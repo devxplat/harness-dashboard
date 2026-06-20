@@ -1,20 +1,35 @@
 "use client";
 
+import { DataTable } from "@/components/data-table";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
 import { formatInt } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { WorkspaceRow } from "@/lib/types";
+import type { ColumnDef } from "@tanstack/react-table";
+
+const columns: ColumnDef<WorkspaceRow>[] = [
+  {
+    accessorKey: "workspace",
+    header: "Workspace",
+    cell: ({ row }) => (
+      <span className="block max-w-[320px] truncate font-medium">{row.original.workspace}</span>
+    ),
+  },
+  {
+    accessorKey: "calls",
+    header: "File-edit calls",
+    cell: ({ row }) => formatInt(row.original.calls),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "files",
+    header: "Files touched",
+    cell: ({ row }) => formatInt(row.original.files),
+    meta: { align: "right" },
+  },
+];
 
 export default function WorkspacesPage() {
   const { since, until } = useRange();
@@ -31,28 +46,17 @@ export default function WorkspacesPage() {
       {data.length === 0 ? (
         <EmptyBlock message="No file-editing activity in range." />
       ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Workspace</TableHead>
-                  <TableHead className="text-right">File-edit calls</TableHead>
-                  <TableHead className="text-right">Files touched</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.map((w) => (
-                  <TableRow key={w.workspace}>
-                    <TableCell className="max-w-[320px] truncate font-medium">{w.workspace}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInt(w.calls)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInt(w.files)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <DataTable
+          columns={columns}
+          data={data}
+          search={{
+            fields: ["workspace"],
+            placeholder: "Filter workspaces…",
+            ariaLabel: "Filter workspaces",
+          }}
+          pageSize={25}
+          emptyMessage="No workspaces match."
+        />
       )}
     </>
   );

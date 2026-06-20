@@ -1,20 +1,33 @@
 "use client";
 
+import { DataTable } from "@/components/data-table";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
 import { formatInt, formatTokens } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { ToolRow } from "@/lib/types";
+import type { ColumnDef } from "@tanstack/react-table";
+
+const columns: ColumnDef<ToolRow>[] = [
+  {
+    accessorKey: "tool_name",
+    header: "Tool",
+    cell: ({ row }) => <span className="font-medium">{row.original.tool_name}</span>,
+  },
+  {
+    accessorKey: "calls",
+    header: "Calls",
+    cell: ({ row }) => formatInt(row.original.calls),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "result_tokens",
+    header: "Result tokens",
+    cell: ({ row }) => formatTokens(row.original.result_tokens),
+    meta: { align: "right" },
+  },
+];
 
 export default function ToolsPage() {
   const { since, until } = useRange();
@@ -29,28 +42,17 @@ export default function ToolsPage() {
       {data.length === 0 ? (
         <EmptyBlock message="No tool calls in range." />
       ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tool</TableHead>
-                  <TableHead className="text-right">Calls</TableHead>
-                  <TableHead className="text-right">Result tokens</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.map((row) => (
-                  <TableRow key={row.tool_name}>
-                    <TableCell className="font-medium">{row.tool_name}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInt(row.calls)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTokens(row.result_tokens)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <DataTable
+          columns={columns}
+          data={data}
+          search={{
+            fields: ["tool_name"],
+            placeholder: "Filter tools…",
+            ariaLabel: "Filter tools",
+          }}
+          pageSize={25}
+          emptyMessage="No tools match."
+        />
       )}
     </>
   );

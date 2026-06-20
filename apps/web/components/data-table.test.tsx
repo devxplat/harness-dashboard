@@ -73,6 +73,19 @@ describe("DataTable", () => {
     await waitFor(() => expect(screen.getByText("Nothing here.")).toBeInTheDocument());
   });
 
+  it("changes the page size via the rows-per-page selector", async () => {
+    const user = userEvent.setup();
+    render(<DataTable columns={columns} data={data} pageSize={10} />);
+    // With 10 per page, the 25th row is on a later page.
+    expect(screen.queryByText("row24")).toBeNull();
+
+    await user.click(screen.getByRole("combobox", { name: "Rows per page" }));
+    await user.click(await screen.findByRole("option", { name: "50" }));
+
+    // 50 per page now shows all 25 rows at once.
+    expect(screen.getByText("row24")).toBeInTheDocument();
+  });
+
   it("hides a column via the Columns menu", async () => {
     const user = userEvent.setup();
     render(<DataTable columns={columns} data={data} pageSize={50} />);

@@ -1,20 +1,46 @@
 "use client";
 
+import { DataTable } from "@/components/data-table";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
 import { formatDate, formatInt } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { SkillRow } from "@/lib/types";
+import type { ColumnDef } from "@tanstack/react-table";
+
+const columns: ColumnDef<SkillRow>[] = [
+  {
+    accessorKey: "skill",
+    header: "Skill",
+    cell: ({ row }) => <span className="font-medium">{row.original.skill}</span>,
+  },
+  {
+    accessorKey: "manual_sessions",
+    header: "You ran",
+    cell: ({ row }) => formatInt(row.original.manual_sessions),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "tool_invocations",
+    header: "Claude invoked",
+    cell: ({ row }) => formatInt(row.original.tool_invocations),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "sessions",
+    header: "Sessions",
+    cell: ({ row }) => formatInt(row.original.sessions),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "last_used",
+    header: "Last used",
+    cell: ({ row }) => (
+      <span className="text-xs text-muted-foreground">{formatDate(row.original.last_used)}</span>
+    ),
+  },
+];
 
 export default function SkillsPage() {
   const { since, until } = useRange();
@@ -32,32 +58,17 @@ export default function SkillsPage() {
       {data.length === 0 ? (
         <EmptyBlock message="No skill or slash-command activity in range." />
       ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Skill</TableHead>
-                  <TableHead className="text-right">You ran</TableHead>
-                  <TableHead className="text-right">Claude invoked</TableHead>
-                  <TableHead className="text-right">Sessions</TableHead>
-                  <TableHead>Last used</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.map((s) => (
-                  <TableRow key={s.skill}>
-                    <TableCell className="font-medium">{s.skill}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInt(s.manual_sessions)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInt(s.tool_invocations)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInt(s.sessions)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{formatDate(s.last_used)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <DataTable
+          columns={columns}
+          data={data}
+          search={{
+            fields: ["skill"],
+            placeholder: "Filter skills…",
+            ariaLabel: "Filter skills",
+          }}
+          pageSize={25}
+          emptyMessage="No skills match."
+        />
       )}
     </>
   );
