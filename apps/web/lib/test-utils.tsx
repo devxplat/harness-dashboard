@@ -10,7 +10,7 @@ export function renderWithRange(ui: ReactElement): RenderResult {
 
 /** Stub `fetch`, routing by URL substring to canned JSON (defaults to `[]`). */
 export function installFetch(routes: Record<string, unknown>): ReturnType<typeof vi.fn> {
-  const fn = vi.fn((url: string | URL) => {
+  const fn = vi.fn((url: string | URL, _init?: RequestInit) => {
     const path = String(url);
     const key = Object.keys(routes).find((k) => path.includes(k));
     return Promise.resolve({ ok: true, json: async () => (key ? routes[key] : []) });
