@@ -4,6 +4,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import Image from "next/image";
 import { AppSidebar } from "./app-sidebar";
 import { RangeSelector } from "./range-selector";
+import { RealtimeToggle } from "./realtime-toggle";
 import { ScanStatus } from "./scan-status";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -22,6 +23,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <RangeSelector />
+            <RealtimeToggle />
             <ThemeToggle />
             <ScanStatus />
           </div>
