@@ -8,6 +8,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use harness_core::db::Db;
+use harness_core::pricing::Pricing;
 use harness_core::scan::{self, ScanStats};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -31,6 +32,24 @@ impl<E: Into<anyhow::Error>> From<E> for AppError {
     }
 }
 type ApiResult = Result<Json<Value>, AppError>;
+
+/// Run a read-only query on its own connection in the blocking pool. Reads use
+/// separate connections (WAL allows many readers) so they never wait on the scan's
+/// write lock on the shared connection, nor block an async worker thread.
+async fn read_json<T, F>(s: &AppState, f: F) -> ApiResult
+where
+    T: Serialize + Send + 'static,
+    F: FnOnce(&Db, &Pricing) -> harness_core::Result<T> + Send + 'static,
+{
+    let path = (*s.db_path).clone();
+    let pricing = s.pricing.clone();
+    let value = tokio::task::spawn_blocking(move || -> anyhow::Result<Value> {
+        let db = Db::open_read(&path)?;
+        Ok(serde_json::to_value(f(&db, &pricing)?)?)
+    })
+    .await??;
+    Ok(Json(value))
+}
 
 #[derive(Debug, Deserialize)]
 pub struct RangeParams {
@@ -168,8 +187,12 @@ async fn dev_root() -> &'static str {
 }
 
 async fn overview(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
-    let t = s.db.overview_totals(&s.pricing, q.since(), q.until())?;
-    Ok(Json(serde_json::to_value(t)?))
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, pr| {
+        db.overview_totals(pr, since.as_deref(), until.as_deref())
+    })
+    .await
 }
 
 async fn overview_bundle(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
@@ -231,45 +254,59 @@ async fn overview_bundle(State(s): State<AppState>, Query(q): Query<RangeParams>
 }
 
 async fn prompts(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
-    let sort = q.sort.as_deref().unwrap_or("tokens");
-    let rows = s.db.expensive_prompts(&s.pricing, q.limit(50), sort)?;
-    Ok(Json(serde_json::to_value(rows)?))
+    let sort = q.sort.clone().unwrap_or_else(|| "tokens".to_string());
+    let limit = q.limit(50);
+    read_json(&s, move |db, pr| db.expensive_prompts(pr, limit, &sort)).await
 }
 
 async fn projects(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
-    Ok(Json(serde_json::to_value(
-        s.db.projects(q.since(), q.until())?,
-    )?))
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, _| {
+        db.projects(since.as_deref(), until.as_deref())
+    })
+    .await
 }
 
 async fn tools(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
-    Ok(Json(serde_json::to_value(
-        s.db.tools(q.since(), q.until())?,
-    )?))
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, _| {
+        db.tools(since.as_deref(), until.as_deref())
+    })
+    .await
 }
 
 async fn sessions(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
-    let rows =
-        s.db.recent_sessions(&s.pricing, q.limit(20), q.since(), q.until())?;
-    Ok(Json(serde_json::to_value(rows)?))
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    let limit = q.limit(20);
+    read_json(&s, move |db, pr| {
+        db.recent_sessions(pr, limit, since.as_deref(), until.as_deref())
+    })
+    .await
 }
 
 async fn session_detail(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult {
-    Ok(Json(serde_json::to_value(s.db.session_detail(&id)?)?))
+    read_json(&s, move |db, _| db.session_detail(&id)).await
 }
 
 async fn daily(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
-    Ok(Json(serde_json::to_value(
-        s.db.daily(q.since(), q.until())?,
-    )?))
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, _| {
+        db.daily(since.as_deref(), until.as_deref())
+    })
+    .await
 }
 
 async fn by_model(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
-    Ok(Json(serde_json::to_value(s.db.by_model(
-        &s.pricing,
-        q.since(),
-        q.until(),
-    )?)?))
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, pr| {
+        db.by_model(pr, since.as_deref(), until.as_deref())
+    })
+    .await
 }
 
 async fn empty_array() -> Json<Value> {
@@ -277,35 +314,45 @@ async fn empty_array() -> Json<Value> {
 }
 
 async fn skills(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
-    Ok(Json(serde_json::to_value(
-        s.db.skill_breakdown(q.since(), q.until())?,
-    )?))
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, _| {
+        db.skill_breakdown(since.as_deref(), until.as_deref())
+    })
+    .await
 }
 
 async fn subagents(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
-    let by_kind = s.db.subagents_by_kind(&s.pricing, q.since(), q.until())?;
-    let by_entrypoint =
-        s.db.subagents_by_entrypoint(&s.pricing, q.since(), q.until())?;
-    Ok(Json(json!({
-        "by_kind": by_kind,
-        "by_entrypoint": by_entrypoint,
-        "breakdown": [],
-        "top_sessions": [],
-        "sdk_runs": [],
-        "dispatch_tree": [],
-    })))
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, pr| {
+        let by_kind = db.subagents_by_kind(pr, since.as_deref(), until.as_deref())?;
+        let by_entrypoint = db.subagents_by_entrypoint(pr, since.as_deref(), until.as_deref())?;
+        Ok(json!({
+            "by_kind": by_kind,
+            "by_entrypoint": by_entrypoint,
+            "breakdown": [],
+            "top_sessions": [],
+            "sdk_runs": [],
+            "dispatch_tree": [],
+        }))
+    })
+    .await
 }
 
 async fn workspaces(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
-    Ok(Json(serde_json::to_value(
-        s.db.workspaces(q.since(), q.until())?,
-    )?))
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, _| {
+        db.workspaces(since.as_deref(), until.as_deref())
+    })
+    .await
 }
 
 async fn tips(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
-    Ok(Json(serde_json::to_value(
-        s.db.tips(q.since(), q.until())?,
-    )?))
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, _| db.tips(since.as_deref(), until.as_deref())).await
 }
 
 async fn rtk() -> Json<Value> {
@@ -318,8 +365,10 @@ async fn rtk() -> Json<Value> {
 }
 
 async fn get_plan(State(s): State<AppState>) -> ApiResult {
-    let plan = s.db.get_plan()?;
-    Ok(Json(json!({ "plan": plan, "pricing": &*s.pricing })))
+    read_json(&s, move |db, pr| {
+        Ok(json!({ "plan": db.get_plan()?, "pricing": pr }))
+    })
+    .await
 }
 
 #[derive(Deserialize)]
@@ -332,14 +381,19 @@ async fn set_plan(State(s): State<AppState>, Json(b): Json<PlanBody>) -> ApiResu
 }
 
 async fn get_settings(State(s): State<AppState>) -> ApiResult {
-    let claude = harness_core::paths::claude_dir();
-    Ok(Json(json!({
-        "claude_dir": claude.display().to_string(),
-        "projects_dir": s.projects_dir.display().to_string(),
-        "projects_overridden": std::env::var("CLAUDE_PROJECTS_DIR").is_ok(),
-        "claude_dirs": [claude.display().to_string()],
-        "plan": s.db.get_plan()?,
-    })))
+    let claude = harness_core::paths::claude_dir().display().to_string();
+    let projects = s.projects_dir.display().to_string();
+    let overridden = std::env::var("CLAUDE_PROJECTS_DIR").is_ok();
+    read_json(&s, move |db, _| {
+        Ok(json!({
+            "claude_dir": claude.clone(),
+            "projects_dir": projects,
+            "projects_overridden": overridden,
+            "claude_dirs": [claude],
+            "plan": db.get_plan()?,
+        }))
+    })
+    .await
 }
 
 #[derive(Deserialize)]
