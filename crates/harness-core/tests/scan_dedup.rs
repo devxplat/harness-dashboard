@@ -82,6 +82,18 @@ fn dedup_does_not_inflate_tokens() {
         "parallel tool_use blocks must survive on the keeper"
     );
 
+    // Workspaces: the three Read calls all land in the "myproj" workspace.
+    let ws = db.workspaces(None, None).unwrap();
+    let mp = ws
+        .iter()
+        .find(|w| w.workspace == "myproj")
+        .expect("myproj workspace");
+    assert_eq!(mp.calls, 3);
+    assert_eq!(mp.files, 3);
+
+    // Tips: this tiny fixture is below every rule threshold → no tips.
+    assert!(db.tips(None, None).unwrap().is_empty());
+
     fs::remove_dir_all(&root).ok();
 }
 
