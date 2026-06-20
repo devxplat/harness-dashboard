@@ -51,6 +51,29 @@ export function dayMap(rows: DailyRow[]): Map<string, DailyRow> {
   return new Map(rows.map((r) => [r.day, r]));
 }
 
+export interface MonthCell {
+  date: Date;
+  inMonth: boolean;
+}
+
+/**
+ * A full calendar grid (5 or 6 weeks) for a month, including the spillover days
+ * from the adjacent months so the grid is always rectangular — like the
+ * dashboard18 availability calendar.
+ */
+export function monthCells(year: number, month: number): MonthCell[] {
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const total = firstDow + daysInMonth <= 35 ? 35 : 42;
+  const cells: MonthCell[] = [];
+  for (let i = 0; i < total; i += 1) {
+    // JS Date normalizes day numbers <=0 and >daysInMonth into adjacent months.
+    const date = new Date(year, month, i - firstDow + 1);
+    cells.push({ date, inMonth: date.getMonth() === month });
+  }
+  return cells;
+}
+
 export function maxValue(rows: DailyRow[], metric: HeatMetric): number {
   return rows.reduce((m, r) => Math.max(m, dayValue(r, metric)), 0);
 }

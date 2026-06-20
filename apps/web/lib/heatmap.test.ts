@@ -7,6 +7,7 @@ import {
   intensity,
   isoDay,
   maxValue,
+  monthCells,
   monthGrid,
   parseDay,
 } from "./heatmap";
@@ -58,6 +59,19 @@ describe("monthGrid", () => {
     const days = weeks.flat().filter(Boolean) as Date[];
     expect(days.length).toBe(30);
     expect(weeks[0]?.[0]).toBeNull(); // Sunday pad before Mon Jun 1
+  });
+});
+
+describe("monthCells", () => {
+  it("returns full weeks with adjacent-month spillover flagged", () => {
+    const cells = monthCells(2026, 5); // June 2026
+    expect(cells.length % 7).toBe(0);
+    expect(cells.length).toBeGreaterThanOrEqual(35);
+    const inMonth = cells.filter((c) => c.inMonth);
+    expect(inMonth.length).toBe(30);
+    // The very first cell is a May spillover day (June 1 2026 is a Monday).
+    expect(cells[0]?.inMonth).toBe(false);
+    expect(cells[0]?.date.getMonth()).toBe(4); // May
   });
 });
 
