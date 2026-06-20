@@ -1,108 +1,86 @@
 "use client";
 
-import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
+import { DataTable } from "@/components/data-table";
+import { ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { formatDate, formatInt, formatTokens, formatUSD, shortId } from "@/lib/format";
 import type { MessageDetail, SessionRow } from "@/lib/types";
+import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense } from "react";
+
+const sessionColumns: ColumnDef<SessionRow>[] = [
+  {
+    accessorKey: "started",
+    header: "Started",
+    cell: ({ row }) => (
+      <span className="whitespace-nowrap text-xs text-muted-foreground">
+        {formatDate(row.original.started)}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "project_slug",
+    header: "Project",
+    cell: ({ row }) => (
+      <Link
+        className="block max-w-[240px] truncate hover:underline"
+        href={`/sessions/?id=${row.original.session_id}`}
+      >
+        {row.original.project_slug ?? shortId(row.original.session_id)}
+      </Link>
+    ),
+  },
+  {
+    accessorKey: "turns",
+    header: "Turns",
+    cell: ({ row }) => formatInt(row.original.turns),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "tokens",
+    header: "Tokens",
+    cell: ({ row }) => formatTokens(row.original.tokens),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "cost_usd",
+    header: "Cost",
+    cell: ({ row }) => formatUSD(row.original.cost_usd),
+    meta: { align: "right" },
+  },
+];
 
 function SessionsList() {
-  const [q, setQ] = useState("");
   const { data, error, loading } = useApi<SessionRow[]>("/api/sessions?limit=500");
-
-  const rows = useMemo(() => {
-    if (!data) return [];
-    const needle = q.trim().toLowerCase();
-    if (!needle) return data;
-    return data.filter(
-      (s) =>
-        (s.project_slug ?? "").toLowerCase().includes(needle) ||
-        s.session_id.toLowerCase().includes(needle),
-    );
-  }, [data, q]);
-
-  const totals = useMemo(
-    () =>
-      rows.reduce(
-        (a, s) => ({
-          turns: a.turns + s.turns,
-          tokens: a.tokens + s.tokens,
-          cost: a.cost + (s.cost_usd ?? 0),
-        }),
-        { turns: 0, tokens: 0, cost: 0 },
-      ),
-    [rows],
-  );
-
   if (error) return <ErrorBlock error={error} />;
   if (loading || !data) return <LoadingBlock />;
 
   return (
-    <>
-      <div className="flex items-center gap-2">
-        <Input
-          placeholder="Filter by project or session id…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className="max-w-sm"
-          aria-label="Filter sessions"
-        />
-        <span className="text-sm text-muted-foreground">{rows.length} sessions</span>
-      </div>
-      {rows.length === 0 ? (
-        <EmptyBlock message="No sessions match." />
-      ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Started</TableHead>
-                  <TableHead>Project</TableHead>
-                  <TableHead className="text-right">Turns</TableHead>
-                  <TableHead className="text-right">Tokens</TableHead>
-                  <TableHead className="text-right">Cost</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.slice(0, 200).map((s) => (
-                  <TableRow key={s.session_id}>
-                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                      {formatDate(s.started)}
-                    </TableCell>
-                    <TableCell className="max-w-[240px] truncate">
-                      <Link className="hover:underline" href={`/sessions/?id=${s.session_id}`}>
-                        {s.project_slug ?? shortId(s.session_id)}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInt(s.turns)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTokens(s.tokens)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatUSD(s.cost_usd)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Totals: {formatInt(totals.turns)} turns · {formatTokens(totals.tokens)} tokens ·{" "}
-              {formatUSD(totals.cost)}
-            </p>
-          </CardContent>
-        </Card>
-      )}
-    </>
+    <DataTable
+      columns={sessionColumns}
+      data={data}
+      search={{
+        fields: ["project_slug", "session_id"],
+        placeholder: "Filter by project or session id…",
+        ariaLabel: "Filter sessions",
+      }}
+      pageSize={25}
+      emptyMessage="No sessions match."
+      footer={(rows) => {
+        const turns = rows.reduce((a, s) => a + s.turns, 0);
+        const tokens = rows.reduce((a, s) => a + s.tokens, 0);
+        const cost = rows.reduce((a, s) => a + (s.cost_usd ?? 0), 0);
+        return (
+          <p className="text-xs text-muted-foreground">
+            Totals: {formatInt(turns)} turns · {formatTokens(tokens)} tokens · {formatUSD(cost)}
+          </p>
+        );
+      }}
+    />
   );
 }
 
@@ -144,7 +122,9 @@ function SessionDetail({ id }: { id: string }) {
 
 function SessionsContent() {
   const id = useSearchParams().get("id");
-  return id ? <SessionDetail id={id} /> : (
+  return id ? (
+    <SessionDetail id={id} />
+  ) : (
     <>
       <PageTitle title="Sessions" description="Browse and drill into individual sessions." />
       <SessionsList />
