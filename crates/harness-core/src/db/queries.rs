@@ -824,3 +824,106 @@ impl Db {
         self.agent_groups(pricing, "COALESCE(entrypoint,'unknown')", since, until)
     }
 }
+
+#[derive(Debug, Serialize)]
+pub struct WorkspaceRow {
+    pub workspace: String,
+    pub calls: i64,
+    pub files: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Tip {
+    pub key: String,
+    pub category: String,
+    pub severity: String,
+    pub title: String,
+    pub body: String,
+}
+
+const FILE_TOOLS: &str = "('Read','Edit','Write','NotebookEdit')";
+
+impl Db {
+    /// File-editing tool activity grouped by the workspace it ran in.
+    pub fn workspaces(
+        &self,
+        since: Option<&str>,
+        until: Option<&str>,
+    ) -> Result<Vec<WorkspaceRow>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = format!(
+            "SELECT project_slug, COUNT(*), COUNT(DISTINCT target) \
+             FROM tool_calls WHERE tool_name IN {FILE_TOOLS} AND target IS NOT NULL AND {TIME_BOUND} \
+             GROUP BY project_slug ORDER BY 2 DESC"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map(params![since, until], |r| {
+                Ok(WorkspaceRow {
+                    workspace: r.get(0)?,
+                    calls: r.get(1)?,
+                    files: r.get(2)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Rule-based suggestions derived from the data in range.
+    pub fn tips(&self, since: Option<&str>, until: Option<&str>) -> Result<Vec<Tip>> {
+        let conn = self.conn.lock().unwrap();
+        let mut out = Vec::new();
+
+        // Rule 1 — cache discipline: low cache reuse relative to fresh input.
+        let cache_sql = format!(
+            "SELECT COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(input_tokens),0), \
+             COALESCE(SUM(cache_create_5m_tokens+cache_create_1h_tokens),0) \
+             FROM messages WHERE {TIME_BOUND}"
+        );
+        let (cr, inp, cc): (i64, i64, i64) =
+            conn.query_row(&cache_sql, params![since, until], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })?;
+        let denom = cr + inp + cc;
+        if denom > 200_000 {
+            let rate = cr as f64 / denom as f64;
+            if rate < 0.5 {
+                out.push(Tip {
+                    key: "cache-discipline".into(),
+                    category: "cache".into(),
+                    severity: "cost".into(),
+                    title: "Low cache reuse".into(),
+                    body: format!(
+                        "Only {:.0}% of your input tokens came from cache. Keeping context stable within a session reuses the prompt cache and cuts input cost.",
+                        rate * 100.0
+                    ),
+                });
+            }
+        }
+
+        // Rule 2 — repeatedly read files.
+        let read_sql = format!(
+            "SELECT target, COUNT(*) FROM tool_calls \
+             WHERE tool_name='Read' AND target IS NOT NULL AND {TIME_BOUND} \
+             GROUP BY target HAVING COUNT(*) >= 10 ORDER BY COUNT(*) DESC LIMIT 5"
+        );
+        let mut stmt = conn.prepare(&read_sql)?;
+        let reads: Vec<(String, i64)> = stmt
+            .query_map(params![since, until], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        drop(stmt);
+        for (target, count) in reads {
+            out.push(Tip {
+                key: format!("repeat-read:{target}"),
+                category: "repeat-file".into(),
+                severity: "info".into(),
+                title: "Repeatedly read file".into(),
+                body: format!(
+                    "{target} was read {count} times. If it's stable, read it once or use a targeted Grep to avoid re-reading the whole file."
+                ),
+            });
+        }
+
+        Ok(out)
+    }
+}

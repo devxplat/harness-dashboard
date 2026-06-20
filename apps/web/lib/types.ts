@@ -143,3 +143,17 @@ export interface SubagentsResponse {
   by_kind: AgentGroupRow[];
   by_entrypoint: AgentGroupRow[];
 }
+
+export interface WorkspaceRow {
+  workspace: string;
+  calls: number;
+  files: number;
+}
+
+export interface Tip {
+  key: string;
+  category: string;
+  severity: string;
+  title: string;
+  body: string;
+}

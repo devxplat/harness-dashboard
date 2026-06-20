@@ -126,9 +126,9 @@ pub fn router(state: AppState) -> Router {
         .route("/api/by-model", get(by_model))
         .route("/api/skills", get(skills))
         .route("/api/subagents", get(subagents))
-        .route("/api/workspaces", get(workspaces_stub))
+        .route("/api/workspaces", get(workspaces))
         .route("/api/cross-workspace-leaks", get(empty_array))
-        .route("/api/tips", get(empty_array))
+        .route("/api/tips", get(tips))
         .route("/api/rtk", get(rtk))
         .route("/api/plan", get(get_plan).post(set_plan))
         .route("/api/settings", get(get_settings).post(post_settings))
@@ -254,11 +254,16 @@ async fn subagents(State(s): State<AppState>, Query(q): Query<RangeParams>) -> A
     })))
 }
 
-async fn workspaces_stub() -> Json<Value> {
-    Json(json!({
-        "nodes": [], "links": [], "total_calls": 0,
-        "self_loop_calls": 0, "cross_workspace_calls": 0
-    }))
+async fn workspaces(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    Ok(Json(serde_json::to_value(
+        s.db.workspaces(q.since(), q.until())?,
+    )?))
+}
+
+async fn tips(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    Ok(Json(serde_json::to_value(
+        s.db.tips(q.since(), q.until())?,
+    )?))
 }
 
 async fn rtk() -> Json<Value> {

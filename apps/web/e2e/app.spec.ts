@@ -91,11 +91,16 @@ test.describe("skills and subagents", () => {
   });
 });
 
-test.describe("empty-state views", () => {
-  for (const path of ["/workspaces/", "/tips/"]) {
-    test(`${path} renders an empty state`, async ({ page }) => {
-      await page.goto(path);
-      await expect(page.getByRole("main")).toContainText(/follow-up|No tips/i);
-    });
-  }
+test.describe("workspaces and tips", () => {
+  test("workspaces shows file-edit activity per workspace", async ({ page }) => {
+    await page.goto("/workspaces/");
+    const main = page.getByRole("main");
+    await expect(main.getByText("File-edit calls")).toBeVisible();
+    await expect(main.getByText("myproj")).toBeVisible();
+  });
+
+  test("tips renders (empty for the fixture)", async ({ page }) => {
+    await page.goto("/tips/");
+    await expect(page.getByRole("main")).toContainText(/No tips/i);
+  });
 });
