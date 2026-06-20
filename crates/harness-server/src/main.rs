@@ -11,6 +11,7 @@ use clap::Parser;
 use harness_core::db::Db;
 use harness_core::paths;
 use harness_core::pricing::Pricing;
+use notify::{RecursiveMode, Watcher};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -117,7 +118,7 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
-    // Periodic background scan.
+    // Periodic background scan — a fallback in case the watcher misses an event.
     {
         let state = state.clone();
         tokio::spawn(async move {
@@ -126,6 +127,41 @@ async fn main() -> anyhow::Result<()> {
             loop {
                 ticker.tick().await;
                 api::scan_now(&state).await;
+            }
+        });
+    }
+
+    // Real-time: watch the transcript dir and rescan on change (debounced), so new
+    // Claude activity shows up in ~1s instead of waiting for the 60s poll. The scan
+    // broadcasts an SSE event, which the UI uses to refetch.
+    if !cli.no_scan {
+        let state = state.clone();
+        let watch_dir = projects_dir.clone();
+        let handle = tokio::runtime::Handle::current();
+        std::thread::spawn(move || {
+            let (tx, rx) = std::sync::mpsc::channel();
+            let mut watcher = match notify::recommended_watcher(move |res| {
+                let _ = tx.send(res);
+            }) {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::warn!("file watcher unavailable: {e}");
+                    return;
+                }
+            };
+            if let Err(e) = watcher.watch(&watch_dir, RecursiveMode::Recursive) {
+                tracing::warn!("watch failed for {}: {e}", watch_dir.display());
+                return;
+            }
+            tracing::info!("watching {} for changes", watch_dir.display());
+            // Coalesce bursts: take the first event, then drain ~800ms of quiet
+            // before triggering a single scan.
+            while rx.recv().is_ok() {
+                while rx.recv_timeout(Duration::from_millis(800)).is_ok() {}
+                let state = state.clone();
+                handle.spawn(async move {
+                    api::scan_now(&state).await;
+                });
             }
         });
     }
