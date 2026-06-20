@@ -5,7 +5,9 @@ import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/st
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
+import { withRange } from "@/lib/api";
 import { formatDate, formatTokens, formatUSD } from "@/lib/format";
+import { useRange } from "@/lib/range";
 import type { PromptRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useState } from "react";
@@ -56,7 +58,10 @@ const promptColumns: ColumnDef<PromptRow>[] = [
 
 export default function PromptsPage() {
   const [sort, setSort] = useState<"tokens" | "recent">("tokens");
-  const { data, error, loading } = useApi<PromptRow[]>(`/api/prompts?limit=50&sort=${sort}`);
+  const { since, until } = useRange();
+  const { data, error, loading } = useApi<PromptRow[]>(
+    withRange(`/api/prompts?limit=50&sort=${sort}`, since, until),
+  );
 
   return (
     <>
