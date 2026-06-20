@@ -1,22 +1,26 @@
 "use client";
 
-import { useApi } from "@/hooks/use-api";
-import type { RtkInfo } from "@/lib/types";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
 } from "@/components/ui/sidebar";
-import { Zap } from "lucide-react";
+import { useApi } from "@/hooks/use-api";
+import type { RtkInfo } from "@/lib/types";
+import { Database, Zap } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV } from "./nav";
+import { NAV_GROUPS } from "./nav";
 
 function norm(p: string): string {
   return p !== "/" && p.endsWith("/") ? p.slice(0, -1) : p;
@@ -27,41 +31,80 @@ export function AppSidebar() {
   const { data: rtk } = useApi<RtkInfo>("/api/rtk");
 
   return (
-    <Sidebar>
-      <SidebarHeader className="px-3 py-3">
-        <div className="flex items-center gap-2 text-base font-semibold">
-          <Image src="/logo.png" alt="" width={24} height={24} className="size-6 rounded" priority />
-          <span>harness dashboard</span>
-        </div>
+    <Sidebar variant="inset" collapsible="icon">
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild tooltip="harness dashboard">
+              <Link href="/">
+                <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-md">
+                  <Image src="/logo.png" alt="" width={32} height={32} className="size-8" priority />
+                </div>
+                <div className="grid flex-1 text-left leading-tight">
+                  <span className="truncate font-semibold">harness dashboard</span>
+                  <span className="truncate text-xs text-muted-foreground">Claude Code usage</span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
+
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {NAV.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={pathname === norm(item.href)} tooltip={item.title}>
-                    <Link href={item.href}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-              {rtk?.available ? (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={pathname === "/rtk"} tooltip="RTK">
-                    <Link href="/rtk">
-                      <Zap />
-                      <span>RTK</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ) : null}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <ScrollArea className="h-full">
+          {NAV_GROUPS.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.items.map((item) => (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname === norm(item.href)}
+                        tooltip={item.title}
+                      >
+                        <Link href={item.href}>
+                          <item.icon className="size-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                  {group.label === "More" && rtk?.available ? (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={pathname === "/rtk"} tooltip="RTK">
+                        <Link href="/rtk">
+                          <Zap className="size-4" />
+                          <span>RTK</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ) : null}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </ScrollArea>
       </SidebarContent>
+
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" className="cursor-default hover:bg-transparent" tooltip="Local data">
+              <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-accent text-sidebar-accent-foreground">
+                <Database className="size-4" />
+              </div>
+              <div className="grid flex-1 text-left leading-tight">
+                <span className="truncate text-sm font-medium">Local</span>
+                <span className="truncate text-xs text-muted-foreground">~/.claude/projects</span>
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+
+      <SidebarRail />
     </Sidebar>
   );
 }
