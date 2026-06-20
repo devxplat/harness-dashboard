@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ColumnDef } from "@tanstack/react-table";
 import { describe, expect, it } from "vitest";
@@ -45,9 +45,9 @@ describe("DataTable", () => {
     expect(screen.getByText("row0")).toBeInTheDocument();
   });
 
-  it("filters via the search box and shows the empty message", async () => {
+  it("filters (debounced) via the search box, offers suggestions, and shows the empty message", async () => {
     const user = userEvent.setup();
-    render(
+    const { container } = render(
       <DataTable
         columns={columns}
         data={data}
@@ -57,12 +57,19 @@ describe("DataTable", () => {
       />,
     );
 
+    // Autocomplete suggestions are populated from the searchable field values.
+    expect(container.querySelectorAll("datalist option").length).toBeGreaterThan(0);
+
     const box = screen.getByLabelText("search");
-    await user.type(box, "row1");
-    expect(screen.getByText("row1")).toBeInTheDocument();
+    await user.type(box, "row7");
+    // Debounced: the filter settles after the timeout, leaving only the match.
+    await waitFor(() => {
+      expect(screen.getByText("row7")).toBeInTheDocument();
+      expect(screen.queryByText("row1")).toBeNull();
+    });
 
     await user.clear(box);
     await user.type(box, "zzz");
-    expect(screen.getByText("Nothing here.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Nothing here.")).toBeInTheDocument());
   });
 });

@@ -23,7 +23,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 
 // Per-column right-alignment for numeric columns.
 declare module "@tanstack/react-table" {
@@ -54,6 +54,29 @@ export function DataTable<TData, TValue>({
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
+  const [rawFilter, setRawFilter] = useState("");
+  const listId = useId();
+
+  // Debounce so large datasets don't re-filter on every keystroke; the input stays
+  // responsive (rawFilter) while the table filters on the settled value.
+  useEffect(() => {
+    const id = setTimeout(() => setGlobalFilter(rawFilter), 200);
+    return () => clearTimeout(id);
+  }, [rawFilter]);
+
+  // Autocomplete: distinct values of the searchable fields (capped, short ones only).
+  const suggestions = useMemo(() => {
+    if (!search) return [];
+    const seen = new Set<string>();
+    for (const row of data) {
+      for (const f of search.fields) {
+        const v = row[f];
+        if (typeof v === "string" && v.length > 0 && v.length <= 80) seen.add(v);
+      }
+      if (seen.size >= 50) break;
+    }
+    return [...seen].sort();
+  }, [data, search]);
 
   const table = useReactTable({
     data,
@@ -81,13 +104,21 @@ export function DataTable<TData, TValue>({
   return (
     <div className="space-y-3">
       {search ? (
-        <Input
-          placeholder={search.placeholder}
-          aria-label={search.ariaLabel}
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-          className="max-w-sm"
-        />
+        <>
+          <Input
+            list={listId}
+            placeholder={search.placeholder}
+            aria-label={search.ariaLabel}
+            value={rawFilter}
+            onChange={(e) => setRawFilter(e.target.value)}
+            className="max-w-sm"
+          />
+          <datalist id={listId}>
+            {suggestions.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        </>
       ) : null}
 
       {rows.length === 0 ? (
