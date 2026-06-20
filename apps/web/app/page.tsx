@@ -3,8 +3,8 @@
 import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import { CalendarHeatmap } from "@/components/charts/calendar-heatmap";
 import { DailyChart } from "@/components/charts/daily-chart";
-import { KpiCard } from "@/components/kpi-card";
-import { EmptyBlock, ErrorBlock, PageTitle } from "@/components/states";
+import { OverviewStats } from "@/components/overview-stats";
+import { EmptyBlock, ErrorBlock } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,14 +21,16 @@ import { rangeQuery } from "@/lib/api";
 import { formatDateShort, formatInt, formatTokens, formatUSD, projectLabel } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { OverviewBundle, Totals } from "@/lib/types";
-import { ArrowDown, ArrowUp, Coins, Database, HardDrive, MessagesSquare, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
-/** Period-over-period change as a fraction, or null when there's no comparable prior value. */
-function delta(curr: number, prev: number | null | undefined): number | null {
-  return prev != null && prev > 0 ? (curr - prev) / prev : null;
-}
+const RANGE_LABEL: Record<string, string> = {
+  "7d": "Last 7 days",
+  "30d": "Last 30 days",
+  "90d": "Last 90 days",
+  all: "All time",
+  custom: "Custom range",
+};
 
 function RowsSkeleton() {
   return (
@@ -41,10 +43,10 @@ function RowsSkeleton() {
 }
 
 export default function OverviewPage() {
-  const { since, until, previous } = useRange();
+  const { range, since, until, previous } = useRange();
   const [shortNames, setShortNames] = useState(true);
-  // Fast path: the KPIs render from the lightweight totals query (~0.6s) while
-  // the heavier bundle (chart, by-model, recent sessions) streams in behind skeletons.
+  // Fast path: the stat panel renders from the lightweight totals query (~0.6s)
+  // while the heavier bundle (heatmaps, by-model, recent sessions) streams in.
   const totals = useApi<Totals>(`/api/overview${rangeQuery(since, until)}`);
   const prevUrl = previous
     ? `/api/overview?since=${encodeURIComponent(previous.since)}&until=${encodeURIComponent(previous.until)}`
@@ -55,35 +57,40 @@ export default function OverviewPage() {
   if (totals.error) return <ErrorBlock error={totals.error} />;
 
   const t = totals.data;
-  const p = prev.data;
   const b = bundle.data;
-  const cacheWrite = t ? t.cache_create_5m_tokens + t.cache_create_1h_tokens : 0;
-  const prevCacheWrite = p ? p.cache_create_5m_tokens + p.cache_create_1h_tokens : null;
 
   return (
     <>
-      <PageTitle title="Overview" description="Token usage and cost across your Claude Code sessions." />
+      {t ? (
+        <OverviewStats totals={t} prev={prev.data} rangeLabel={RANGE_LABEL[range] ?? "Selected range"} />
+      ) : (
+        <Skeleton className="h-[196px] w-full rounded-xl" />
+      )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {t ? (
-          <>
-            <KpiCard label="Sessions" value={formatInt(t.sessions)} icon={MessagesSquare} delta={delta(t.sessions, p?.sessions)} />
-            <KpiCard label="Turns" value={formatInt(t.turns)} icon={RefreshCw} delta={delta(t.turns, p?.turns)} />
-            <KpiCard label="Input" value={formatTokens(t.input_tokens)} icon={ArrowDown} delta={delta(t.input_tokens, p?.input_tokens)} />
-            <KpiCard label="Output" value={formatTokens(t.output_tokens)} icon={ArrowUp} delta={delta(t.output_tokens, p?.output_tokens)} />
-            <KpiCard label="Cache read" value={formatTokens(t.cache_read_tokens)} icon={Database} delta={delta(t.cache_read_tokens, p?.cache_read_tokens)} />
-            <KpiCard label="Cache write" value={formatTokens(cacheWrite)} icon={HardDrive} delta={delta(cacheWrite, prevCacheWrite)} />
-            <KpiCard
-              label="Est. cost"
-              value={formatUSD(t.cost_usd)}
-              icon={Coins}
-              hint={t.cost_estimated ? "includes estimated rates" : undefined}
-              delta={t.cost_usd != null ? delta(t.cost_usd, p?.cost_usd) : null}
-            />
-          </>
-        ) : (
-          Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-[110px] rounded-xl" />)
-        )}
+      <div className="grid items-stretch gap-4 lg:grid-cols-5">
+        <Card className="flex flex-col lg:col-span-3">
+          <CardContent className="flex-1 pt-6">
+            {!b ? (
+              <Skeleton className="h-72 w-full" />
+            ) : b.daily.length ? (
+              <ActivityHeatmap data={b.daily} />
+            ) : (
+              <EmptyBlock message="No activity in range." />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardContent className="pt-6">
+            {!b ? (
+              <Skeleton className="h-72 w-full" />
+            ) : b.daily.length ? (
+              <CalendarHeatmap data={b.daily} />
+            ) : (
+              <EmptyBlock message="No activity in range." />
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -100,32 +107,6 @@ export default function OverviewPage() {
           )}
         </CardContent>
       </Card>
-
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardContent className="pt-6">
-            {!b ? (
-              <Skeleton className="h-56 w-full" />
-            ) : b.daily.length ? (
-              <ActivityHeatmap data={b.daily} />
-            ) : (
-              <EmptyBlock message="No activity in range." />
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardContent className="pt-6">
-            {!b ? (
-              <Skeleton className="h-64 w-full" />
-            ) : b.daily.length ? (
-              <CalendarHeatmap data={b.daily} />
-            ) : (
-              <EmptyBlock message="No activity in range." />
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

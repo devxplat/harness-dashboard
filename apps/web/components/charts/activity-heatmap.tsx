@@ -3,27 +3,45 @@
 import { formatInt, formatTokens } from "@/lib/format";
 import { dayTokens, dotScale, parseDay } from "@/lib/heatmap";
 import type { DailyRow } from "@/lib/types";
+import { useEffect, useRef, useState } from "react";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-// Per-series dot target; the two stacks combine to ~2x this at the busiest day.
-const TARGET = 8;
+const GAP = 3;
+const FALLBACK_ROWS = 18;
 
 /**
- * Booking-sources-style dot matrix: one column per day over a light square grid,
- * filled bottom-up with two stacked series — tokens (sky) then sessions (orange).
- * Each square is a quantum (stated in the legend) so the two very different scales
- * stay legible in one chart.
+ * Booking-sources-style dot matrix that fills its tile: one column per day over a
+ * light square grid, filled bottom-up with two stacked series — tokens (sky) then
+ * sessions (orange). Square size and row count are derived from the measured plot
+ * box so the grid spans the whole panel; the per-square quantum is in the legend.
  */
 export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
-  const { columns, sessionsPerDot, tokensPerDot } = dotScale(data, TARGET);
-  const rows = Math.max(1, ...columns.map((c) => c.sessionDots + c.tokenDots));
+  const ref = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const cols = Math.max(1, data.length);
+  // Square sized to fill the measured width; rows to fill the measured height.
+  const square = box.w > 0 ? Math.max(4, Math.floor((box.w - (cols - 1) * GAP) / cols)) : 12;
+  const rows =
+    box.h > 0 ? Math.max(6, Math.floor((box.h + GAP) / (square + GAP))) : FALLBACK_ROWS;
+  const { columns, sessionsPerDot, tokensPerDot } = dotScale(data, Math.max(1, Math.ceil(rows / 2)));
 
   const totalSessions = data.reduce((a, d) => a + d.sessions, 0);
   const totalTokens = data.reduce((a, d) => a + dayTokens(d), 0);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+    <div className="flex h-full flex-col gap-4">
+      <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
             Activity
@@ -49,30 +67,30 @@ export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto pb-1">
-        <div className="flex items-end gap-[3px]">
+      <div className="min-h-[200px] flex-1">
+        <div ref={ref} className="flex h-full items-end justify-between" style={{ gap: GAP }}>
           {columns.map((c, i) => {
             const r = data[i];
             if (!r) return null;
+            const tok = Math.min(rows, c.tokenDots);
+            const ses = Math.min(rows - tok, c.sessionDots);
             return (
               <div
                 key={c.day}
-                className="flex flex-col-reverse gap-[2px]"
+                className="flex flex-col-reverse"
+                style={{ gap: GAP }}
                 title={`${c.day} · ${formatInt(r.sessions)} sessions · ${formatTokens(dayTokens(r))} tokens`}
               >
                 {Array.from({ length: rows }).map((_, row) => {
-                  const filledTokens = row < c.tokenDots;
-                  const filledSessions = !filledTokens && row < c.tokenDots + c.sessionDots;
+                  const isToken = row < tok;
+                  const isSession = !isToken && row < tok + ses;
                   return (
                     <span
                       key={row}
+                      style={{ width: square, height: square }}
                       className={
-                        "size-[7px] shrink-0 rounded-[2px] " +
-                        (filledTokens
-                          ? "bg-sky-500"
-                          : filledSessions
-                            ? "bg-primary"
-                            : "bg-foreground/[0.07]")
+                        "shrink-0 rounded-[2px] " +
+                        (isToken ? "bg-sky-500" : isSession ? "bg-primary" : "bg-foreground/[0.07]")
                       }
                     />
                   );
@@ -81,26 +99,30 @@ export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
             );
           })}
         </div>
-        <div className="mt-1.5 flex gap-[3px]">
+      </div>
+
+      <div className="shrink-0 space-y-2">
+        <div className="flex justify-between" style={{ gap: GAP }}>
           {columns.map((c, i) => {
             const d = parseDay(c.day);
-            const first = i === 0 || parseDay(columns[i - 1]?.day ?? c.day).getMonth() !== d.getMonth();
+            const first =
+              i === 0 || parseDay(columns[i - 1]?.day ?? c.day).getMonth() !== d.getMonth();
             return (
               <span
                 key={c.day}
-                className="w-[7px] shrink-0 text-[10px] font-medium tracking-wide text-muted-foreground"
+                style={{ width: square }}
+                className="shrink-0 overflow-visible text-[10px] font-medium whitespace-nowrap text-muted-foreground"
               >
                 {first ? MONTHS[d.getMonth()] : ""}
               </span>
             );
           })}
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          Each square ≈ {formatInt(sessionsPerDot)} session{sessionsPerDot > 1 ? "s" : ""} (orange)
+          or {formatTokens(tokensPerDot)} tokens (blue).
+        </p>
       </div>
-
-      <p className="text-[11px] text-muted-foreground">
-        Each square ≈ {formatInt(sessionsPerDot)} session{sessionsPerDot > 1 ? "s" : ""} (orange) or{" "}
-        {formatTokens(tokensPerDot)} tokens (blue).
-      </p>
     </div>
   );
 }
