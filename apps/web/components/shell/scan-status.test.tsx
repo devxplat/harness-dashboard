@@ -21,7 +21,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("ScanStatus", () => {
   it("refreshes on click and reacts to scan events", async () => {
     vi.stubGlobal("EventSource", ES as unknown as typeof EventSource);
-    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: async () => ({ ok: true }) }));
+    const fetchMock = vi.fn((_url: string) => Promise.resolve({ ok: true, json: async () => ({ ok: true }) }));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ScanStatus />);
