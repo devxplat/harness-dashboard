@@ -11,8 +11,10 @@
   },
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"pnpm dev:api\" \"pnpm dev:web\"",
+    "dev:lan": "concurrently -k -n api,web -c blue,green \"pnpm dev:api:lan\" \"pnpm dev:web\"",
     "dev:web": "pnpm --filter @harness/web dev",
     "dev:api": "cargo run -p harness-server -- --dev",
+    "dev:api:lan": "cargo run -p harness-server -- --dev --host 0.0.0.0",
     "build:web": "pnpm --filter @harness/web build",
     "build:server": "cargo build --release -p harness-server --features release-embed",
     "build": "pnpm build:web && pnpm build:server",
