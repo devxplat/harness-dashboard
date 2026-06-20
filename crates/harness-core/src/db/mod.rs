@@ -12,7 +12,7 @@ pub use queries::{
 };
 
 use crate::error::Result;
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -38,6 +38,16 @@ impl Db {
     pub fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(schema::SCHEMA_SQL)?;
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+
+    /// Open a read-only connection to an existing database. WAL allows many
+    /// concurrent readers, so callers can fan out independent queries across
+    /// several of these connections (e.g. the overview bundle).
+    pub fn open_read(path: &Path) -> Result<Self> {
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
