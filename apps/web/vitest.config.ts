@@ -17,7 +17,15 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       include: ["lib/**", "components/**", "hooks/**", "app/**"],
-      exclude: ["components/ui/**", "**/*.d.ts", "**/*.test.{ts,tsx}"],
+      exclude: [
+        "components/ui/**",
+        "lib/utils.ts",
+        "lib/test-utils.tsx",
+        "app/layout.tsx",
+        "**/*.d.ts",
+        "**/*.test.{ts,tsx}",
+      ],
+      thresholds: { lines: 98, statements: 98, functions: 90, branches: 88 },
     },
   },
 });
