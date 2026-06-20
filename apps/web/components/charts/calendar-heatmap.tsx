@@ -9,7 +9,7 @@ import {
   intensity,
   isoDay,
   maxValue,
-  monthGrid,
+  monthCells,
   parseDay,
   type HeatMetric,
 } from "@/lib/heatmap";
@@ -22,12 +22,12 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const LEVELS = 4;
 
 const RAMP: Record<HeatMetric, string[]> = {
-  sessions: ["bg-primary/25", "bg-primary/45", "bg-primary/70", "bg-primary"],
-  tokens: ["bg-sky-500/25", "bg-sky-500/45", "bg-sky-500/70", "bg-sky-500"],
+  sessions: ["bg-primary/15", "bg-primary/35", "bg-primary/65", "bg-primary"],
+  tokens: ["bg-sky-500/15", "bg-sky-500/35", "bg-sky-500/65", "bg-sky-500"],
 };
 
 function cellClass(level: number, metric: HeatMetric): string {
-  if (level === 0) return "bg-muted/40 text-muted-foreground/70";
+  if (level === 0) return "border border-border/60 bg-background text-foreground/80";
   return cn(RAMP[metric][level - 1], level >= 3 ? "text-white" : "text-foreground");
 }
 
@@ -39,7 +39,7 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
 
   const map = dayMap(data);
   const max = maxValue(data, metric);
-  const weeks = monthGrid(view.year, view.month);
+  const cells = monthCells(view.year, view.month);
   const monthLabel = new Date(view.year, view.month).toLocaleString(undefined, {
     month: "long",
     year: "numeric",
@@ -53,13 +53,13 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1">
-          <Button size="icon-sm" variant="ghost" aria-label="Previous month" onClick={() => shift(-1)}>
-            <ChevronLeft className="size-4" />
+        <div className="flex flex-1 items-center gap-2 rounded-xl bg-muted/40 px-2 py-1.5">
+          <Button size="icon-sm" variant="outline" aria-label="Previous month" onClick={() => shift(-1)}>
+            <ChevronLeft className="size-3.5" />
           </Button>
-          <span className="min-w-[8.5rem] text-center text-sm font-medium">{monthLabel}</span>
-          <Button size="icon-sm" variant="ghost" aria-label="Next month" onClick={() => shift(1)}>
-            <ChevronRight className="size-4" />
+          <span className="flex-1 text-center text-sm font-medium">{monthLabel}</span>
+          <Button size="icon-sm" variant="outline" aria-label="Next month" onClick={() => shift(1)}>
+            <ChevronRight className="size-3.5" />
           </Button>
         </div>
         <div className="flex gap-1" role="group" aria-label="Heatmap metric">
@@ -78,29 +78,29 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-center">
+      <div className="grid grid-cols-7 text-center text-[0.7rem] font-medium tracking-wide text-muted-foreground">
         {WEEKDAYS.map((w) => (
-          <div key={w} className="text-[0.7rem] font-medium text-muted-foreground">
+          <span key={w} className="py-1">
             {w}
-          </div>
+          </span>
         ))}
-        {weeks.flat().map((date, i) => {
-          if (!date) return <div key={`pad-${i}`} aria-hidden />;
+      </div>
+
+      <div className="grid grid-cols-7 gap-2">
+        {cells.map(({ date, inMonth }) => {
           const key = isoDay(date);
           const r = map.get(key);
           const value = r ? dayValue(r, metric) : 0;
-          const level = intensity(value, max, LEVELS);
+          const level = inMonth ? intensity(value, max, LEVELS) : 0;
           const label =
-            metric === "sessions"
-              ? `${formatInt(value)} sessions`
-              : `${formatTokens(value)} tokens`;
+            metric === "sessions" ? `${formatInt(value)} sessions` : `${formatTokens(value)} tokens`;
           return (
             <div
               key={key}
               title={`${key} · ${label}`}
               className={cn(
-                "flex aspect-square items-center justify-center rounded-md text-xs tabular-nums transition-colors",
-                cellClass(level, metric),
+                "flex aspect-square items-center justify-center rounded-[10px] text-[11px] font-medium tabular-nums transition-colors",
+                inMonth ? cellClass(level, metric) : "bg-muted/20 text-muted-foreground/35",
               )}
             >
               {date.getDate()}
@@ -109,7 +109,7 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
         })}
       </div>
 
-      <div className="flex items-center justify-end gap-1.5 text-[0.7rem] text-muted-foreground">
+      <div className="flex items-center justify-end gap-1.5 pt-1 text-[0.7rem] text-muted-foreground">
         <span>Less</span>
         {[0, 1, 2, 3, 4].map((l) => (
           <span key={l} className={cn("size-3 rounded-sm", cellClass(l, metric))} aria-hidden />

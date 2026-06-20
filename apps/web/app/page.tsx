@@ -101,14 +101,11 @@ export default function OverviewPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
+      <div className="grid gap-4 lg:grid-cols-5">
+        <Card className="lg:col-span-3">
+          <CardContent className="pt-6">
             {!b ? (
-              <Skeleton className="h-48 w-full" />
+              <Skeleton className="h-56 w-full" />
             ) : b.daily.length ? (
               <ActivityHeatmap data={b.daily} />
             ) : (
@@ -117,11 +114,8 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Calendar</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Card className="lg:col-span-2">
+          <CardContent className="pt-6">
             {!b ? (
               <Skeleton className="h-64 w-full" />
             ) : b.daily.length ? (

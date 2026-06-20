@@ -15,18 +15,21 @@ function row(day: string, sessions: number, tokens: number): DailyRow {
 }
 
 describe("ActivityHeatmap", () => {
-  it("renders a singular legend and dot columns for small data", () => {
+  it("renders the header, totals, day columns and a singular legend", () => {
     const { container } = render(
       <ActivityHeatmap data={[row("2026-06-01", 1, 100), row("2026-06-02", 3, 500)]} />,
     );
-    expect(screen.getByText(/1 session\b/)).toBeInTheDocument();
-    expect(container.querySelectorAll("span.rounded-full").length).toBeGreaterThan(0);
+    expect(screen.getByText("Activity")).toBeInTheDocument();
+    expect(screen.getByText("Sessions")).toBeInTheDocument();
+    // The grid is built from small square cells.
+    expect(container.querySelectorAll("span.rounded-\\[2px\\]").length).toBeGreaterThan(0);
     expect(screen.getByTitle(/2026-06-02 · 3 sessions/)).toBeInTheDocument();
+    expect(screen.getByText(/1 session \(orange\)/)).toBeInTheDocument();
   });
 
   it("pluralizes the session quantum when data is large", () => {
     render(<ActivityHeatmap data={[row("2026-06-01", 64, 1000)]} />);
-    // ceil(64/16) = 4 sessions per dot -> plural label
-    expect(screen.getByText(/4 sessions/)).toBeInTheDocument();
+    // ceil(64/8) = 8 sessions per square -> plural label.
+    expect(screen.getByText(/8 sessions \(orange\)/)).toBeInTheDocument();
   });
 });
