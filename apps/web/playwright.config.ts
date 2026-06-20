@@ -33,7 +33,7 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: `python -m http.server ${APP_PORT} -d out`,
+      command: `node e2e/static-server.mjs out ${APP_PORT}`,
       url: APP,
       reuseExistingServer: false,
       timeout: 30_000,
