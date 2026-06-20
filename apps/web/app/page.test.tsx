@@ -61,8 +61,13 @@ const prevTotals = {
 
 describe("OverviewPage", () => {
   it("renders KPIs, chart, by-model and recent sessions", async () => {
-    // Order matters: substring match is first-key-wins, so "/api/overview-bundle" precedes "/api/overview".
-    installFetch({ "/api/overview-bundle": bundle, "/api/overview": prevTotals });
+    // Order matters: substring match is first-key-wins. The previous-window URL has
+    // "until="; the current-totals URL is plain "/api/overview"; bundle is its own path.
+    installFetch({
+      "/api/overview-bundle": bundle,
+      "until=": prevTotals,
+      "/api/overview": bundle.totals,
+    });
     renderWithRange(<OverviewPage />);
     await waitFor(() => expect(screen.getByText("Est. cost")).toBeInTheDocument());
     expect(screen.getByText("claude-opus-4-8")).toBeInTheDocument();
@@ -73,7 +78,7 @@ describe("OverviewPage", () => {
   });
 
   it("renders the empty chart state when there is no daily data", async () => {
-    installFetch({ "/api/overview-bundle": { ...bundle, daily: [] } });
+    installFetch({ "/api/overview-bundle": { ...bundle, daily: [] }, "/api/overview": bundle.totals });
     renderWithRange(<OverviewPage />);
     await waitFor(() => expect(screen.getByText("No activity in range.")).toBeInTheDocument());
   });
