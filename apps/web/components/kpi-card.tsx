@@ -20,7 +20,7 @@ export function KpiCard({
   delta?: number | null;
 }) {
   return (
-    <Card>
+    <Card className="transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
         {Icon ? <Icon className="size-4 text-muted-foreground" /> : null}

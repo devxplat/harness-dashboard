@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatInt, formatPct, formatTokens, formatUSD, shortId } from "./format";
+import {
+  baseName,
+  formatDate,
+  formatDateShort,
+  formatInt,
+  formatPct,
+  formatTokens,
+  formatUSD,
+  projectLabel,
+  shortId,
+} from "./format";
 
 describe("formatTokens", () => {
   it("handles null/undefined", () => {
@@ -49,5 +59,35 @@ describe("formatPct", () => {
     expect(formatPct(0.201)).toBe("+20.1%");
     expect(formatPct(-0.05)).toBe("-5.0%");
     expect(formatPct(0)).toBe("0.0%");
+  });
+});
+
+describe("formatDateShort", () => {
+  it("handles null, passes through invalid, formats valid", () => {
+    expect(formatDateShort(null)).toBe("—");
+    expect(formatDateShort("nope")).toBe("nope");
+    expect(formatDateShort("2026-06-20T10:00:00Z")).toContain("Jun");
+  });
+});
+
+describe("baseName", () => {
+  it("returns the last segment of any path style", () => {
+    expect(baseName("D:\\Github\\harness-dashboard")).toBe("harness-dashboard");
+    expect(baseName("/home/me/proj/")).toBe("proj");
+    expect(baseName("solo")).toBe("solo");
+    expect(baseName(null)).toBe("—");
+  });
+});
+
+describe("projectLabel", () => {
+  it("prefers cwd, falls back to slug, and can shorten", () => {
+    expect(projectLabel("D:\\Github\\harness-dashboard", "D--Github-harness-dashboard")).toBe(
+      "D:\\Github\\harness-dashboard",
+    );
+    expect(projectLabel("D:\\Github\\harness-dashboard", null, true)).toBe("harness-dashboard");
+    expect(projectLabel(null, "D--Github-token-dashboard-community")).toBe(
+      "D--Github-token-dashboard-community",
+    );
+    expect(projectLabel(null, null)).toBe("—");
   });
 });

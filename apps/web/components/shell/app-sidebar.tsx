@@ -67,6 +67,7 @@ export function AppSidebar() {
                         asChild
                         isActive={pathname === norm(item.href)}
                         tooltip={item.title}
+                        className="transition-transform duration-150 hover:translate-x-0.5"
                       >
                         <Link href={item.href}>
                           <item.icon className="size-4" />
@@ -77,7 +78,12 @@ export function AppSidebar() {
                   ))}
                   {group.label === "More" && rtk?.available ? (
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={pathname === "/rtk"} tooltip="RTK">
+                      <SidebarMenuButton
+                        asChild
+                        isActive={pathname === "/rtk"}
+                        tooltip="RTK"
+                        className="transition-transform duration-150 hover:translate-x-0.5"
+                      >
                         <Link href="/rtk">
                           <Zap className="size-4" />
                           <span>RTK</span>

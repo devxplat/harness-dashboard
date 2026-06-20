@@ -26,6 +26,41 @@ export function shortId(s: string | null | undefined): string {
   return s ? s.slice(0, 8) : "—";
 }
 
+/** Compact date+time ("Jun 20, 18:30") for dense tables. */
+export function formatDateShort(s: string | null | undefined): string {
+  if (!s) return "—";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Final path segment of a Windows or POSIX path. */
+export function baseName(path: string | null | undefined): string {
+  if (!path) return "—";
+  const parts = path.split(/[/\\]+/).filter(Boolean);
+  return parts.at(-1) ?? path;
+}
+
+/**
+ * Human label for a session/project. Claude Code stores projects under a slug
+ * that flattens path separators to "-" (e.g. "D--Github-harness-dashboard"), so
+ * prefer the real recorded cwd. `short` keeps only the final folder name.
+ */
+export function projectLabel(
+  cwd: string | null | undefined,
+  slug: string | null | undefined,
+  short = false,
+): string {
+  const path = cwd ?? slug ?? null;
+  if (!path) return "—";
+  return short ? baseName(path) : path;
+}
+
 /** A fraction (0.201) as a signed percent ("+20.1%"). Negatives keep their sign. */
 export function formatPct(frac: number): string {
   return (frac > 0 ? "+" : "") + (frac * 100).toFixed(1) + "%";
