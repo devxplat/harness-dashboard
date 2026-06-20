@@ -17,8 +17,8 @@ import { useRange } from "@/lib/range";
 import type { ToolRow } from "@/lib/types";
 
 export default function ToolsPage() {
-  const { since } = useRange();
-  const { data, error, loading } = useApi<ToolRow[]>(`/api/tools${rangeQuery(since)}`);
+  const { since, until } = useRange();
+  const { data, error, loading } = useApi<ToolRow[]>(`/api/tools${rangeQuery(since, until)}`);
 
   if (error) return <ErrorBlock error={error} />;
   if (loading || !data) return <LoadingBlock />;

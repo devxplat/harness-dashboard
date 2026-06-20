@@ -3,6 +3,7 @@
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import Image from "next/image";
 import { AppSidebar } from "./app-sidebar";
+import { DateRangePicker } from "./date-range-picker";
 import { RangeSelector } from "./range-selector";
 import { RealtimeToggle } from "./realtime-toggle";
 import { ScanStatus } from "./scan-status";
@@ -23,6 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <RangeSelector />
+            <DateRangePicker />
             <RealtimeToggle />
             <ThemeToggle />
             <ScanStatus />

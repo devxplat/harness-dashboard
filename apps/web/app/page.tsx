@@ -37,15 +37,15 @@ function RowsSkeleton() {
 }
 
 export default function OverviewPage() {
-  const { since, previous } = useRange();
+  const { since, until, previous } = useRange();
   // Fast path: the KPIs render from the lightweight totals query (~0.6s) while
   // the heavier bundle (chart, by-model, recent sessions) streams in behind skeletons.
-  const totals = useApi<Totals>(`/api/overview${rangeQuery(since)}`);
+  const totals = useApi<Totals>(`/api/overview${rangeQuery(since, until)}`);
   const prevUrl = previous
     ? `/api/overview?since=${encodeURIComponent(previous.since)}&until=${encodeURIComponent(previous.until)}`
     : null;
   const prev = useApi<Totals>(prevUrl);
-  const bundle = useApi<OverviewBundle>(`/api/overview-bundle${rangeQuery(since)}`);
+  const bundle = useApi<OverviewBundle>(`/api/overview-bundle${rangeQuery(since, until)}`);
 
   if (totals.error) return <ErrorBlock error={totals.error} />;
 
