@@ -2,6 +2,14 @@
 
 import { EmptyBlock } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -15,6 +23,7 @@ import {
   type ColumnDef,
   type RowData,
   type SortingState,
+  type VisibilityState,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
@@ -22,7 +31,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, SlidersHorizontal } from "lucide-react";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 
 // Per-column right-alignment for numeric columns.
@@ -55,6 +64,7 @@ export function DataTable<TData, TValue>({
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [rawFilter, setRawFilter] = useState("");
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const listId = useId();
 
   // Debounce so large datasets don't re-filter on every keystroke; the input stays
@@ -81,9 +91,10 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter },
+    state: { sorting, globalFilter, columnVisibility },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
+    onColumnVisibilityChange: setColumnVisibility,
     globalFilterFn: (row, _columnId, value) => {
       if (!search) return true;
       const needle = String(value).toLowerCase();
@@ -103,23 +114,49 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-3">
-      {search ? (
-        <>
-          <Input
-            list={listId}
-            placeholder={search.placeholder}
-            aria-label={search.ariaLabel}
-            value={rawFilter}
-            onChange={(e) => setRawFilter(e.target.value)}
-            className="max-w-sm"
-          />
-          <datalist id={listId}>
-            {suggestions.map((s) => (
-              <option key={s} value={s} />
-            ))}
-          </datalist>
-        </>
-      ) : null}
+      <div className="flex items-center gap-2">
+        {search ? (
+          <>
+            <Input
+              list={listId}
+              placeholder={search.placeholder}
+              aria-label={search.ariaLabel}
+              value={rawFilter}
+              onChange={(e) => setRawFilter(e.target.value)}
+              className="max-w-sm"
+            />
+            <datalist id={listId}>
+              {suggestions.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
+          </>
+        ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="ml-auto">
+              <SlidersHorizontal />
+              <span className="hidden sm:inline">Columns</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {table
+              .getAllColumns()
+              .filter((c) => c.getCanHide())
+              .map((c) => (
+                <DropdownMenuCheckboxItem
+                  key={c.id}
+                  checked={c.getIsVisible()}
+                  onCheckedChange={(v) => c.toggleVisibility(!!v)}
+                >
+                  {typeof c.columnDef.header === "string" ? c.columnDef.header : c.id}
+                </DropdownMenuCheckboxItem>
+              ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       {rows.length === 0 ? (
         <EmptyBlock message={emptyMessage} />
