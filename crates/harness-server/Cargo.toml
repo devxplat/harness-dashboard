@@ -31,3 +31,4 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rust-embed = { version = "8", optional = true }
 mime_guess = { version = "2", optional = true }
+notify = "8.2.0"
