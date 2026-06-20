@@ -1,23 +1,20 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useStream } from "@/hooks/use-stream";
+import { ScanSyncContext } from "@/hooks/scan-sync";
 import { apiPost } from "@/lib/api";
 import { RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export function ScanStatus() {
+  // Reads the shared SSE (no second EventSource) — `last` updates when a scan ends.
+  const { last } = useContext(ScanSyncContext);
   const [scanning, setScanning] = useState(false);
 
-  useStream((e) => {
-    if (e.type === "scan") {
-      setScanning(false);
-      if (e.n && e.n.messages > 0) {
-        toast.success(`Scanned ${e.n.files} files, ${e.n.messages} new messages`);
-      }
-    }
-  });
+  useEffect(() => {
+    if (last) setScanning(false);
+  }, [last]);
 
   async function refresh() {
     setScanning(true);
