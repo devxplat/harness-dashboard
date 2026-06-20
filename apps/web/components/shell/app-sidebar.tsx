@@ -13,6 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { useApi } from "@/hooks/use-api";
 import type { RtkInfo } from "@/lib/types";
@@ -33,21 +34,24 @@ export function AppSidebar() {
   return (
     <Sidebar variant="inset" collapsible="icon">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild tooltip="harness dashboard">
-              <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-md">
-                  <Image src="/logo.png" alt="" width={32} height={32} className="size-8" priority />
-                </div>
-                <div className="grid flex-1 text-left leading-tight">
-                  <span className="truncate font-semibold">harness dashboard</span>
-                  <span className="truncate text-xs text-muted-foreground">Claude Code usage</span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" asChild tooltip="harness dashboard">
+                <Link href="/">
+                  <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-md">
+                    <Image src="/logo.png" alt="" width={32} height={32} className="size-8" priority />
+                  </div>
+                  <div className="grid flex-1 text-left leading-tight">
+                    <span className="truncate font-semibold">harness dashboard</span>
+                    <span className="truncate text-xs text-muted-foreground">Claude Code usage</span>
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <SidebarTrigger className="ml-auto group-data-[collapsible=icon]:ml-0" />
+        </div>
       </SidebarHeader>
 
       <SidebarContent>

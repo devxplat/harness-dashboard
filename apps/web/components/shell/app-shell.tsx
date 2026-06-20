@@ -1,7 +1,7 @@
 "use client";
 
-import { Separator } from "@/components/ui/separator";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import Image from "next/image";
 import { AppSidebar } from "./app-sidebar";
 import { RangeSelector } from "./range-selector";
 import { ScanStatus } from "./scan-status";
@@ -11,11 +11,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
-        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
-          <SidebarTrigger aria-label="Toggle sidebar" />
-          <Separator orientation="vertical" className="h-5" />
-          <span className="text-sm font-semibold">harness-dashboard</span>
+      <SidebarInset className="md:peer-data-[variant=inset]:border">
+        <header className="sticky top-0 z-10 flex w-full shrink-0 items-center gap-3 border-b bg-background px-4 py-3.5 sm:px-6 lg:rounded-t-xl">
+          <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-background">
+            <Image src="/logo.png" alt="" width={40} height={40} className="size-9" priority />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">Welcome back 👋</span>
+            <span className="text-xs text-muted-foreground">Your Claude Code usage</span>
+          </div>
           <div className="ml-auto flex items-center gap-2">
             <RangeSelector />
             <ThemeToggle />
