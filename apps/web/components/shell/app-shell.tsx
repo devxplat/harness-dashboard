@@ -20,7 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <ScanStatus />
           </div>
         </header>
-        <main className="flex-1 space-y-6 p-4 md:p-6">{children}</main>
+        <div className="flex-1 space-y-6 p-4 md:p-6">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );
