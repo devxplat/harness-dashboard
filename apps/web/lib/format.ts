@@ -25,3 +25,8 @@ export function formatDate(s: string | null | undefined): string {
 export function shortId(s: string | null | undefined): string {
   return s ? s.slice(0, 8) : "—";
 }
+
+/** A fraction (0.201) as a signed percent ("+20.1%"). Negatives keep their sign. */
+export function formatPct(frac: number): string {
+  return (frac > 0 ? "+" : "") + (frac * 100).toFixed(1) + "%";
+}

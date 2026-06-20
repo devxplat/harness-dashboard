@@ -46,13 +46,30 @@ const bundle = {
   ],
 };
 
+// Previous-window totals (all smaller → positive deltas). turns 3 vs 2 = +50%, cost 1.5 vs 1.2 = +25%.
+const prevTotals = {
+  sessions: 1,
+  turns: 2,
+  input_tokens: 50,
+  output_tokens: 100,
+  cache_read_tokens: 25,
+  cache_create_5m_tokens: 5,
+  cache_create_1h_tokens: 2,
+  cost_usd: 1.2,
+  cost_estimated: false,
+};
+
 describe("OverviewPage", () => {
   it("renders KPIs, chart, by-model and recent sessions", async () => {
-    installFetch({ "/api/overview-bundle": bundle });
+    // Order matters: substring match is first-key-wins, so "/api/overview-bundle" precedes "/api/overview".
+    installFetch({ "/api/overview-bundle": bundle, "/api/overview": prevTotals });
     renderWithRange(<OverviewPage />);
     await waitFor(() => expect(screen.getByText("Est. cost")).toBeInTheDocument());
     expect(screen.getByText("claude-opus-4-8")).toBeInTheDocument();
     expect(screen.getByText("Daily tokens")).toBeInTheDocument();
+    // Genuine period-over-period deltas from the previous-window fetch.
+    expect(await screen.findByText("+50.0%")).toBeInTheDocument(); // turns 3 vs 2
+    expect(screen.getByText("+25.0%")).toBeInTheDocument(); // cost 1.5 vs 1.2
   });
 
   it("renders the empty chart state when there is no daily data", async () => {

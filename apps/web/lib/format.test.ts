@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatInt, formatTokens, formatUSD, shortId } from "./format";
+import { formatDate, formatInt, formatPct, formatTokens, formatUSD, shortId } from "./format";
 
 describe("formatTokens", () => {
   it("handles null/undefined", () => {
@@ -41,5 +41,13 @@ describe("shortId", () => {
   it("truncates to 8 and handles null", () => {
     expect(shortId("abcdef1234567")).toBe("abcdef12");
     expect(shortId(null)).toBe("—");
+  });
+});
+
+describe("formatPct", () => {
+  it("signs and scales fractions", () => {
+    expect(formatPct(0.201)).toBe("+20.1%");
+    expect(formatPct(-0.05)).toBe("-5.0%");
+    expect(formatPct(0)).toBe("0.0%");
   });
 });
