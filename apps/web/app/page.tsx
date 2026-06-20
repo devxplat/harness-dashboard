@@ -16,36 +16,51 @@ import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
 import { formatInt, formatTokens, formatUSD, shortId } from "@/lib/format";
 import { useRange } from "@/lib/range";
-import type { OverviewBundle } from "@/lib/types";
+import type { OverviewBundle, Totals } from "@/lib/types";
+import { ArrowDown, ArrowUp, Coins, Database, HardDrive, MessagesSquare, RefreshCw } from "lucide-react";
 import Link from "next/link";
 
+/** Period-over-period change as a fraction, or null when there's no comparable prior value. */
+function delta(curr: number, prev: number | null | undefined): number | null {
+  return prev != null && prev > 0 ? (curr - prev) / prev : null;
+}
+
 export default function OverviewPage() {
-  const { since } = useRange();
+  const { since, previous } = useRange();
   const { data, error, loading } = useApi<OverviewBundle>(
     `/api/overview-bundle${rangeQuery(since)}`,
   );
+  // Genuine deltas: the equal-length window before `since`, via the existing /api/overview.
+  const prevUrl = previous
+    ? `/api/overview?since=${encodeURIComponent(previous.since)}&until=${encodeURIComponent(previous.until)}`
+    : null;
+  const prev = useApi<Totals>(prevUrl);
 
   if (error) return <ErrorBlock error={error} />;
   if (loading || !data) return <LoadingBlock />;
 
   const t = data.totals;
+  const p = prev.data;
   const cacheWrite = t.cache_create_5m_tokens + t.cache_create_1h_tokens;
+  const prevCacheWrite = p ? p.cache_create_5m_tokens + p.cache_create_1h_tokens : null;
 
   return (
     <>
       <PageTitle title="Overview" description="Token usage and cost across your Claude Code sessions." />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Sessions" value={formatInt(t.sessions)} />
-        <KpiCard label="Turns" value={formatInt(t.turns)} />
-        <KpiCard label="Input" value={formatTokens(t.input_tokens)} />
-        <KpiCard label="Output" value={formatTokens(t.output_tokens)} />
-        <KpiCard label="Cache read" value={formatTokens(t.cache_read_tokens)} />
-        <KpiCard label="Cache write" value={formatTokens(cacheWrite)} />
+        <KpiCard label="Sessions" value={formatInt(t.sessions)} icon={MessagesSquare} delta={delta(t.sessions, p?.sessions)} />
+        <KpiCard label="Turns" value={formatInt(t.turns)} icon={RefreshCw} delta={delta(t.turns, p?.turns)} />
+        <KpiCard label="Input" value={formatTokens(t.input_tokens)} icon={ArrowDown} delta={delta(t.input_tokens, p?.input_tokens)} />
+        <KpiCard label="Output" value={formatTokens(t.output_tokens)} icon={ArrowUp} delta={delta(t.output_tokens, p?.output_tokens)} />
+        <KpiCard label="Cache read" value={formatTokens(t.cache_read_tokens)} icon={Database} delta={delta(t.cache_read_tokens, p?.cache_read_tokens)} />
+        <KpiCard label="Cache write" value={formatTokens(cacheWrite)} icon={HardDrive} delta={delta(cacheWrite, prevCacheWrite)} />
         <KpiCard
           label="Est. cost"
           value={formatUSD(t.cost_usd)}
+          icon={Coins}
           hint={t.cost_estimated ? "includes estimated rates" : undefined}
+          delta={t.cost_usd != null ? delta(t.cost_usd, p?.cost_usd) : null}
         />
       </div>
 
