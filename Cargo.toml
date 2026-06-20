@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = ["crates/harness-core", "crates/harness-server"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/devxplat/harness-dashboard"
+rust-version = "1.85"
+
+# Shared dependency versions. Individual crates opt in via `dep.workspace = true`.
+# Heavy deps (rusqlite/bundled, axum, tokio) are pulled in as the backend lands.
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

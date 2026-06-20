@@ -1,0 +1,91 @@
+{
+  "_comment": "Published Anthropic API rates in USD per million tokens. Re-authored from public pricing; not imported from any other project. Cache-read ~= 10% of input; 5m cache write ~= 1.25x input; 1h cache write ~= 2x input.",
+  "models": {
+    "claude-fable-5": {
+      "tier": "fable",
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_create_5m": 12.5,
+      "cache_create_1h": 20.0
+    },
+    "claude-opus-4-8": {
+      "tier": "opus",
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_create_5m": 6.25,
+      "cache_create_1h": 10.0
+    },
+    "claude-opus-4-7": {
+      "tier": "opus",
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_create_5m": 6.25,
+      "cache_create_1h": 10.0
+    },
+    "claude-opus-4-6": {
+      "tier": "opus",
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_create_5m": 6.25,
+      "cache_create_1h": 10.0
+    },
+    "claude-sonnet-4-6": {
+      "tier": "sonnet",
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.3,
+      "cache_create_5m": 3.75,
+      "cache_create_1h": 6.0
+    },
+    "claude-haiku-4-5": {
+      "tier": "haiku",
+      "input": 1.0,
+      "output": 5.0,
+      "cache_read": 0.1,
+      "cache_create_5m": 1.25,
+      "cache_create_1h": 2.0
+    }
+  },
+  "tier_fallback": {
+    "fable": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_read": 1.0,
+      "cache_create_5m": 12.5,
+      "cache_create_1h": 20.0
+    },
+    "opus": {
+      "input": 15.0,
+      "output": 75.0,
+      "cache_read": 1.5,
+      "cache_create_5m": 18.75,
+      "cache_create_1h": 30.0
+    },
+    "sonnet": {
+      "input": 3.0,
+      "output": 15.0,
+      "cache_read": 0.3,
+      "cache_create_5m": 3.75,
+      "cache_create_1h": 6.0
+    },
+    "haiku": {
+      "input": 1.0,
+      "output": 5.0,
+      "cache_read": 0.1,
+      "cache_create_5m": 1.25,
+      "cache_create_1h": 2.0
+    }
+  },
+  "plans": {
+    "api": { "monthly": 0, "label": "API (pay-per-token)" },
+    "pro": { "monthly": 20, "label": "Pro" },
+    "max": { "monthly": 100, "label": "Max" },
+    "max-20x": { "monthly": 200, "label": "Max 20x" },
+    "team": { "monthly": 25, "label": "Team Standard" },
+    "team-premium": { "monthly": 125, "label": "Team Premium" }
+  }
+}
