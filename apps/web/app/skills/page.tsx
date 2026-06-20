@@ -17,8 +17,8 @@ import { useRange } from "@/lib/range";
 import type { SkillRow } from "@/lib/types";
 
 export default function SkillsPage() {
-  const { since } = useRange();
-  const { data, error, loading } = useApi<SkillRow[]>(`/api/skills${rangeQuery(since)}`);
+  const { since, until } = useRange();
+  const { data, error, loading } = useApi<SkillRow[]>(`/api/skills${rangeQuery(since, until)}`);
 
   if (error) return <ErrorBlock error={error} />;
   if (loading || !data) return <LoadingBlock />;

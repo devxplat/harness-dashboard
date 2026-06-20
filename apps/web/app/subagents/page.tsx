@@ -46,8 +46,10 @@ function AgentTable({ rows, label }: { rows: AgentGroupRow[]; label: string }) {
 }
 
 export default function SubagentsPage() {
-  const { since } = useRange();
-  const { data, error, loading } = useApi<SubagentsResponse>(`/api/subagents${rangeQuery(since)}`);
+  const { since, until } = useRange();
+  const { data, error, loading } = useApi<SubagentsResponse>(
+    `/api/subagents${rangeQuery(since, until)}`,
+  );
 
   if (error) return <ErrorBlock error={error} />;
   if (loading || !data) return <LoadingBlock />;

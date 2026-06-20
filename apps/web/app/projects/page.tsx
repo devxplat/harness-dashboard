@@ -17,8 +17,8 @@ import { useRange } from "@/lib/range";
 import type { ProjectRow } from "@/lib/types";
 
 export default function ProjectsPage() {
-  const { since } = useRange();
-  const { data, error, loading } = useApi<ProjectRow[]>(`/api/projects${rangeQuery(since)}`);
+  const { since, until } = useRange();
+  const { data, error, loading } = useApi<ProjectRow[]>(`/api/projects${rangeQuery(since, until)}`);
 
   if (error) return <ErrorBlock error={error} />;
   if (loading || !data) return <LoadingBlock />;

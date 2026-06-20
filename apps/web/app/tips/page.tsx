@@ -4,6 +4,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/st
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useApi } from "@/hooks/use-api";
+import { withRange } from "@/lib/api";
 import { useRange } from "@/lib/range";
 import type { Tip } from "@/lib/types";
 
@@ -14,10 +15,8 @@ function severityVariant(s: string): "default" | "secondary" | "destructive" | "
 }
 
 export default function TipsPage() {
-  const { since } = useRange();
-  const { data, error, loading } = useApi<Tip[]>(
-    `/api/tips${since ? `?since=${encodeURIComponent(since)}` : ""}`,
-  );
+  const { since, until } = useRange();
+  const { data, error, loading } = useApi<Tip[]>(withRange("/api/tips", since, until));
 
   if (error) return <ErrorBlock error={error} />;
   if (loading || !data) return <LoadingBlock />;

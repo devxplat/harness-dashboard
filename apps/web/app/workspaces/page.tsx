@@ -17,8 +17,10 @@ import { useRange } from "@/lib/range";
 import type { WorkspaceRow } from "@/lib/types";
 
 export default function WorkspacesPage() {
-  const { since } = useRange();
-  const { data, error, loading } = useApi<WorkspaceRow[]>(`/api/workspaces${rangeQuery(since)}`);
+  const { since, until } = useRange();
+  const { data, error, loading } = useApi<WorkspaceRow[]>(
+    `/api/workspaces${rangeQuery(since, until)}`,
+  );
 
   if (error) return <ErrorBlock error={error} />;
   if (loading || !data) return <LoadingBlock />;
