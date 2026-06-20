@@ -5,6 +5,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { AppSidebar } from "./app-sidebar";
 import { RangeSelector } from "./range-selector";
 import { ScanStatus } from "./scan-status";
+import { ThemeToggle } from "./theme-toggle";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -17,6 +18,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="text-sm font-semibold">harness-dashboard</span>
           <div className="ml-auto flex items-center gap-2">
             <RangeSelector />
+            <ThemeToggle />
             <ScanStatus />
           </div>
         </header>
