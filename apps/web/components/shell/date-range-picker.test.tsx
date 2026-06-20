@@ -23,6 +23,9 @@ function CustomHarness() {
   );
 }
 
+const dayButtons = () =>
+  Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-day]"));
+
 describe("DateRangePicker", () => {
   it("shows a prompt label and outline style with no custom window", () => {
     render(
@@ -48,7 +51,18 @@ describe("DateRangePicker", () => {
     expect(trigger).toHaveAttribute("data-variant", "default");
   });
 
-  it("selects a range from the calendar and closes the popover", async () => {
+  it("highlights the active preset window when opened", async () => {
+    // Default provider range is 30d, so opening should mark those days as the preset.
+    render(
+      <RangeProvider>
+        <DateRangePicker />
+      </RangeProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Pick a custom date range" }));
+    expect(document.querySelector(".rdp-preset")).not.toBeNull();
+  });
+
+  it("keeps the popover open after the first click and commits on the second", async () => {
     const user = userEvent.setup();
     render(
       <RangeProvider>
@@ -57,13 +71,18 @@ describe("DateRangePicker", () => {
     );
     await user.click(screen.getByRole("button", { name: "Pick a custom date range" }));
 
-    const days = Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-day]"));
-    expect(days.length).toBeGreaterThan(25);
-    const start = days[10];
-    const end = days[20];
-    if (!start || !end) throw new Error("calendar days not rendered");
-    await user.click(start); // sets range start (onSelect early-returns: no end yet)
-    await user.click(end); // completes the range -> setCustom + close
+    const first = dayButtons();
+    expect(first.length).toBeGreaterThan(25);
+    const start = first[10];
+    if (!start) throw new Error("calendar days not rendered");
+    await user.click(start); // start only — must NOT close
+
+    // Popover is still open: day grid is still mounted.
+    const second = dayButtons();
+    expect(second.length).toBeGreaterThan(25);
+    const end = second[20];
+    if (!end) throw new Error("calendar days not rendered after first click");
+    await user.click(end); // completes the range -> commit + close
 
     const trigger = screen.getByRole("button", { name: "Pick a custom date range" });
     expect(trigger).not.toHaveTextContent("Custom range");
