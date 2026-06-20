@@ -618,31 +618,39 @@ impl Db {
         limit: i64,
         sort: &str,
     ) -> Result<Vec<PromptRow>> {
-        let order = if sort == "recent" {
-            "p.timestamp DESC"
+        let (inner_order, outer_order) = if sort == "recent" {
+            ("p.timestamp DESC", "timestamp DESC")
         } else {
-            "billable DESC"
+            ("billable DESC", "billable DESC")
         };
         let conn = self.conn.lock().unwrap();
+        // Rank + take the top N first (cheap: tokens only), then resolve each prompt's
+        // model with a subquery for just those N rows — instead of running the model
+        // subquery for every prompt in the history. Identical results, far less work.
         let sql = format!(
             "WITH prompts AS ( \
                SELECT uuid, session_id, project_slug, timestamp, prompt_text, prompt_chars, \
                       LEAD(timestamp) OVER (PARTITION BY session_id ORDER BY timestamp) AS next_ts \
                FROM messages WHERE type='user' AND prompt_text IS NOT NULL \
+             ), \
+             ranked AS ( \
+               SELECT p.uuid, p.session_id, p.project_slug, p.timestamp, p.prompt_text, p.prompt_chars, p.next_ts, \
+                 COALESCE(SUM(a.input_tokens),0) AS in_tok, COALESCE(SUM(a.output_tokens),0) AS out_tok, \
+                 COALESCE(SUM(a.cache_read_tokens),0) AS cr_tok, COALESCE(SUM(a.cache_create_5m_tokens),0) AS c5_tok, \
+                 COALESCE(SUM(a.cache_create_1h_tokens),0) AS c1_tok, \
+                 (COALESCE(SUM(a.input_tokens),0)+COALESCE(SUM(a.output_tokens),0)\
+                  +COALESCE(SUM(a.cache_create_5m_tokens),0)+COALESCE(SUM(a.cache_create_1h_tokens),0)) AS billable \
+               FROM prompts p \
+               LEFT JOIN messages a ON a.session_id=p.session_id AND a.type='assistant' AND a.is_sidechain=0 \
+                 AND a.timestamp>=p.timestamp AND (p.next_ts IS NULL OR a.timestamp<p.next_ts) \
+               GROUP BY p.uuid ORDER BY {inner_order} LIMIT ? \
              ) \
-             SELECT p.uuid, p.session_id, p.project_slug, p.timestamp, p.prompt_text, p.prompt_chars, \
-               (SELECT a.model FROM messages a WHERE a.session_id=p.session_id AND a.type='assistant' \
-                  AND a.is_sidechain=0 AND a.model IS NOT NULL AND a.timestamp>=p.timestamp \
-                  AND (p.next_ts IS NULL OR a.timestamp<p.next_ts) ORDER BY a.timestamp LIMIT 1) AS model, \
-               COALESCE(SUM(a.input_tokens),0), COALESCE(SUM(a.output_tokens),0), \
-               COALESCE(SUM(a.cache_read_tokens),0), COALESCE(SUM(a.cache_create_5m_tokens),0), \
-               COALESCE(SUM(a.cache_create_1h_tokens),0), \
-               (COALESCE(SUM(a.input_tokens),0)+COALESCE(SUM(a.output_tokens),0)\
-                +COALESCE(SUM(a.cache_create_5m_tokens),0)+COALESCE(SUM(a.cache_create_1h_tokens),0)) AS billable \
-             FROM prompts p \
-             LEFT JOIN messages a ON a.session_id=p.session_id AND a.type='assistant' AND a.is_sidechain=0 \
-               AND a.timestamp>=p.timestamp AND (p.next_ts IS NULL OR a.timestamp<p.next_ts) \
-             GROUP BY p.uuid ORDER BY {order} LIMIT ?"
+             SELECT r.uuid, r.session_id, r.project_slug, r.timestamp, r.prompt_text, r.prompt_chars, \
+               (SELECT a.model FROM messages a WHERE a.session_id=r.session_id AND a.type='assistant' \
+                  AND a.is_sidechain=0 AND a.model IS NOT NULL AND a.timestamp>=r.timestamp \
+                  AND (r.next_ts IS NULL OR a.timestamp<r.next_ts) ORDER BY a.timestamp LIMIT 1) AS model, \
+               r.in_tok, r.out_tok, r.cr_tok, r.c5_tok, r.c1_tok, r.billable \
+             FROM ranked r ORDER BY {outer_order}"
         );
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt
