@@ -42,7 +42,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec eslint .
       - run: pnpm --filter @harness/web typecheck
-      - run: pnpm --filter @harness/web test
+      - run: pnpm --filter @harness/web test:coverage
       - run: pnpm --filter @harness/web build
 
   e2e:
