@@ -21,6 +21,9 @@ use tokio::sync::broadcast;
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<Db>,
+    /// Path to the SQLite file — lets handlers open extra read-only connections
+    /// for concurrent queries (the overview bundle fans out across them).
+    pub db_path: Arc<PathBuf>,
     pub pricing: Arc<Pricing>,
     pub projects_dir: Arc<PathBuf>,
     pub tx: broadcast::Sender<api::ScanEvent>,
@@ -85,6 +88,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState {
         db,
+        db_path: Arc::new(db_path.clone()),
         pricing,
         projects_dir: Arc::new(projects_dir.clone()),
         tx,
