@@ -1,20 +1,64 @@
 "use client";
 
+import { DataTable } from "@/components/data-table";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
-import { formatInt, formatTokens } from "@/lib/format";
+import { formatInt, formatTokens, projectLabel } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { ProjectRow } from "@/lib/types";
+import type { ColumnDef } from "@tanstack/react-table";
+
+const columns: ColumnDef<ProjectRow>[] = [
+  {
+    accessorKey: "project_slug",
+    header: "Project",
+    cell: ({ row }) => (
+      <span
+        className="block max-w-[280px] truncate font-medium"
+        title={projectLabel(row.original.sample_cwd, row.original.project_slug)}
+      >
+        {projectLabel(row.original.sample_cwd, row.original.project_slug, true)}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "sessions",
+    header: "Sessions",
+    cell: ({ row }) => formatInt(row.original.sessions),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "turns",
+    header: "Turns",
+    cell: ({ row }) => formatInt(row.original.turns),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "input_tokens",
+    header: "Input",
+    cell: ({ row }) => formatTokens(row.original.input_tokens),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "output_tokens",
+    header: "Output",
+    cell: ({ row }) => formatTokens(row.original.output_tokens),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "billable_tokens",
+    header: "Billable",
+    cell: ({ row }) => formatTokens(row.original.billable_tokens),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "cache_read_tokens",
+    header: "Cache read",
+    cell: ({ row }) => formatTokens(row.original.cache_read_tokens),
+    meta: { align: "right" },
+  },
+];
 
 export default function ProjectsPage() {
   const { since, until } = useRange();
@@ -29,36 +73,17 @@ export default function ProjectsPage() {
       {data.length === 0 ? (
         <EmptyBlock message="No projects in range." />
       ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Project</TableHead>
-                  <TableHead className="text-right">Sessions</TableHead>
-                  <TableHead className="text-right">Turns</TableHead>
-                  <TableHead className="text-right">Input</TableHead>
-                  <TableHead className="text-right">Output</TableHead>
-                  <TableHead className="text-right">Billable</TableHead>
-                  <TableHead className="text-right">Cache read</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.map((p) => (
-                  <TableRow key={p.project_slug}>
-                    <TableCell className="max-w-[280px] truncate font-medium">{p.project_slug}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInt(p.sessions)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInt(p.turns)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTokens(p.input_tokens)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTokens(p.output_tokens)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTokens(p.billable_tokens)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTokens(p.cache_read_tokens)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <DataTable
+          columns={columns}
+          data={data}
+          search={{
+            fields: ["project_slug", "sample_cwd"],
+            placeholder: "Filter projects…",
+            ariaLabel: "Filter projects",
+          }}
+          pageSize={25}
+          emptyMessage="No projects match."
+        />
       )}
     </>
   );

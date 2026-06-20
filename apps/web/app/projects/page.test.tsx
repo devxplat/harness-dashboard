@@ -7,8 +7,8 @@ afterEach(() => vi.restoreAllMocks());
 
 const rows = [
   {
-    project_slug: "myproj",
-    sample_cwd: "/p",
+    project_slug: "D--Github-myproj",
+    sample_cwd: "D:\\Github\\myproj",
     sessions: 1,
     turns: 2,
     input_tokens: 10,

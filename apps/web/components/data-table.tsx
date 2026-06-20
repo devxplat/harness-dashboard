@@ -12,6 +12,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -48,6 +55,8 @@ interface DataTableProps<TData, TValue> {
   /** Adds a search box that matches the listed row fields (case-insensitive substring). */
   search?: { fields: (keyof TData)[]; placeholder: string; ariaLabel: string };
   pageSize?: number;
+  /** Choices offered in the rows-per-page selector. */
+  pageSizeOptions?: number[];
   emptyMessage?: string;
   /** Rendered below the table, receives the filtered rows (e.g. for a totals line). */
   footer?: (rows: TData[]) => ReactNode;
@@ -58,6 +67,7 @@ export function DataTable<TData, TValue>({
   data,
   search,
   pageSize = 20,
+  pageSizeOptions = [10, 25, 50, 100],
   emptyMessage = "No results.",
   footer,
 }: DataTableProps<TData, TValue>) {
@@ -223,29 +233,49 @@ export function DataTable<TData, TValue>({
 
       {footer && rows.length > 0 ? footer(filtered.map((r) => r.original)) : null}
 
-      {table.getPageCount() > 1 ? (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()} · {filtered.length}{" "}
-            rows
-          </span>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
+      {rows.length > 0 ? (
+        <div className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span>Rows per page</span>
+            <Select
+              value={String(table.getState().pagination.pageSize)}
+              onValueChange={(v) => table.setPageSize(Number(v))}
             >
-              Previous
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
-            >
-              Next
-            </Button>
+              <SelectTrigger size="sm" className="w-[4.5rem]" aria-label="Rows per page">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {pageSizeOptions.map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-3">
+            <span>
+              Page {table.getState().pagination.pageIndex + 1} of {Math.max(1, table.getPageCount())} ·{" "}
+              {filtered.length} rows
+            </span>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+              >
+                Previous
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}
