@@ -37,14 +37,14 @@ export function AppSidebar() {
         <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton size="lg" asChild tooltip="harness dashboard">
+              <SidebarMenuButton size="lg" asChild tooltip="Harness Dashboard">
                 <Link href="/">
                   <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-md">
                     <Image src="/logo.png" alt="" width={32} height={32} className="size-8" priority />
                   </div>
                   <div className="grid flex-1 text-left leading-tight">
-                    <span className="truncate font-semibold">harness dashboard</span>
-                    <span className="truncate text-xs text-muted-foreground">Claude Code usage</span>
+                    <span className="truncate font-semibold">Harness Dashboard</span>
+                    <span className="truncate text-xs text-muted-foreground/80">DevX Platform</span>
                   </div>
                 </Link>
               </SidebarMenuButton>

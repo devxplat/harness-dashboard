@@ -7,8 +7,8 @@ import "./globals.css";
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "harness-dashboard",
-  description: "Local-first Claude Code usage dashboard",
+  title: "Harness Dashboard",
+  description: "Local-first Claude Code usage dashboard — DevX Platform",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
