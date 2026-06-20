@@ -1,21 +1,58 @@
 "use client";
 
+import { DataTable } from "@/components/data-table";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { formatDate, formatTokens, formatUSD } from "@/lib/format";
 import type { PromptRow } from "@/lib/types";
+import type { ColumnDef } from "@tanstack/react-table";
 import { useState } from "react";
+
+const promptColumns: ColumnDef<PromptRow>[] = [
+  {
+    accessorKey: "timestamp",
+    header: "When",
+    cell: ({ row }) => (
+      <span className="whitespace-nowrap text-xs text-muted-foreground">
+        {formatDate(row.original.timestamp)}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "project_slug",
+    header: "Project",
+    cell: ({ row }) => <span className="block max-w-[160px] truncate text-xs">{row.original.project_slug}</span>,
+  },
+  {
+    accessorKey: "prompt_text",
+    header: "Prompt",
+    enableSorting: false,
+    cell: ({ row }) => (
+      <span className="block max-w-[360px] truncate">
+        {row.original.prompt_text ?? "—"}
+        {row.original.cost_estimated ? (
+          <Badge variant="outline" className="ml-2 text-[10px]">
+            est.
+          </Badge>
+        ) : null}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "billable_tokens",
+    header: "Billable",
+    cell: ({ row }) => formatTokens(row.original.billable_tokens),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "estimated_cost_usd",
+    header: "Cost",
+    cell: ({ row }) => formatUSD(row.original.estimated_cost_usd),
+    meta: { align: "right" },
+  },
+];
 
 export default function PromptsPage() {
   const [sort, setSort] = useState<"tokens" | "recent">("tokens");
@@ -42,41 +79,17 @@ export default function PromptsPage() {
       ) : data.length === 0 ? (
         <EmptyBlock message="No prompts yet." />
       ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Project</TableHead>
-                  <TableHead>Prompt</TableHead>
-                  <TableHead className="text-right">Billable</TableHead>
-                  <TableHead className="text-right">Cost</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.map((p) => (
-                  <TableRow key={p.user_uuid}>
-                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                      {formatDate(p.timestamp)}
-                    </TableCell>
-                    <TableCell className="max-w-[160px] truncate text-xs">{p.project_slug}</TableCell>
-                    <TableCell className="max-w-[360px] truncate">
-                      {p.prompt_text ?? "—"}
-                      {p.cost_estimated ? (
-                        <Badge variant="outline" className="ml-2 text-[10px]">
-                          est.
-                        </Badge>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTokens(p.billable_tokens)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatUSD(p.estimated_cost_usd)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <DataTable
+          columns={promptColumns}
+          data={data}
+          search={{
+            fields: ["project_slug", "prompt_text"],
+            placeholder: "Filter prompts…",
+            ariaLabel: "Filter prompts",
+          }}
+          pageSize={25}
+          emptyMessage="No prompts match."
+        />
       )}
     </>
   );
