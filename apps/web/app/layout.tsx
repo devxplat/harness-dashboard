@@ -1,9 +1,11 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import { Geist } from "next/font/google";
+import { Providers } from "@/components/providers";
+import { AppShell } from "@/components/shell/app-shell";
 import { cn } from "@/lib/utils";
+import type { Metadata } from "next";
+import { Geist } from "next/font/google";
+import "./globals.css";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "harness-dashboard",
@@ -12,8 +14,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={cn("dark", "font-sans", geist.variable)} suppressHydrationWarning>
-      <body>{children}</body>
+    <html lang="en" className={cn("dark", geist.variable)} suppressHydrationWarning>
+      <body className="font-sans antialiased">
+        <Providers>
+          <AppShell>{children}</AppShell>
+        </Providers>
+      </body>
     </html>
   );
 }
