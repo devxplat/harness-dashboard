@@ -5,7 +5,9 @@ import { ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApi } from "@/hooks/use-api";
+import { withRange } from "@/lib/api";
 import { formatDate, formatInt, formatTokens, formatUSD, shortId } from "@/lib/format";
+import { useRange } from "@/lib/range";
 import type { MessageDetail, SessionRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
@@ -55,7 +57,10 @@ const sessionColumns: ColumnDef<SessionRow>[] = [
 ];
 
 function SessionsList() {
-  const { data, error, loading } = useApi<SessionRow[]>("/api/sessions?limit=500");
+  const { since, until } = useRange();
+  const { data, error, loading } = useApi<SessionRow[]>(
+    withRange("/api/sessions?limit=500", since, until),
+  );
   if (error) return <ErrorBlock error={error} />;
   if (loading || !data) return <LoadingBlock />;
 

@@ -256,7 +256,12 @@ async fn overview_bundle(State(s): State<AppState>, Query(q): Query<RangeParams>
 async fn prompts(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
     let sort = q.sort.clone().unwrap_or_else(|| "tokens".to_string());
     let limit = q.limit(50);
-    read_json(&s, move |db, pr| db.expensive_prompts(pr, limit, &sort)).await
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, pr| {
+        db.expensive_prompts(pr, limit, &sort, since.as_deref(), until.as_deref())
+    })
+    .await
 }
 
 async fn projects(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {

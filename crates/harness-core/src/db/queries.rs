@@ -617,6 +617,8 @@ impl Db {
         pricing: &Pricing,
         limit: i64,
         sort: &str,
+        since: Option<&str>,
+        until: Option<&str>,
     ) -> Result<Vec<PromptRow>> {
         let (inner_order, outer_order) = if sort == "recent" {
             ("p.timestamp DESC", "timestamp DESC")
@@ -631,7 +633,7 @@ impl Db {
             "WITH prompts AS ( \
                SELECT uuid, session_id, project_slug, timestamp, prompt_text, prompt_chars, \
                       LEAD(timestamp) OVER (PARTITION BY session_id ORDER BY timestamp) AS next_ts \
-               FROM messages WHERE type='user' AND prompt_text IS NOT NULL \
+               FROM messages WHERE type='user' AND prompt_text IS NOT NULL AND {TIME_BOUND} \
              ), \
              ranked AS ( \
                SELECT p.uuid, p.session_id, p.project_slug, p.timestamp, p.prompt_text, p.prompt_chars, p.next_ts, \
@@ -654,7 +656,7 @@ impl Db {
         );
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt
-            .query_map(params![limit], |r| {
+            .query_map(params![since, until, limit], |r| {
                 let model: Option<String> = r.get(6)?;
                 let u = Usage {
                     input_tokens: r.get(7)?,

@@ -16,7 +16,20 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** `?since=…` (until omitted; the server treats a missing bound as open). */
-export function rangeQuery(since: string | null): string {
-  return since ? `?since=${encodeURIComponent(since)}` : "";
+/** `?since=…&until=…` (omitted bounds are open). For URLs with no existing query. */
+export function rangeQuery(since: string | null, until?: string | null): string {
+  const p = new URLSearchParams();
+  if (since) p.set("since", since);
+  if (until) p.set("until", until);
+  const qs = p.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** Append the range to a URL that may already have query params. */
+export function withRange(url: string, since: string | null, until?: string | null): string {
+  const p = new URLSearchParams();
+  if (since) p.set("since", since);
+  if (until) p.set("until", until);
+  const qs = p.toString();
+  return qs ? url + (url.includes("?") ? "&" : "?") + qs : url;
 }
