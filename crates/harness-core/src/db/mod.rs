@@ -7,7 +7,8 @@ mod queries;
 mod schema;
 
 pub use queries::{
-    DailyRow, MessageDetail, ModelRow, ProjectRow, PromptRow, SessionRow, ToolRow, Totals,
+    AgentGroupRow, DailyRow, MessageDetail, ModelRow, ProjectRow, PromptRow, SessionRow, SkillRow,
+    ToolRow, Totals,
 };
 
 use crate::error::Result;

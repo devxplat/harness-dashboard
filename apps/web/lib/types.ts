@@ -118,3 +118,28 @@ export interface SettingsInfo {
   claude_dirs: string[];
   plan: string;
 }
+
+export interface SkillRow {
+  skill: string;
+  manual_sessions: number;
+  tool_invocations: number;
+  sessions: number;
+  last_used: string | null;
+}
+
+export interface AgentGroupRow {
+  group: string;
+  model: string | null;
+  messages: number;
+  sessions: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cost_usd: number | null;
+  cost_estimated: boolean;
+}
+
+export interface SubagentsResponse {
+  by_kind: AgentGroupRow[];
+  by_entrypoint: AgentGroupRow[];
+}

@@ -105,3 +105,41 @@ fn rescan_unchanged_is_idempotent() {
 
     fs::remove_dir_all(&root).ok();
 }
+
+#[test]
+fn skills_and_subagents_breakdowns() {
+    let root = unique_tmp("skills");
+    let proj = root.join("projects").join("p");
+    fs::create_dir_all(&proj).unwrap();
+    let user = r#"{"uuid":"u1","sessionId":"s1","timestamp":"2026-06-19T10:00:00Z","type":"user","entrypoint":"cli","message":{"role":"user","content":"<command-name>/review</command-name> go"}}"#;
+    let asst = r#"{"uuid":"a1","sessionId":"s1","timestamp":"2026-06-19T10:00:01Z","type":"assistant","entrypoint":"cli","message":{"id":"m1","model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":20},"content":[{"type":"text","text":"ok"}]}}"#;
+    fs::write(proj.join("s.jsonl"), format!("{user}\n{asst}\n")).unwrap();
+
+    let db = Db::open_in_memory().unwrap();
+    scan_dir(&db, &root.join("projects")).unwrap();
+
+    let skills = db.skill_breakdown(None, None).unwrap();
+    let review = skills
+        .iter()
+        .find(|s| s.skill == "review")
+        .expect("review skill present");
+    assert_eq!(
+        review.manual_sessions, 1,
+        "user-typed slash command counts as manual"
+    );
+    assert_eq!(review.tool_invocations, 0);
+
+    let pricing = Pricing::load_default();
+    let kinds = db.subagents_by_kind(&pricing, None, None).unwrap();
+    assert!(
+        kinds.iter().any(|k| k.group == "main"),
+        "main-thread assistant work present"
+    );
+    let eps = db.subagents_by_entrypoint(&pricing, None, None).unwrap();
+    assert!(
+        eps.iter().any(|e| e.group == "cli"),
+        "cli entrypoint present"
+    );
+
+    fs::remove_dir_all(&root).ok();
+}
