@@ -27,7 +27,7 @@ describe("AppShell", () => {
         </AppShell>
       </Providers>,
     );
-    expect(screen.getByText("harness-dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Your Claude Code usage")).toBeInTheDocument();
     expect(screen.getByText("page-body")).toBeInTheDocument();
   });
 });
