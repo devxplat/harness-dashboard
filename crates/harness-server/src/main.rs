@@ -95,15 +95,22 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("database: {}", db_path.display());
     tracing::info!("projects: {}", projects_dir.display());
 
+    // Run the initial scan in the background so the server binds the port
+    // immediately. The UI loads at once and refreshes over SSE (see `scan_now`,
+    // which broadcasts a scan event) once the scan completes — important when
+    // scanning a large ~/.claude/projects, which can take a while.
     if !cli.no_scan {
-        tracing::info!("initial scan…");
-        let n = api::scan_now(&state).await;
-        tracing::info!(
-            "scanned {} files, {} messages, {} tools",
-            n.files,
-            n.messages,
-            n.tools
-        );
+        let state = state.clone();
+        tokio::spawn(async move {
+            tracing::info!("initial scan…");
+            let n = api::scan_now(&state).await;
+            tracing::info!(
+                "initial scan complete: {} files, {} messages, {} tools",
+                n.files,
+                n.messages,
+                n.tools
+            );
+        });
     }
 
     // Periodic background scan.
