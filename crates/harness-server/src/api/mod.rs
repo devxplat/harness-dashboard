@@ -115,7 +115,6 @@ pub async fn scan_now(state: &AppState) -> ScanStats {
 
 pub fn router(state: AppState) -> Router {
     let mut app = Router::new()
-        .route("/", get(root))
         .route("/api/overview", get(overview))
         .route("/api/overview-bundle", get(overview_bundle))
         .route("/api/prompts", get(prompts))
@@ -139,6 +138,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/stream", get(stream))
         .with_state(state.clone());
 
+    app = with_static_fallback(app);
+
     if state.dev {
         app = app.layer(
             CorsLayer::new()
@@ -150,7 +151,18 @@ pub fn router(state: AppState) -> Router {
     app
 }
 
-async fn root() -> &'static str {
+#[cfg(feature = "release-embed")]
+fn with_static_fallback(app: Router) -> Router {
+    app.fallback(crate::static_assets::handler)
+}
+
+#[cfg(not(feature = "release-embed"))]
+fn with_static_fallback(app: Router) -> Router {
+    app.fallback(dev_root)
+}
+
+#[cfg(not(feature = "release-embed"))]
+async fn dev_root() -> &'static str {
     "harness-dashboard API. In dev the UI runs on http://127.0.0.1:3000"
 }
 

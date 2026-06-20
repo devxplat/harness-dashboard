@@ -4,6 +4,8 @@
 //! stream, a periodic background scan, and (in release) the embedded frontend.
 
 mod api;
+#[cfg(feature = "release-embed")]
+mod static_assets;
 
 use clap::Parser;
 use harness_core::db::Db;

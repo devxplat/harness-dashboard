@@ -5,16 +5,17 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "axum HTTP server and `harness-dashboard` binary."
+build = "build.rs"
 
 [[bin]]
 name = "harness-dashboard"
 path = "src/main.rs"
 
 [features]
-# When enabled (release builds), the prebuilt Next.js export is embedded into
-# the binary and served on the same port as the API. Off by default so debug
-# builds don't require `apps/web/out` to exist.
-release-embed = []
+# When enabled (release builds), the prebuilt Next.js export (apps/web/out) is
+# embedded into the binary and served on the same port as the API. Off by default
+# so debug builds don't require `apps/web/out` to exist.
+release-embed = ["dep:rust-embed", "dep:mime_guess"]
 
 [dependencies]
 harness-core = { path = "../harness-core" }
@@ -28,3 +29,5 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rust-embed = { version = "8", optional = true }
+mime_guess = { version = "2", optional = true }

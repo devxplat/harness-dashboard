@@ -23,5 +23,12 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Plain JS (config + node scripts) run under Node.
+    files: ["**/*.{js,mjs,cjs}"],
+    languageOptions: {
+      globals: { process: "readonly", console: "readonly", URL: "readonly", Buffer: "readonly" },
+    },
+  },
   prettier,
 );
