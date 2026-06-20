@@ -72,4 +72,13 @@ describe("DataTable", () => {
     await user.type(box, "zzz");
     await waitFor(() => expect(screen.getByText("Nothing here.")).toBeInTheDocument());
   });
+
+  it("hides a column via the Columns menu", async () => {
+    const user = userEvent.setup();
+    render(<DataTable columns={columns} data={data} pageSize={50} />);
+    expect(screen.getByRole("columnheader", { name: /Name/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Columns/ }));
+    await user.click(await screen.findByRole("menuitemcheckbox", { name: "Name" }));
+    expect(screen.queryByRole("columnheader", { name: /Name/ })).toBeNull();
+  });
 });
