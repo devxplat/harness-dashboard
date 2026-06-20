@@ -1,8 +1,11 @@
 "use client";
 
+import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
+import { CalendarHeatmap } from "@/components/charts/calendar-heatmap";
 import { DailyChart } from "@/components/charts/daily-chart";
 import { KpiCard } from "@/components/kpi-card";
 import { EmptyBlock, ErrorBlock, PageTitle } from "@/components/states";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -15,11 +18,12 @@ import {
 } from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
-import { formatInt, formatTokens, formatUSD, shortId } from "@/lib/format";
+import { formatDateShort, formatInt, formatTokens, formatUSD, projectLabel } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { OverviewBundle, Totals } from "@/lib/types";
 import { ArrowDown, ArrowUp, Coins, Database, HardDrive, MessagesSquare, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 /** Period-over-period change as a fraction, or null when there's no comparable prior value. */
 function delta(curr: number, prev: number | null | undefined): number | null {
@@ -38,6 +42,7 @@ function RowsSkeleton() {
 
 export default function OverviewPage() {
   const { since, until, previous } = useRange();
+  const [shortNames, setShortNames] = useState(true);
   // Fast path: the KPIs render from the lightweight totals query (~0.6s) while
   // the heavier bundle (chart, by-model, recent sessions) streams in behind skeletons.
   const totals = useApi<Totals>(`/api/overview${rangeQuery(since, until)}`);
@@ -99,6 +104,38 @@ export default function OverviewPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
+            <CardTitle>Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!b ? (
+              <Skeleton className="h-48 w-full" />
+            ) : b.daily.length ? (
+              <ActivityHeatmap data={b.daily} />
+            ) : (
+              <EmptyBlock message="No activity in range." />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Calendar</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!b ? (
+              <Skeleton className="h-64 w-full" />
+            ) : b.daily.length ? (
+              <CalendarHeatmap data={b.daily} />
+            ) : (
+              <EmptyBlock message="No activity in range." />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
             <CardTitle>By model</CardTitle>
           </CardHeader>
           <CardContent>
@@ -130,8 +167,17 @@ export default function OverviewPage() {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Recent sessions</CardTitle>
+            <Button
+              size="sm"
+              variant="outline"
+              aria-pressed={shortNames}
+              onClick={() => setShortNames((v) => !v)}
+              title={shortNames ? "Showing folder names" : "Showing full paths"}
+            >
+              {shortNames ? "Short names" : "Full paths"}
+            </Button>
           </CardHeader>
           <CardContent>
             {!b ? (
@@ -141,6 +187,7 @@ export default function OverviewPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Project</TableHead>
+                    <TableHead>Started</TableHead>
                     <TableHead className="text-right">Turns</TableHead>
                     <TableHead className="text-right">Tokens</TableHead>
                     <TableHead className="text-right">Cost</TableHead>
@@ -149,10 +196,13 @@ export default function OverviewPage() {
                 <TableBody>
                   {b.sessions.map((s) => (
                     <TableRow key={s.session_id}>
-                      <TableCell className="max-w-[180px] truncate">
+                      <TableCell className="max-w-[200px] truncate">
                         <Link className="hover:underline" href={`/sessions/?id=${s.session_id}`}>
-                          {s.project_slug ?? shortId(s.session_id)}
+                          {projectLabel(s.sample_cwd, s.project_slug, shortNames)}
                         </Link>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                        {formatDateShort(s.started)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{formatInt(s.turns)}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatTokens(s.tokens)}</TableCell>
