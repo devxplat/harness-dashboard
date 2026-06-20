@@ -1,0 +1,34 @@
+{
+  "name": "harness-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first dashboard for Claude Code token usage, costs, and session history. Rust backend, Next.js frontend, shipped as a single binary.",
+  "license": "AGPL-3.0-or-later",
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "dev:api": "cargo run -p harness-server -- --dev",
+    "build:web": "pnpm --filter @harness/web build",
+    "build:server": "cargo build --release -p harness-server --features release-embed",
+    "build": "pnpm build:web && pnpm build:server",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:rust": "cargo test",
+    "format": "prettier --write . && cargo fmt",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.40.0",
+    "eslint": "^9.40.0",
+    "eslint-config-prettier": "^10.1.5",
+    "prettier": "^3.6.2",
+    "turbo": "^2.6.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.46.0"
+  }
+}

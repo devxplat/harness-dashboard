@@ -1,0 +1,36 @@
+# Rust
+/target
+**/*.rs.bk
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+apps/web/out/
+apps/web/.next/
+next-env.d.ts
+
+# Turbo
+.turbo/
+
+# Test / coverage
+coverage/
+playwright-report/
+test-results/
+
+# Local data + secrets
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.local
+!.env.example
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
