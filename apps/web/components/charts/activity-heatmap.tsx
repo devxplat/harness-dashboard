@@ -20,8 +20,6 @@ export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
 
   const totalSessions = data.reduce((a, d) => a + d.sessions, 0);
   const totalTokens = data.reduce((a, d) => a + dayTokens(d), 0);
-  const total = totalSessions + totalTokens;
-  const sessionShare = total > 0 ? Math.round((totalSessions / total) * 100) : 0;
 
   return (
     <div className="space-y-4">
@@ -42,12 +40,11 @@ export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
             <span className="size-2 rounded-full bg-primary" aria-hidden />
             <span className="font-medium text-foreground">Sessions</span>
             <span className="tabular-nums">{formatInt(totalSessions)}</span>
-            <span>{sessionShare}%</span>
           </span>
           <span className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-sky-500" aria-hidden />
             <span className="font-medium text-foreground">Tokens</span>
-            <span className="tabular-nums">{100 - sessionShare}%</span>
+            <span className="tabular-nums">{formatTokens(totalTokens)}</span>
           </span>
         </div>
       </div>
