@@ -92,10 +92,8 @@ pub fn parse_line(line: &str, project_slug: &str) -> Option<MessageRow> {
     let mut tool_calls: Vec<ToolCall> = Vec::new();
 
     match message.get("content") {
-        Some(Value::String(s)) => {
-            if msg_type == "user" {
-                prompt_text = Some(s.clone());
-            }
+        Some(Value::String(s)) if msg_type == "user" => {
+            prompt_text = Some(s.clone());
         }
         Some(Value::Array(blocks)) => {
             let mut texts: Vec<String> = Vec::new();
