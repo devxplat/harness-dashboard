@@ -46,6 +46,9 @@ CREATE INDEX IF NOT EXISTS idx_messages_parent    ON messages(parent_uuid);
 CREATE INDEX IF NOT EXISTS idx_messages_agent     ON messages(agent_id);
 CREATE INDEX IF NOT EXISTS idx_messages_date      ON messages(substr(timestamp, 1, 10));
 CREATE INDEX IF NOT EXISTS idx_messages_type_ts   ON messages(type, timestamp);
+-- Supports the per-prompt token-attribution range join (expensive_prompts):
+-- "same session, timestamp within the turn window". Without it that query is O(60s+).
+CREATE INDEX IF NOT EXISTS idx_messages_session_ts ON messages(session_id, timestamp);
 
 CREATE TABLE IF NOT EXISTS tool_calls (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
