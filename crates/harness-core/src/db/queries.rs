@@ -690,3 +690,137 @@ impl Db {
             .collect())
     }
 }
+
+#[derive(Debug, Serialize)]
+pub struct SkillRow {
+    pub skill: String,
+    pub manual_sessions: i64,
+    pub tool_invocations: i64,
+    pub sessions: i64,
+    pub last_used: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentGroupRow {
+    pub group: String,
+    pub model: Option<String>,
+    pub messages: i64,
+    pub sessions: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cost_usd: Option<f64>,
+    pub cost_estimated: bool,
+}
+
+impl Db {
+    /// Per-skill split of slash-command (manual) vs Skill-tool (Claude-invoked) use.
+    pub fn skill_breakdown(
+        &self,
+        since: Option<&str>,
+        until: Option<&str>,
+    ) -> Result<Vec<SkillRow>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = "SELECT target AS skill, \
+             COUNT(DISTINCT CASE WHEN tool_use_id IS NULL THEN session_id END), \
+             COALESCE(SUM(CASE WHEN tool_use_id IS NOT NULL THEN 1 ELSE 0 END), 0), \
+             COUNT(DISTINCT session_id), MAX(timestamp) \
+             FROM tool_calls WHERE tool_name='Skill' AND target IS NOT NULL \
+               AND timestamp >= COALESCE(?, '') AND timestamp < COALESCE(?, '9999-12-31T99:99:99Z') \
+             GROUP BY target ORDER BY COUNT(DISTINCT session_id) DESC, 3 DESC";
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt
+            .query_map(params![since, until], |r| {
+                Ok(SkillRow {
+                    skill: r.get(0)?,
+                    manual_sessions: r.get(1)?,
+                    tool_invocations: r.get(2)?,
+                    sessions: r.get(3)?,
+                    last_used: r.get(4)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Assistant token usage grouped by an internal SQL expression (kind / entrypoint).
+    /// `group_expr` is a caller-controlled constant, never user input.
+    fn agent_groups(
+        &self,
+        pricing: &Pricing,
+        group_expr: &str,
+        since: Option<&str>,
+        until: Option<&str>,
+    ) -> Result<Vec<AgentGroupRow>> {
+        let conn = self.conn.lock().unwrap();
+        let sql = format!(
+            "SELECT {group_expr} AS grp, model, COUNT(*), COUNT(DISTINCT session_id), \
+             COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), COALESCE(SUM(cache_read_tokens),0), \
+             COALESCE(SUM(cache_create_5m_tokens),0), COALESCE(SUM(cache_create_1h_tokens),0) \
+             FROM messages WHERE type='assistant' AND {TIME_BOUND} \
+             GROUP BY grp, model \
+             ORDER BY COALESCE(SUM(input_tokens),0)+COALESCE(SUM(output_tokens),0) DESC"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map(params![since, until], |r| {
+                let u = Usage {
+                    input_tokens: r.get(4)?,
+                    output_tokens: r.get(5)?,
+                    cache_read_tokens: r.get(6)?,
+                    cache_create_5m_tokens: r.get(7)?,
+                    cache_create_1h_tokens: r.get(8)?,
+                };
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, i64>(3)?,
+                    u,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows
+            .into_iter()
+            .map(|(group, model, messages, sessions, u)| {
+                let c = pricing.cost_for(model.as_deref(), &u);
+                AgentGroupRow {
+                    group,
+                    model,
+                    messages,
+                    sessions,
+                    input_tokens: u.input_tokens,
+                    output_tokens: u.output_tokens,
+                    cache_read_tokens: u.cache_read_tokens,
+                    cost_usd: c.usd,
+                    cost_estimated: c.estimated,
+                }
+            })
+            .collect())
+    }
+
+    /// Spend split by agent kind: main thread / auto-compaction / subagent.
+    pub fn subagents_by_kind(
+        &self,
+        pricing: &Pricing,
+        since: Option<&str>,
+        until: Option<&str>,
+    ) -> Result<Vec<AgentGroupRow>> {
+        self.agent_groups(
+            pricing,
+            "CASE WHEN is_sidechain=0 THEN 'main' WHEN agent_id LIKE 'acompact%' THEN 'compact' ELSE 'subagent' END",
+            since,
+            until,
+        )
+    }
+
+    /// Spend split by client entrypoint (cli / vscode / sdk-* / unknown).
+    pub fn subagents_by_entrypoint(
+        &self,
+        pricing: &Pricing,
+        since: Option<&str>,
+        until: Option<&str>,
+    ) -> Result<Vec<AgentGroupRow>> {
+        self.agent_groups(pricing, "COALESCE(entrypoint,'unknown')", since, until)
+    }
+}

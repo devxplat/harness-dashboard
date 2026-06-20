@@ -75,8 +75,24 @@ test.describe("settings", () => {
   });
 });
 
+test.describe("skills and subagents", () => {
+  test("skills shows the fixture slash command", async ({ page }) => {
+    await page.goto("/skills/");
+    const main = page.getByRole("main");
+    await expect(main.getByText("You ran", { exact: true })).toBeVisible();
+    await expect(main.getByText("review", { exact: true })).toBeVisible();
+  });
+
+  test("subagents shows by-kind main-thread spend", async ({ page }) => {
+    await page.goto("/subagents/");
+    const main = page.getByRole("main");
+    await expect(main.getByText("By kind")).toBeVisible();
+    await expect(main.getByText("main", { exact: true }).first()).toBeVisible();
+  });
+});
+
 test.describe("empty-state views", () => {
-  for (const path of ["/skills/", "/subagents/", "/workspaces/", "/tips/"]) {
+  for (const path of ["/workspaces/", "/tips/"]) {
     test(`${path} renders an empty state`, async ({ page }) => {
       await page.goto(path);
       await expect(page.getByRole("main")).toContainText(/follow-up|No tips/i);

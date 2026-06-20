@@ -124,8 +124,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/sessions/{id}", get(session_detail))
         .route("/api/daily", get(daily))
         .route("/api/by-model", get(by_model))
-        .route("/api/skills", get(empty_array))
-        .route("/api/subagents", get(subagents_stub))
+        .route("/api/skills", get(skills))
+        .route("/api/subagents", get(subagents))
         .route("/api/workspaces", get(workspaces_stub))
         .route("/api/cross-workspace-leaks", get(empty_array))
         .route("/api/tips", get(empty_array))
@@ -234,11 +234,24 @@ async fn empty_array() -> Json<Value> {
     Json(json!([]))
 }
 
-async fn subagents_stub() -> Json<Value> {
-    Json(json!({
-        "breakdown": [], "top_sessions": [], "by_kind": [],
-        "by_entrypoint": [], "sdk_runs": [], "dispatch_tree": []
-    }))
+async fn skills(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    Ok(Json(serde_json::to_value(
+        s.db.skill_breakdown(q.since(), q.until())?,
+    )?))
+}
+
+async fn subagents(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    let by_kind = s.db.subagents_by_kind(&s.pricing, q.since(), q.until())?;
+    let by_entrypoint =
+        s.db.subagents_by_entrypoint(&s.pricing, q.since(), q.until())?;
+    Ok(Json(json!({
+        "by_kind": by_kind,
+        "by_entrypoint": by_entrypoint,
+        "breakdown": [],
+        "top_sessions": [],
+        "sdk_runs": [],
+        "dispatch_tree": [],
+    })))
 }
 
 async fn workspaces_stub() -> Json<Value> {
