@@ -3,6 +3,35 @@
 Working note for continuing the UI upgrade in a **new Claude Code session with the
 shadcnblocks MCP connected**. Not user-facing product docs.
 
+## Progress — 2026-06-20 (session 2)
+
+Env key fixed: the working `9INhn…` key is now in the shell/process env (`.env`
+was already correct). shadcnblocks **auth** works (HTTP 200), but the **MCP
+server still doesn't register its tools** this session — harvest via
+`curl -H "Authorization: Bearer $SHADCNBLOCKS_API_KEY" https://www.shadcnblocks.com/r/<name>.json`
+and adapt, or `shadcn add` (CLI auth works). `components.json` now targets the
+canonical `www` host (non-www 308-redirects).
+
+Chunks landed (each green: tsc · vitest ≥98% · eslint · build · e2e 13/13):
+
+- **Charts** (`20ef736`): daily chart → gradient stacked area, harvested from
+  `@shadcnblocks/chart-card9`.
+- **KPI cards** (`ab66729`): genuine period-over-period deltas — a 2nd fetch to
+  the existing `/api/overview` previous window (no backend change) — plus Lucide
+  icons; trend row from `@shadcnblocks/stats-card1`, rendered muted (cost up
+  isn't "good"). `all` range has no prior window → no delta.
+- **Data table** (`4d3a73e`, `d96a2a3`): reusable `components/data-table.tsx` on
+  `@tanstack/react-table` v8 (column sort, global search, pagination, right-align
+  via column `meta`, filtered-rows footer). Sessions + Prompts reworked onto it;
+  Prompts keeps the server-side By tokens / Recent toggle (which-50 semantics).
+
+Remaining:
+
+- **Empty states / filter toolbar** — largely covered by DataTable (search box +
+  empty states). A dedicated standalone filter toolbar is optional.
+- **Broad primitive swap** — button/badge/switch/skeleton/progress/slider/
+  pagination/hover-card/input/select → pro variants (~30 files). Not started.
+
 ## Where the project stands
 
 harness-dashboard is **functionally complete and shipping** on `main`
