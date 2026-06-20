@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApi } from "@/hooks/use-api";
 import { withRange } from "@/lib/api";
-import { formatDate, formatInt, formatTokens, formatUSD, shortId } from "@/lib/format";
+import { formatDate, formatInt, formatTokens, formatUSD, projectLabel } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { MessageDetail, SessionRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -31,8 +31,9 @@ const sessionColumns: ColumnDef<SessionRow>[] = [
       <Link
         className="block max-w-[240px] truncate hover:underline"
         href={`/sessions/?id=${row.original.session_id}`}
+        title={projectLabel(row.original.sample_cwd, row.original.project_slug)}
       >
-        {row.original.project_slug ?? shortId(row.original.session_id)}
+        {projectLabel(row.original.sample_cwd, row.original.project_slug, true)}
       </Link>
     ),
   },
