@@ -12,7 +12,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Activity, Zap } from "lucide-react";
+import { Zap } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV } from "./nav";
@@ -29,8 +30,8 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="px-3 py-3">
         <div className="flex items-center gap-2 text-base font-semibold">
-          <Activity className="size-5 text-primary" />
-          <span>harness</span>
+          <Image src="/logo.png" alt="" width={24} height={24} className="size-6 rounded" priority />
+          <span>harness dashboard</span>
         </div>
       </SidebarHeader>
       <SidebarContent>
