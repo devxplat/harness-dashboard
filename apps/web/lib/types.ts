@@ -14,6 +14,7 @@ export interface Totals {
 
 export interface DailyRow {
   day: string;
+  sessions: number;
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;

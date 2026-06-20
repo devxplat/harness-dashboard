@@ -46,6 +46,7 @@ pub struct Totals {
 #[derive(Debug, Serialize)]
 pub struct DailyRow {
     pub day: String,
+    pub sessions: i64,
     pub input_tokens: i64,
     pub output_tokens: i64,
     pub cache_read_tokens: i64,
@@ -429,7 +430,8 @@ impl Db {
     pub fn daily(&self, since: Option<&str>, until: Option<&str>) -> Result<Vec<DailyRow>> {
         let conn = self.conn.lock().unwrap();
         let sql = format!(
-            "SELECT substr(timestamp,1,10) AS day, COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), \
+            "SELECT substr(timestamp,1,10) AS day, COUNT(DISTINCT session_id), \
+             COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), \
              COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(cache_create_5m_tokens+cache_create_1h_tokens),0) \
              FROM messages WHERE {TIME_BOUND} GROUP BY day ORDER BY day"
         );
@@ -438,10 +440,11 @@ impl Db {
             .query_map(params![since, until], |r| {
                 Ok(DailyRow {
                     day: r.get(0)?,
-                    input_tokens: r.get(1)?,
-                    output_tokens: r.get(2)?,
-                    cache_read_tokens: r.get(3)?,
-                    cache_create_tokens: r.get(4)?,
+                    sessions: r.get(1)?,
+                    input_tokens: r.get(2)?,
+                    output_tokens: r.get(3)?,
+                    cache_read_tokens: r.get(4)?,
+                    cache_create_tokens: r.get(5)?,
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;

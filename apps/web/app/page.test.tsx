@@ -32,7 +32,9 @@ const bundle = {
     },
   ],
   tools: [],
-  daily: [{ day: "2026-06-19", input_tokens: 100, output_tokens: 200, cache_read_tokens: 50, cache_create_tokens: 15 }],
+  daily: [
+    { day: "2026-06-19", sessions: 2, input_tokens: 100, output_tokens: 200, cache_read_tokens: 50, cache_create_tokens: 15 },
+  ],
   byModel: [
     {
       model: "claude-opus-4-8",
@@ -80,7 +82,10 @@ describe("OverviewPage", () => {
   it("renders the empty chart state when there is no daily data", async () => {
     installFetch({ "/api/overview-bundle": { ...bundle, daily: [] }, "/api/overview": bundle.totals });
     renderWithRange(<OverviewPage />);
-    await waitFor(() => expect(screen.getByText("No activity in range.")).toBeInTheDocument());
+    // Daily tokens, Activity and Calendar all surface the empty message.
+    await waitFor(() =>
+      expect(screen.getAllByText("No activity in range.").length).toBeGreaterThan(0),
+    );
   });
 
   it("shows an error state", async () => {
