@@ -1,0 +1,85 @@
+import { expect, test } from "@playwright/test";
+
+test.describe("overview", () => {
+  test("renders KPIs and the daily chart", async ({ page }) => {
+    await page.goto("/");
+    const main = page.getByRole("main");
+    await expect(main.getByText("Est. cost")).toBeVisible();
+    await expect(main.getByText("Daily tokens")).toBeVisible();
+    await expect(main.locator("svg").first()).toBeVisible();
+  });
+
+  test("range selector toggles pressed state", async ({ page }) => {
+    await page.goto("/");
+    const sevenDay = page.getByRole("button", { name: "7d", exact: true });
+    await sevenDay.click();
+    await expect(sevenDay).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("refresh button is present and clickable", async ({ page }) => {
+    await page.goto("/");
+    const refresh = page.getByRole("button", { name: "Rescan transcripts" });
+    await expect(refresh).toBeVisible();
+    await refresh.click();
+  });
+});
+
+test.describe("sessions", () => {
+  test("lists fixture sessions, filters, and drills into detail", async ({ page }) => {
+    await page.goto("/sessions/");
+    const main = page.getByRole("main");
+    await expect(main.getByRole("link", { name: "myproj" })).toHaveCount(2);
+
+    const filter = page.getByPlaceholder("Filter by project or session id…");
+    await filter.fill("nomatch-xyz");
+    await expect(main.getByText("No sessions match.")).toBeVisible();
+
+    await filter.fill("myproj");
+    await main.getByRole("link", { name: "myproj" }).first().click();
+    await expect(page).toHaveURL(/\?id=/);
+    await expect(page.getByRole("heading", { name: "Session" })).toBeVisible();
+  });
+});
+
+test.describe("prompts", () => {
+  test("sort toggle switches and rows render", async ({ page }) => {
+    await page.goto("/prompts/");
+    await expect(page.getByRole("button", { name: "By tokens" })).toBeVisible();
+    await page.getByRole("button", { name: "Recent" }).click();
+    await expect(page.getByRole("main").locator("tbody tr").first()).toBeVisible();
+  });
+});
+
+test.describe("projects and tools", () => {
+  test("projects shows the fixture project", async ({ page }) => {
+    await page.goto("/projects/");
+    await expect(page.getByRole("main").getByText("myproj")).toBeVisible();
+  });
+
+  test("tools shows Read and Bash", async ({ page }) => {
+    await page.goto("/tools/");
+    const main = page.getByRole("main");
+    await expect(main.getByText("Read")).toBeVisible();
+    await expect(main.getByText("Bash")).toBeVisible();
+  });
+});
+
+test.describe("settings", () => {
+  test("plan select updates the trigger", async ({ page }) => {
+    await page.goto("/settings/");
+    await expect(page.getByText("Pricing plan", { exact: true })).toBeVisible();
+    const combobox = page.getByRole("combobox", { name: "Pricing plan" });
+    await combobox.click();
+    await page.getByRole("option", { name: "pro", exact: true }).click();
+    await expect(combobox).toContainText("pro");
+  });
+});
+
+test.describe("empty-state views", () => {
+  for (const path of ["/skills/", "/subagents/", "/workspaces/", "/tips/"]) {
+    test(`${path} renders an empty state`, async ({ page }) => {
+      await page.goto(path);
+      await expect(page.getByRole("main")).toContainText(/follow-up|No tips/i);
+    });
+  }
+});

@@ -1,0 +1,2 @@
+{"uuid":"u2","sessionId":"s2","timestamp":"2026-06-19T11:00:00Z","type":"user","cwd":"/proj","message":{"role":"user","content":"run the tests"}}
+{"uuid":"a2","parentUuid":"u2","sessionId":"s2","timestamp":"2026-06-19T11:00:03Z","type":"assistant","message":{"id":"m2","model":"claude-sonnet-4-6","stop_reason":"end_turn","usage":{"input_tokens":800,"output_tokens":1500,"cache_read_input_tokens":2000,"cache_creation":{"ephemeral_5m_input_tokens":50,"ephemeral_1h_input_tokens":0}},"content":[{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"cargo test"}}]}}
