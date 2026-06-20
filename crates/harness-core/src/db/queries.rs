@@ -269,13 +269,26 @@ impl Db {
             }
         }
 
-        // Global dedup of tool rows that share (message_uuid, tool_use_id) — keeps
-        // the earliest, covering the cross-batch re-point above.
-        tx.execute(
-            "DELETE FROM tool_calls WHERE tool_use_id IS NOT NULL AND id NOT IN \
-             (SELECT MIN(id) FROM tool_calls WHERE tool_use_id IS NOT NULL GROUP BY message_uuid, tool_use_id)",
-            [],
-        )?;
+        // Dedup tool rows sharing (message_uuid, tool_use_id), keeping the earliest
+        // — covers the cross-batch re-point above. Scoped to THIS batch's keepers
+        // so it never scans the whole (growing) table.
+        for chunk in keepers.chunks(300) {
+            let ph = vec!["?"; chunk.len()].join(",");
+            let sql = format!(
+                "DELETE FROM tool_calls WHERE tool_use_id IS NOT NULL AND message_uuid IN ({ph}) \
+                 AND id NOT IN (SELECT MIN(id) FROM tool_calls \
+                   WHERE tool_use_id IS NOT NULL AND message_uuid IN ({ph}) \
+                   GROUP BY message_uuid, tool_use_id)"
+            );
+            let mut p: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(chunk.len() * 2);
+            for r in chunk {
+                p.push(&r.uuid);
+            }
+            for r in chunk {
+                p.push(&r.uuid);
+            }
+            tx.execute(&sql, p.as_slice())?;
+        }
 
         tx.commit()?;
         Ok((msg_n, tool_n))
@@ -465,14 +478,12 @@ impl Db {
 
     pub fn tools(&self, since: Option<&str>, until: Option<&str>) -> Result<Vec<ToolRow>> {
         let conn = self.conn.lock().unwrap();
-        let sql = format!(
-            "SELECT tu.tool_name, COUNT(DISTINCT tu.id), COALESCE(SUM(tr.result_tokens),0) \
+        let sql = "SELECT tu.tool_name, COUNT(DISTINCT tu.id), COALESCE(SUM(tr.result_tokens),0) \
              FROM tool_calls tu \
              LEFT JOIN tool_calls tr ON tr.tool_name='_tool_result' AND tr.tool_use_id=tu.tool_use_id \
              WHERE tu.tool_name<>'_tool_result' \
                AND tu.timestamp >= COALESCE(?, '') AND tu.timestamp < COALESCE(?, '9999-12-31T99:99:99Z') \
-             GROUP BY tu.tool_name ORDER BY 2 DESC"
-        );
+             GROUP BY tu.tool_name ORDER BY 2 DESC".to_string();
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt
             .query_map(params![since, until], |r| {

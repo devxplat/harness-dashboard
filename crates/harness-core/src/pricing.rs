@@ -5,14 +5,14 @@
 
 use crate::error::Result;
 use crate::model::Usage;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
 const DEFAULT_PRICING: &str = include_str!("../../../pricing.json");
 
 /// Per-million-token rates for one model or tier.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rate {
     pub input: f64,
     pub output: f64,
@@ -21,7 +21,7 @@ pub struct Rate {
     pub cache_create_1h: f64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelRate {
     #[serde(default)]
     pub tier: Option<String>,
@@ -29,13 +29,13 @@ pub struct ModelRate {
     pub rate: Rate,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Plan {
     pub monthly: f64,
     pub label: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pricing {
     pub models: HashMap<String, ModelRate>,
     pub tier_fallback: HashMap<String, Rate>,
