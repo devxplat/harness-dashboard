@@ -11,6 +11,7 @@ const rows = [
     user_uuid: "u1",
     session_id: "s1",
     project_slug: "p",
+    sample_cwd: null,
     timestamp: "2026-06-19T10:00:00Z",
     prompt_text: "hello",
     prompt_chars: 5,

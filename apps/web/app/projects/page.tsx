@@ -1,25 +1,27 @@
 "use client";
 
 import { DataTable } from "@/components/data-table";
+import { PathToggle, ProjectCell } from "@/components/path-display";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
-import { formatInt, formatTokens, projectLabel } from "@/lib/format";
+import { formatInt, formatTokens } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { ProjectRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
+import { useMemo, useState } from "react";
 
-const columns: ColumnDef<ProjectRow>[] = [
+const makeColumns = (short: boolean): ColumnDef<ProjectRow>[] => [
   {
     accessorKey: "project_slug",
     header: "Project",
     cell: ({ row }) => (
-      <span
-        className="block max-w-[280px] truncate font-medium"
-        title={projectLabel(row.original.sample_cwd, row.original.project_slug)}
-      >
-        {projectLabel(row.original.sample_cwd, row.original.project_slug, true)}
-      </span>
+      <ProjectCell
+        cwd={row.original.sample_cwd}
+        slug={row.original.project_slug}
+        short={short}
+        className="max-w-[280px] font-medium"
+      />
     ),
   },
   {
@@ -61,6 +63,8 @@ const columns: ColumnDef<ProjectRow>[] = [
 ];
 
 export default function ProjectsPage() {
+  const [shortNames, setShortNames] = useState(true);
+  const columns = useMemo(() => makeColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
   const { data, error, loading } = useApi<ProjectRow[]>(`/api/projects${rangeQuery(since, until)}`);
 
@@ -81,6 +85,7 @@ export default function ProjectsPage() {
             placeholder: "Filter projects…",
             ariaLabel: "Filter projects",
           }}
+          actions={<PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />}
           pageSize={25}
           emptyMessage="No projects match."
         />

@@ -4,8 +4,8 @@ import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
 import { CalendarHeatmap } from "@/components/charts/calendar-heatmap";
 import { DailyChart } from "@/components/charts/daily-chart";
 import { OverviewStats } from "@/components/overview-stats";
+import { PathToggle, ProjectCell } from "@/components/path-display";
 import { EmptyBlock, ErrorBlock } from "@/components/states";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -18,10 +18,9 @@ import {
 } from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
-import { formatDateShort, formatInt, formatTokens, formatUSD, projectLabel } from "@/lib/format";
+import { formatDateShort, formatInt, formatTokens, formatUSD } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { OverviewBundle, Totals } from "@/lib/types";
-import Link from "next/link";
 import { useState } from "react";
 
 const RANGE_LABEL: Record<string, string> = {
@@ -144,15 +143,7 @@ export default function OverviewPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Recent sessions</CardTitle>
-            <Button
-              size="sm"
-              variant="outline"
-              aria-pressed={shortNames}
-              onClick={() => setShortNames((v) => !v)}
-              title={shortNames ? "Showing folder names" : "Showing full paths"}
-            >
-              {shortNames ? "Short names" : "Full paths"}
-            </Button>
+            <PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />
           </CardHeader>
           <CardContent>
             {!b ? (
@@ -171,10 +162,14 @@ export default function OverviewPage() {
                 <TableBody>
                   {b.sessions.map((s) => (
                     <TableRow key={s.session_id}>
-                      <TableCell className="max-w-[200px] truncate">
-                        <Link className="hover:underline" href={`/sessions/?id=${s.session_id}`}>
-                          {projectLabel(s.sample_cwd, s.project_slug, shortNames)}
-                        </Link>
+                      <TableCell>
+                        <ProjectCell
+                          cwd={s.sample_cwd}
+                          slug={s.project_slug}
+                          short={shortNames}
+                          href={`/sessions/?id=${s.session_id}`}
+                          className="max-w-[200px]"
+                        />
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                         {formatDateShort(s.started)}

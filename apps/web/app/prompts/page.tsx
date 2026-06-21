@@ -1,6 +1,7 @@
 "use client";
 
 import { DataTable } from "@/components/data-table";
+import { PathToggle, ProjectCell } from "@/components/path-display";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,9 +11,9 @@ import { formatDate, formatTokens, formatUSD } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { PromptRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-const promptColumns: ColumnDef<PromptRow>[] = [
+const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
   {
     accessorKey: "timestamp",
     header: "When",
@@ -25,7 +26,14 @@ const promptColumns: ColumnDef<PromptRow>[] = [
   {
     accessorKey: "project_slug",
     header: "Project",
-    cell: ({ row }) => <span className="block max-w-[160px] truncate text-xs">{row.original.project_slug}</span>,
+    cell: ({ row }) => (
+      <ProjectCell
+        cwd={row.original.sample_cwd}
+        slug={row.original.project_slug}
+        short={short}
+        className="max-w-[200px] text-xs"
+      />
+    ),
   },
   {
     accessorKey: "prompt_text",
@@ -58,6 +66,8 @@ const promptColumns: ColumnDef<PromptRow>[] = [
 
 export default function PromptsPage() {
   const [sort, setSort] = useState<"tokens" | "recent">("tokens");
+  const [shortNames, setShortNames] = useState(true);
+  const columns = useMemo(() => makePromptColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
   const { data, error, loading } = useApi<PromptRow[]>(
     withRange(`/api/prompts?limit=50&sort=${sort}`, since, until),
@@ -85,13 +95,14 @@ export default function PromptsPage() {
         <EmptyBlock message="No prompts yet." />
       ) : (
         <DataTable
-          columns={promptColumns}
+          columns={columns}
           data={data}
           search={{
-            fields: ["project_slug", "prompt_text"],
+            fields: ["project_slug", "sample_cwd", "prompt_text"],
             placeholder: "Filter prompts…",
             ariaLabel: "Filter prompts",
           }}
+          actions={<PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />}
           pageSize={25}
           emptyMessage="No prompts match."
         />

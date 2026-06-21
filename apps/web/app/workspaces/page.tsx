@@ -1,6 +1,7 @@
 "use client";
 
 import { DataTable } from "@/components/data-table";
+import { PathToggle, ProjectCell } from "@/components/path-display";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
@@ -8,13 +9,19 @@ import { formatInt } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { WorkspaceRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
+import { useMemo, useState } from "react";
 
-const columns: ColumnDef<WorkspaceRow>[] = [
+const makeColumns = (short: boolean): ColumnDef<WorkspaceRow>[] => [
   {
     accessorKey: "workspace",
     header: "Workspace",
     cell: ({ row }) => (
-      <span className="block max-w-[320px] truncate font-medium">{row.original.workspace}</span>
+      <ProjectCell
+        cwd={row.original.sample_cwd}
+        slug={row.original.workspace}
+        short={short}
+        className="max-w-[320px] font-medium"
+      />
     ),
   },
   {
@@ -32,6 +39,8 @@ const columns: ColumnDef<WorkspaceRow>[] = [
 ];
 
 export default function WorkspacesPage() {
+  const [shortNames, setShortNames] = useState(true);
+  const columns = useMemo(() => makeColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
   const { data, error, loading } = useApi<WorkspaceRow[]>(
     `/api/workspaces${rangeQuery(since, until)}`,
@@ -50,10 +59,11 @@ export default function WorkspacesPage() {
           columns={columns}
           data={data}
           search={{
-            fields: ["workspace"],
+            fields: ["workspace", "sample_cwd"],
             placeholder: "Filter workspaces…",
             ariaLabel: "Filter workspaces",
           }}
+          actions={<PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />}
           pageSize={25}
           emptyMessage="No workspaces match."
         />

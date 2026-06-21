@@ -46,6 +46,13 @@ export function baseName(path: string | null | undefined): string {
   return parts.at(-1) ?? path;
 }
 
+/** Strip the Windows extended-length prefix (`\\?\`, `\\?\UNC\`) for display. */
+export function tidyPath(path: string): string {
+  if (path.startsWith("\\\\?\\UNC\\")) return "\\\\" + path.slice(8);
+  if (path.startsWith("\\\\?\\")) return path.slice(4);
+  return path;
+}
+
 /**
  * Human label for a session/project. Claude Code stores projects under a slug
  * that flattens path separators to "-" (e.g. "D--Github-harness-dashboard"), so
@@ -58,7 +65,7 @@ export function projectLabel(
 ): string {
   const path = cwd ?? slug ?? null;
   if (!path) return "—";
-  return short ? baseName(path) : path;
+  return short ? baseName(path) : tidyPath(path);
 }
 
 /** A fraction (0.201) as a signed percent ("+20.1%"). Negatives keep their sign. */
