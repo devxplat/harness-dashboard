@@ -704,7 +704,9 @@ impl Db {
                (SELECT a.model FROM messages a WHERE a.session_id=r.session_id AND a.type='assistant' \
                   AND a.is_sidechain=0 AND a.model IS NOT NULL AND a.timestamp>=r.timestamp \
                   AND (r.next_ts IS NULL OR a.timestamp<r.next_ts) ORDER BY a.timestamp LIMIT 1) AS model, \
-               r.in_tok, r.out_tok, r.cr_tok, r.c5_tok, r.c1_tok, r.billable, r.cwd \
+               r.in_tok, r.out_tok, r.cr_tok, r.c5_tok, r.c1_tok, r.billable, \
+               COALESCE(r.cwd, (SELECT m.cwd FROM messages m WHERE m.session_id=r.session_id \
+                  AND m.cwd IS NOT NULL ORDER BY m.timestamp LIMIT 1)) \
              FROM ranked r ORDER BY {outer_order}"
         );
         let mut stmt = conn.prepare(&sql)?;
