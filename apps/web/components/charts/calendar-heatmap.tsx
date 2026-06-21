@@ -1,5 +1,7 @@
 "use client";
 
+// Port of the dashboard18 availability calendar (status cells, spacing, legend),
+// driven by our per-day activity intensity with a sessions/tokens metric toggle.
 import { Button } from "@/components/ui/button";
 import { formatInt, formatTokens } from "@/lib/format";
 import {
@@ -19,6 +21,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const LEVELS = 4;
 
 const RAMP: Record<HeatMetric, string[]> = {
@@ -27,7 +30,7 @@ const RAMP: Record<HeatMetric, string[]> = {
 };
 
 function cellClass(level: number, metric: HeatMetric): string {
-  if (level === 0) return "border border-border/60 bg-background text-foreground/80";
+  if (level <= 0) return "border border-border/60 bg-background text-foreground/85";
   return cn(RAMP[metric][level - 1], level >= 3 ? "text-white" : "text-foreground");
 }
 
@@ -36,31 +39,52 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
   const lastRow = data.at(-1);
   const last = lastRow ? parseDay(lastRow.day) : new Date();
   const [view, setView] = useState({ year: last.getFullYear(), month: last.getMonth() });
+  const [selected, setSelected] = useState<Date>(last);
 
   const map = dayMap(data);
   const max = maxValue(data, metric);
   const cells = monthCells(view.year, view.month);
+  const today = new Date();
   const monthLabel = new Date(view.year, view.month).toLocaleString(undefined, {
     month: "long",
     year: "numeric",
   });
 
+  const valueAt = (d: Date) => {
+    const r = map.get(isoDay(d));
+    return r ? dayValue(r, metric) : 0;
+  };
+  const fmt = (v: number) => (metric === "sessions" ? `${formatInt(v)} sessions` : `${formatTokens(v)} tokens`);
+
   const shift = (delta: number) => {
-    const d = new Date(view.year, view.month + delta);
+    const d = new Date(view.year, view.month + delta, 1);
     setView({ year: d.getFullYear(), month: d.getMonth() });
+    setSelected(d);
   };
 
+  const selectedValue = valueAt(selected);
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex flex-1 items-center gap-2 rounded-xl bg-muted/40 px-2 py-1.5">
-          <Button size="icon-sm" variant="outline" aria-label="Previous month" onClick={() => shift(-1)}>
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-2 rounded-xl bg-muted/35 px-2 py-2">
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={() => shift(-1)}
+            className="flex size-6 items-center justify-center rounded-md border border-border/80 bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
             <ChevronLeft className="size-3.5" />
-          </Button>
-          <span className="flex-1 text-center text-sm font-medium">{monthLabel}</span>
-          <Button size="icon-sm" variant="outline" aria-label="Next month" onClick={() => shift(1)}>
+          </button>
+          <span className="flex-1 text-center text-sm font-medium text-foreground/85">{monthLabel}</span>
+          <button
+            type="button"
+            aria-label="Next month"
+            onClick={() => shift(1)}
+            className="flex size-6 items-center justify-center rounded-md border border-border/80 bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
             <ChevronRight className="size-3.5" />
-          </Button>
+          </button>
         </div>
         <div className="flex gap-1" role="group" aria-label="Heatmap metric">
           {HEAT_METRICS.map((m) => (
@@ -78,43 +102,58 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-7 text-center text-[0.7rem] font-medium tracking-wide text-muted-foreground">
-        {WEEKDAYS.map((w) => (
-          <span key={w} className="py-1">
-            {w}
+      <div className="mx-auto flex min-h-0 w-full flex-1 flex-col pt-4">
+        <div className="space-y-3">
+          <div className="grid grid-cols-7 text-center text-[10px] font-medium tracking-[0.04em] text-muted-foreground">
+            {WEEKDAYS.map((w) => (
+              <span key={w} className="py-1">
+                {w}
+              </span>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-2.5">
+            {cells.map(({ date, inMonth }) => {
+              const key = isoDay(date);
+              const value = inMonth ? valueAt(date) : 0;
+              const level = inMonth ? intensity(value, max, LEVELS) : 0;
+              const isSelected = isoDay(selected) === key;
+              const isToday = isoDay(today) === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  title={`${key} · ${fmt(value)}`}
+                  onClick={() => {
+                    if (date.getMonth() !== view.month) setView({ year: date.getFullYear(), month: date.getMonth() });
+                    setSelected(date);
+                  }}
+                  className={cn(
+                    "relative flex aspect-square items-center justify-center rounded-[10px] text-[11px] font-medium tabular-nums transition-colors",
+                    inMonth ? cellClass(level, metric) : "bg-muted/20 text-muted-foreground/35",
+                    isSelected && "ring-2 ring-primary/40 ring-offset-1 ring-offset-background",
+                    isToday && !isSelected && "ring-1 ring-primary/30",
+                  )}
+                >
+                  <span>{date.getDate()}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 pt-6 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <span>Less</span>
+            {[0, 1, 2, 3, 4].map((l) => (
+              <span key={l} className={cn("size-2.5 rounded-[4px]", cellClass(l, metric))} aria-hidden />
+            ))}
+            <span>More</span>
+          </div>
+          <span className="ml-auto text-[11px] text-muted-foreground/75">
+            {selected.getDate()} {MONTHS3[selected.getMonth()]} · {fmt(selectedValue)}
           </span>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-2">
-        {cells.map(({ date, inMonth }) => {
-          const key = isoDay(date);
-          const r = map.get(key);
-          const value = r ? dayValue(r, metric) : 0;
-          const level = inMonth ? intensity(value, max, LEVELS) : 0;
-          const label =
-            metric === "sessions" ? `${formatInt(value)} sessions` : `${formatTokens(value)} tokens`;
-          return (
-            <div
-              key={key}
-              title={`${key} · ${label}`}
-              className={cn(
-                "flex aspect-square items-center justify-center rounded-[10px] text-[11px] font-medium tabular-nums transition-colors",
-                inMonth ? cellClass(level, metric) : "bg-muted/20 text-muted-foreground/35",
-              )}
-            >
-              {date.getDate()}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="flex items-center justify-end gap-1.5 pt-1 text-[0.7rem] text-muted-foreground">
-        <span>Less</span>
-        {[0, 1, 2, 3, 4].map((l) => (
-          <span key={l} className={cn("size-3 rounded-sm", cellClass(l, metric))} aria-hidden />
-        ))}
-        <span>More</span>
+        </div>
       </div>
     </div>
   );

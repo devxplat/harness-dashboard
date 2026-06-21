@@ -78,31 +78,5 @@ export function maxValue(rows: DailyRow[], metric: HeatMetric): number {
   return rows.reduce((m, r) => Math.max(m, dayValue(r, metric)), 0);
 }
 
-export interface DotColumn {
-  day: string;
-  sessionDots: number;
-  tokenDots: number;
-}
-export interface DotScale {
-  columns: DotColumn[];
-  sessionsPerDot: number;
-  tokensPerDot: number;
-}
-
-/**
- * Convert daily rows into stacked dot counts. Sessions and tokens live on wildly
- * different scales, so each gets its own per-dot quantum sized so the busiest day
- * is ~`targetDots` tall — both series stay legible in one column.
- */
-export function dotScale(rows: DailyRow[], targetDots = 16): DotScale {
-  const maxSessions = rows.reduce((m, r) => Math.max(m, r.sessions), 0);
-  const maxTokens = rows.reduce((m, r) => Math.max(m, dayTokens(r)), 0);
-  const sessionsPerDot = Math.max(1, Math.ceil(maxSessions / targetDots));
-  const tokensPerDot = Math.max(1, Math.ceil(maxTokens / targetDots));
-  const columns = rows.map((r) => ({
-    day: r.day,
-    sessionDots: Math.ceil(r.sessions / sessionsPerDot),
-    tokenDots: Math.ceil(dayTokens(r) / tokensPerDot),
-  }));
-  return { columns, sessionsPerDot, tokensPerDot };
-}
+// (dotScale was removed — the Activity chart now scales tokens/sessions in
+// lib/activity-grid.ts; dayTokens/dayValue above remain the shared helpers.)
