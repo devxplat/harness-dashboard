@@ -22,7 +22,16 @@ import {
 import { formatInt, formatTokens } from "@/lib/format";
 import { dayTokens, parseDay } from "@/lib/heatmap";
 import type { DailyRow } from "@/lib/types";
-import { Bar, BarChart, Tooltip, usePlotArea, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  Tooltip,
+  useActiveTooltipCoordinate,
+  useActiveTooltipDataPoints,
+  usePlotArea,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const TOKEN_COLOR = "var(--color-tokens)";
@@ -67,8 +76,8 @@ function GridBackground({ cols }: { cols: number }) {
           key={`${r}-${c}`}
           x={cellX(c, m)}
           y={cellY(r, m)}
-          width={m.size}
-          height={m.size}
+          width={m.square}
+          height={m.square}
           rx={1}
           fill={GRID_CELL}
         />,
@@ -99,8 +108,8 @@ function SquareBar(props: { x?: number; width?: number; payload?: Point } & Scal
         key={r}
         x={cellX(col, m)}
         y={cellY(r, m)}
-        width={m.size}
-        height={m.size}
+        width={m.square}
+        height={m.square}
         rx={1}
         fill={r < tokenRows ? TOKEN_COLOR : SESSION_COLOR}
       />,
@@ -110,19 +119,19 @@ function SquareBar(props: { x?: number; width?: number; payload?: Point } & Scal
 }
 
 /**
- * Dashed vertical line + circle marker at the hovered day's stack top. Rendered as
- * the Tooltip's `cursor`, so its `coordinate`/`payload` come from the same active
- * state as the tooltip card — they can never drift apart.
+ * Dashed vertical line + white circle marker at the hovered day's stack top.
+ * Rendered as a sibling AFTER <Bar> so it sits ON TOP of the squares (the Tooltip
+ * `cursor` slot draws behind the data). Reads the active-tooltip hooks, which share
+ * the tooltip's active state, so the line/marker stay in sync with the card.
  */
-function ActivityCursor(
-  props: { coordinate?: { x: number; y: number }; payload?: { payload?: Point }[] } & ScaleProps,
-) {
-  const { coordinate, payload, yMax, maxSessions, cols } = props;
+function CursorLayer({ yMax, maxSessions, cols }: ScaleProps) {
   const area = usePlotArea();
+  const coordinate = useActiveTooltipCoordinate();
+  const points = useActiveTooltipDataPoints<Point>();
   if (!area || !coordinate) return null;
   const m: GridMetrics = gridMetrics(toBox(area), cols);
   const cx = coordinate.x; // active category center = day-column center
-  const active = payload?.[0]?.payload;
+  const active = points?.[0];
   let cy: number | null = null;
   if (active && typeof active.tokens === "number") {
     const { tokenRows, sessionRows } = stackRows({
@@ -224,7 +233,12 @@ export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
         </div>
       </div>
 
-      <div className="min-h-[220px] flex-1">
+      {/* Constrain the plot width (~72% of the tile) so day-columns stay small and
+          contiguous like the template, and the panel reads ~30% smaller. */}
+      <div
+        className="mx-auto min-h-[180px] w-[72%] min-w-[280px] flex-1"
+        style={{ maxWidth: points.length * 18 + 48 }}
+      >
         <ChartContainer
           config={config}
           className="h-full w-full [&_.recharts-cartesian-axis-line]:stroke-transparent [&_.recharts-cartesian-axis-tick_line]:stroke-transparent"
@@ -250,12 +264,9 @@ export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
               domain={[0, yMax]}
               ticks={axisTicks(yMax)}
               tickFormatter={(v: number) => formatTokens(v)}
-              width={52}
+              width={40}
             />
-            <Tooltip
-              content={<ActivityTooltip />}
-              cursor={<ActivityCursor yMax={yMax} maxSessions={maxSessions} cols={points.length} />}
-            />
+            <Tooltip content={<ActivityTooltip />} cursor={false} />
             <Bar
               dataKey="tokens"
               fill={TOKEN_COLOR}
@@ -264,6 +275,7 @@ export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
                 <SquareBar {...p} yMax={yMax} maxSessions={maxSessions} cols={points.length} />
               )}
             />
+            <CursorLayer yMax={yMax} maxSessions={maxSessions} cols={points.length} />
           </BarChart>
         </ChartContainer>
       </div>

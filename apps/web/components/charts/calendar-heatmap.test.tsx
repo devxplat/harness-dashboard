@@ -18,16 +18,28 @@ function row(day: string, sessions: number, tokens: number): DailyRow {
 const data = [row("2026-06-10", 5, 1000), row("2026-06-15", 20, 8000)];
 
 describe("CalendarHeatmap", () => {
-  it("opens on the latest data month with session intensity", () => {
+  it("opens on the latest data month and summarizes the selected day", () => {
     render(<CalendarHeatmap data={data} />);
     expect(screen.getByText("June 2026")).toBeInTheDocument();
-    expect(screen.getByTitle("2026-06-15 · 20 sessions")).toBeInTheDocument();
+    // The latest data day (Jun 15) is selected; the footer summarizes it (8000 -> 8.0K).
+    expect(screen.getByText("15 Jun")).toBeInTheDocument();
+    expect(screen.getByText("8.0K")).toBeInTheDocument();
   });
 
-  it("switches the metric to tokens", async () => {
+  it("updates the footer to the hovered day's sessions and tokens", async () => {
+    const user = userEvent.setup();
     render(<CalendarHeatmap data={data} />);
-    await userEvent.click(screen.getByRole("button", { name: "tokens" }));
-    expect(screen.getByTitle(/2026-06-15 · .*tokens/)).toBeInTheDocument();
+    await user.hover(screen.getByRole("button", { name: "10" }));
+    expect(screen.getByText("10 Jun")).toBeInTheDocument();
+    expect(screen.getByText("1.0K")).toBeInTheDocument(); // Jun 10 tokens, unique to its summary
+  });
+
+  it("toggles the active metric", async () => {
+    render(<CalendarHeatmap data={data} />);
+    const tokensBtn = screen.getByRole("button", { name: "tokens" });
+    await userEvent.click(tokensBtn);
+    expect(tokensBtn).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "sessions" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("navigates between months", async () => {

@@ -1,9 +1,11 @@
-// Pure geometry/scaling for the recharts "Activity" square-grid chart. One grid
-// COLUMN per day: the column step is derived from the plot width / day count so the
-// matrix is contiguous and fills the tile. Kept framework-free so the math is
-// unit-tested without a real recharts layout (jsdom gives charts zero size).
+// Pure geometry/scaling for the recharts "Activity" square-grid chart (template:
+// dashboard18 booking-sources). One contiguous column per day; the column step is
+// plotWidth/dayCount, so the component constrains the plot width to keep the step
+// (and squares) small like the template. Framework-free so it's unit-tested without
+// a real recharts layout (jsdom gives charts zero size).
 
-export const GAP = 3;
+/** Gap between cells (template uses an 8px cell on a 12px step). */
+export const GAP = 4;
 /** Fraction of the grid height the (off-axis) session cap may occupy. */
 export const SESSION_BAND = 0.3;
 
@@ -18,10 +20,10 @@ export interface PlotBox {
 export interface GridMetrics {
   cols: number;
   rows: number;
-  /** Width/height of one cell slot (square cells stepped by this both ways). */
+  /** Cell slot (square cells stepped by this both ways). */
   step: number;
-  /** Drawn square size (step minus the gap). */
-  size: number;
+  /** Drawn square size (step - GAP). */
+  square: number;
   gridLeft: number;
   gridTop: number;
   gridHeight: number;
@@ -29,32 +31,32 @@ export interface GridMetrics {
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
-/** A grid with exactly `cols` day-columns spanning the plot width, square cells. */
+/** A contiguous square grid: `cols` day-columns spanning the width, rows filling height. */
 export function gridMetrics(box: PlotBox, cols: number): GridMetrics {
   const c = Math.max(1, cols);
   const step = box.width > 0 ? box.width / c : 0;
-  const size = Math.max(2, step - GAP);
+  const square = step > 0 ? Math.max(2, step - GAP) : 0;
   const rows = step > 0 ? Math.max(0, Math.floor(box.height / step)) : 0;
   const gridHeight = rows * step;
   return {
     cols: c,
     rows,
     step,
-    size,
+    square,
     gridLeft: box.left,
     gridTop: box.top + (box.height - gridHeight), // bottom-anchored
     gridHeight,
   };
 }
 
-/** Left x of the square in day-column `index`. */
+/** Left x of the square in day-column `index` (centered in its slot). */
 export function cellX(index: number, m: GridMetrics): number {
-  return m.gridLeft + index * m.step + (m.step - m.size) / 2;
+  return m.gridLeft + index * m.step + (m.step - m.square) / 2;
 }
 
 /** Top y of the square `rowFromBottom` rows up from the grid floor. */
 export function cellY(rowFromBottom: number, m: GridMetrics): number {
-  return m.gridTop + m.gridHeight - (rowFromBottom + 1) * m.step + (m.step - m.size) / 2;
+  return m.gridTop + m.gridHeight - (rowFromBottom + 1) * m.step + (m.step - m.square) / 2;
 }
 
 /** Day-column index nearest a slot center-x (clamped to the grid). */

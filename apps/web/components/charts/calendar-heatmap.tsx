@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { formatInt, formatTokens } from "@/lib/format";
 import {
   dayMap,
+  dayTokens,
   dayValue,
   HEAT_METRICS,
   intensity,
@@ -40,6 +41,7 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
   const last = lastRow ? parseDay(lastRow.day) : new Date();
   const [view, setView] = useState({ year: last.getFullYear(), month: last.getMonth() });
   const [selected, setSelected] = useState<Date>(last);
+  const [hovered, setHovered] = useState<Date | null>(null);
 
   const map = dayMap(data);
   const max = maxValue(data, metric);
@@ -54,7 +56,6 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
     const r = map.get(isoDay(d));
     return r ? dayValue(r, metric) : 0;
   };
-  const fmt = (v: number) => (metric === "sessions" ? `${formatInt(v)} sessions` : `${formatTokens(v)} tokens`);
 
   const shift = (delta: number) => {
     const d = new Date(view.year, view.month + delta, 1);
@@ -62,10 +63,15 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
     setSelected(d);
   };
 
-  const selectedValue = valueAt(selected);
+  // The footer summary reflects the hovered day (so the count appears on hover),
+  // falling back to the selected day. It always shows both metrics.
+  const active = hovered ?? selected;
+  const activeRow = map.get(isoDay(active));
+  const activeSessions = activeRow?.sessions ?? 0;
+  const activeTokens = activeRow ? dayTokens(activeRow) : 0;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="mx-auto flex h-full w-full max-w-[240px] flex-col">
       <div className="flex items-center gap-2">
         <div className="flex flex-1 items-center gap-2 rounded-xl bg-muted/35 px-2 py-2">
           <button
@@ -112,7 +118,7 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
             ))}
           </div>
 
-          <div className="grid grid-cols-7 gap-2.5">
+          <div className="grid grid-cols-7 gap-1.5" onMouseLeave={() => setHovered(null)}>
             {cells.map(({ date, inMonth }) => {
               const key = isoDay(date);
               const value = inMonth ? valueAt(date) : 0;
@@ -123,9 +129,11 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
                 <button
                   key={key}
                   type="button"
-                  title={`${key} · ${fmt(value)}`}
+                  onMouseEnter={() => setHovered(date)}
+                  onFocus={() => setHovered(date)}
                   onClick={() => {
-                    if (date.getMonth() !== view.month) setView({ year: date.getFullYear(), month: date.getMonth() });
+                    if (date.getMonth() !== view.month)
+                      setView({ year: date.getFullYear(), month: date.getMonth() });
                     setSelected(date);
                   }}
                   className={cn(
@@ -150,8 +158,18 @@ export function CalendarHeatmap({ data }: { data: DailyRow[] }) {
             ))}
             <span>More</span>
           </div>
-          <span className="ml-auto text-[11px] text-muted-foreground/75">
-            {selected.getDate()} {MONTHS3[selected.getMonth()]} · {fmt(selectedValue)}
+          <span className="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground/80">
+            <span className="font-medium text-foreground/85">
+              {active.getDate()} {MONTHS3[active.getMonth()]}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="size-1.5 rounded-full bg-primary" aria-hidden />
+              {formatInt(activeSessions)}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="size-1.5 rounded-full bg-sky-500" aria-hidden />
+              {formatTokens(activeTokens)}
+            </span>
           </span>
         </div>
       </div>
