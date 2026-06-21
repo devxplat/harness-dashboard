@@ -9,30 +9,20 @@
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
 import {
   axisTicks,
-  CELL_INSET,
-  CELL_SIZE,
-  CELL_STEP,
-  columnCenter,
-  columnLeft,
+  cellX,
+  cellY,
+  columnIndexAt,
   gridMetrics,
   markerY,
   niceMax,
   stackRows,
+  type GridMetrics,
   type PlotBox,
 } from "@/lib/activity-grid";
 import { formatInt, formatTokens } from "@/lib/format";
 import { dayTokens, parseDay } from "@/lib/heatmap";
 import type { DailyRow } from "@/lib/types";
-import {
-  Bar,
-  BarChart,
-  Tooltip,
-  useActiveTooltipCoordinate,
-  useActiveTooltipDataPoints,
-  usePlotArea,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, Tooltip, usePlotArea, XAxis, YAxis } from "recharts";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const TOKEN_COLOR = "var(--color-tokens)";
@@ -42,7 +32,6 @@ const CURSOR = "color-mix(in oklch, var(--foreground) 60%, transparent)";
 
 interface Point {
   key: string;
-  xLabel: string;
   sessions: number;
   tokens: number;
 }
@@ -50,6 +39,7 @@ interface Point {
 interface ScaleProps {
   yMax: number;
   maxSessions: number;
+  cols: number;
 }
 
 const config = {
@@ -64,31 +54,37 @@ const toBox = (a: { x: number; y: number; width: number; height: number }): Plot
   height: a.height,
 });
 
-/** Light square grid filling the plot box (drawn under the bars). */
-function GridBackground() {
+/** Light square grid filling the plot box (one column per day, drawn under bars). */
+function GridBackground({ cols }: { cols: number }) {
   const area = usePlotArea();
   if (!area) return null;
-  const m = gridMetrics(toBox(area));
+  const m = gridMetrics(toBox(area), cols);
   const rects = [];
   for (let r = 0; r < m.rows; r += 1) {
-    const y = m.gridTop + r * CELL_STEP + CELL_INSET;
     for (let c = 0; c < m.cols; c += 1) {
-      const x = m.gridLeft + c * CELL_STEP + CELL_INSET;
       rects.push(
-        <rect key={`${r}-${c}`} x={x} y={y} width={CELL_SIZE} height={CELL_SIZE} rx={1} fill={GRID_CELL} />,
+        <rect
+          key={`${r}-${c}`}
+          x={cellX(c, m)}
+          y={cellY(r, m)}
+          width={m.size}
+          height={m.size}
+          rx={1}
+          fill={GRID_CELL}
+        />,
       );
     }
   }
   return <g>{rects}</g>;
 }
 
-/** One column of stacked squares: tokens (blue, bottom) then sessions (orange, top). */
+/** One day-column of stacked squares: tokens (blue, bottom) then sessions (orange, top). */
 function SquareBar(props: { x?: number; width?: number; payload?: Point } & ScaleProps) {
-  const { x, width, payload, yMax, maxSessions } = props;
+  const { x, width, payload, yMax, maxSessions, cols } = props;
   const area = usePlotArea();
   if (typeof x !== "number" || typeof width !== "number" || !area || !payload) return null;
-  const m = gridMetrics(toBox(area));
-  const colX = columnLeft(x, width, m);
+  const m = gridMetrics(toBox(area), cols);
+  const col = columnIndexAt(x + width / 2, m);
   const { tokenRows, sessionRows } = stackRows({
     tokens: payload.tokens,
     sessions: payload.sessions,
@@ -96,18 +92,15 @@ function SquareBar(props: { x?: number; width?: number; payload?: Point } & Scal
     maxSessions,
     rows: m.rows,
   });
-  const bottom = m.gridTop + m.gridHeight;
   const rects = [];
   for (let r = 0; r < tokenRows + sessionRows; r += 1) {
-    const ry = Math.round(bottom - (r + 1) * CELL_STEP) + CELL_INSET;
-    if (ry < m.gridTop) continue;
     rects.push(
       <rect
         key={r}
-        x={colX}
-        y={ry}
-        width={CELL_SIZE}
-        height={CELL_SIZE}
+        x={cellX(col, m)}
+        y={cellY(r, m)}
+        width={m.size}
+        height={m.size}
         rx={1}
         fill={r < tokenRows ? TOKEN_COLOR : SESSION_COLOR}
       />,
@@ -116,15 +109,20 @@ function SquareBar(props: { x?: number; width?: number; payload?: Point } & Scal
   return <g>{rects}</g>;
 }
 
-/** Dashed vertical line + circle marker at the hovered column's stack top. */
-function CursorLayer({ yMax, maxSessions }: ScaleProps) {
+/**
+ * Dashed vertical line + circle marker at the hovered day's stack top. Rendered as
+ * the Tooltip's `cursor`, so its `coordinate`/`payload` come from the same active
+ * state as the tooltip card — they can never drift apart.
+ */
+function ActivityCursor(
+  props: { coordinate?: { x: number; y: number }; payload?: { payload?: Point }[] } & ScaleProps,
+) {
+  const { coordinate, payload, yMax, maxSessions, cols } = props;
   const area = usePlotArea();
-  const coord = useActiveTooltipCoordinate();
-  const points = useActiveTooltipDataPoints<Point>();
-  if (!area || !coord) return null;
-  const m = gridMetrics(toBox(area));
-  const cx = columnCenter(coord.x, 0, m);
-  const active = points?.[0];
+  if (!area || !coordinate) return null;
+  const m: GridMetrics = gridMetrics(toBox(area), cols);
+  const cx = coordinate.x; // active category center = day-column center
+  const active = payload?.[0]?.payload;
   let cy: number | null = null;
   if (active && typeof active.tokens === "number") {
     const { tokenRows, sessionRows } = stackRows({
@@ -185,17 +183,13 @@ function ActivityTooltip({ active, payload }: { active?: boolean; payload?: { pa
 }
 
 export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
-  const points: Point[] = data.map((d, i) => {
-    const dt = parseDay(d.day);
-    const prev = i > 0 ? parseDay(data[i - 1]?.day ?? d.day) : null;
-    const first = !prev || prev.getMonth() !== dt.getMonth();
-    return {
-      key: d.day,
-      xLabel: first ? MONTHS[dt.getMonth()] ?? "" : "",
-      sessions: d.sessions,
-      tokens: dayTokens(d),
-    };
-  });
+  // Unique category key per day so recharts maps the mouse to the right column
+  // (a shared "" label would collapse every day into one category, breaking hover).
+  const points: Point[] = data.map((d) => ({
+    key: d.day,
+    sessions: d.sessions,
+    tokens: dayTokens(d),
+  }));
   const totalSessions = data.reduce((a, d) => a + d.sessions, 0);
   const totalTokens = data.reduce((a, d) => a + dayTokens(d), 0);
   const maxTokens = points.reduce((m, p) => Math.max(m, p.tokens), 0);
@@ -236,14 +230,18 @@ export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
           className="h-full w-full [&_.recharts-cartesian-axis-line]:stroke-transparent [&_.recharts-cartesian-axis-tick_line]:stroke-transparent"
         >
           <BarChart data={points} barCategoryGap={0} margin={{ top: 8, right: 8, left: -4, bottom: 6 }}>
-            <GridBackground />
+            <GridBackground cols={points.length} />
             <XAxis
-              dataKey="xLabel"
+              dataKey="key"
               axisLine={false}
               tickLine={false}
               interval={0}
               tick={{ fontSize: 11, fontWeight: 500 }}
               dy={6}
+              tickFormatter={(value: string, index: number) => {
+                const d = parseDay(value);
+                return index === 0 || d.getDate() === 1 ? MONTHS[d.getMonth()] ?? "" : "";
+              }}
             />
             <YAxis
               axisLine={false}
@@ -254,17 +252,18 @@ export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
               tickFormatter={(v: number) => formatTokens(v)}
               width={52}
             />
-            <Tooltip content={<ActivityTooltip />} cursor={false} />
+            <Tooltip
+              content={<ActivityTooltip />}
+              cursor={<ActivityCursor yMax={yMax} maxSessions={maxSessions} cols={points.length} />}
+            />
             <Bar
               dataKey="tokens"
               fill={TOKEN_COLOR}
               radius={0}
-              barSize={CELL_SIZE}
               shape={(p: { x?: number; width?: number; payload?: Point }) => (
-                <SquareBar {...p} yMax={yMax} maxSessions={maxSessions} />
+                <SquareBar {...p} yMax={yMax} maxSessions={maxSessions} cols={points.length} />
               )}
             />
-            <CursorLayer yMax={yMax} maxSessions={maxSessions} />
           </BarChart>
         </ChartContainer>
       </div>

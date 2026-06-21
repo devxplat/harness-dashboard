@@ -1,11 +1,9 @@
-// Pure geometry/scaling for the recharts "Activity" square-grid chart (ported from
-// the dashboard18 booking-sources chart). Kept framework-free so the math is
-// unit-tested without a real recharts layout (jsdom gives charts zero size, so the
-// SVG-drawing callbacks in activity-heatmap.tsx can't run under unit tests).
+// Pure geometry/scaling for the recharts "Activity" square-grid chart. One grid
+// COLUMN per day: the column step is derived from the plot width / day count so the
+// matrix is contiguous and fills the tile. Kept framework-free so the math is
+// unit-tested without a real recharts layout (jsdom gives charts zero size).
 
-export const CELL_STEP = 12;
-export const CELL_SIZE = 8;
-export const CELL_INSET = 2;
+export const GAP = 3;
 /** Fraction of the grid height the (off-axis) session cap may occupy. */
 export const SESSION_BAND = 0.3;
 
@@ -20,35 +18,49 @@ export interface PlotBox {
 export interface GridMetrics {
   cols: number;
   rows: number;
+  /** Width/height of one cell slot (square cells stepped by this both ways). */
+  step: number;
+  /** Drawn square size (step minus the gap). */
+  size: number;
   gridLeft: number;
   gridTop: number;
-  gridWidth: number;
   gridHeight: number;
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
-/** A centered whole-cell grid that fits inside the plot box. */
-export function gridMetrics(box: PlotBox): GridMetrics {
-  const cols = Math.max(0, Math.floor(box.width / CELL_STEP));
-  const rows = Math.max(0, Math.floor(box.height / CELL_STEP));
-  const gridWidth = cols * CELL_STEP;
-  const gridHeight = rows * CELL_STEP;
-  const gridLeft = Math.round(box.left + (box.width - gridWidth) / 2);
-  const gridTop = Math.round(box.top + (box.height - gridHeight) / 2);
-  return { cols, rows, gridLeft, gridTop, gridWidth, gridHeight };
+/** A grid with exactly `cols` day-columns spanning the plot width, square cells. */
+export function gridMetrics(box: PlotBox, cols: number): GridMetrics {
+  const c = Math.max(1, cols);
+  const step = box.width > 0 ? box.width / c : 0;
+  const size = Math.max(2, step - GAP);
+  const rows = step > 0 ? Math.max(0, Math.floor(box.height / step)) : 0;
+  const gridHeight = rows * step;
+  return {
+    cols: c,
+    rows,
+    step,
+    size,
+    gridLeft: box.left,
+    gridTop: box.top + (box.height - gridHeight), // bottom-anchored
+    gridHeight,
+  };
 }
 
-/** Snap a bar's slot (x + width) to the center-x of its nearest grid column. */
-export function columnCenter(x: number, width: number, m: GridMetrics): number {
-  const centerX = x + width / 2;
-  const snapped = Math.round((centerX - m.gridLeft - CELL_STEP / 2) / CELL_STEP);
-  const col = clamp(snapped, 0, Math.max(0, m.cols - 1));
-  return Math.round(m.gridLeft + col * CELL_STEP + CELL_INSET + CELL_SIZE / 2);
+/** Left x of the square in day-column `index`. */
+export function cellX(index: number, m: GridMetrics): number {
+  return m.gridLeft + index * m.step + (m.step - m.size) / 2;
 }
 
-export function columnLeft(x: number, width: number, m: GridMetrics): number {
-  return Math.round(columnCenter(x, width, m) - CELL_SIZE / 2);
+/** Top y of the square `rowFromBottom` rows up from the grid floor. */
+export function cellY(rowFromBottom: number, m: GridMetrics): number {
+  return m.gridTop + m.gridHeight - (rowFromBottom + 1) * m.step + (m.step - m.size) / 2;
+}
+
+/** Day-column index nearest a slot center-x (clamped to the grid). */
+export function columnIndexAt(centerX: number, m: GridMetrics): number {
+  if (m.step <= 0) return 0;
+  return clamp(Math.round((centerX - m.gridLeft) / m.step - 0.5), 0, m.cols - 1);
 }
 
 /**
@@ -66,11 +78,7 @@ export function stackRows(opts: {
   const { tokens, sessions, yMax, maxSessions, rows } = opts;
   const tokenRows = yMax > 0 ? clamp(Math.round((tokens / yMax) * rows), 0, rows) : 0;
   const sessionFrac = maxSessions > 0 ? sessions / maxSessions : 0;
-  const sessionRows = clamp(
-    Math.round(sessionFrac * rows * SESSION_BAND),
-    0,
-    rows - tokenRows,
-  );
+  const sessionRows = clamp(Math.round(sessionFrac * rows * SESSION_BAND), 0, rows - tokenRows);
   return { tokenRows, sessionRows };
 }
 
@@ -90,10 +98,8 @@ export function axisTicks(yMax: number): number[] {
   return [0, 0.25, 0.5, 0.75, 1].map((f) => f * yMax);
 }
 
-/** Y of the cursor circle (top of a column's filled stack), or null when empty. */
+/** Y of the cursor circle (center of a column's top filled cell), or null when empty. */
 export function markerY(filledRows: number, m: GridMetrics): number | null {
-  if (filledRows <= 0) return null;
-  const bottom = m.gridTop + m.gridHeight;
-  const topCellY = Math.round(bottom - filledRows * CELL_STEP) + CELL_INSET;
-  return topCellY + CELL_SIZE / 2;
+  if (filledRows <= 0 || m.step <= 0) return null;
+  return m.gridTop + m.gridHeight - filledRows * m.step + m.step / 2;
 }
