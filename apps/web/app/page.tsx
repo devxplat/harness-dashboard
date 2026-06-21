@@ -73,7 +73,7 @@ export default function OverviewPage() {
             {!b ? (
               <Skeleton className="h-72 w-full" />
             ) : b.daily.length ? (
-              <ActivityHeatmap data={b.daily} />
+              <ActivityHeatmap data={b.daily} granular={b.activity} />
             ) : (
               <EmptyBlock message="No activity in range." />
             )}

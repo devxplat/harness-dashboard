@@ -35,6 +35,10 @@ const bundle = {
   daily: [
     { day: "2026-06-19", sessions: 2, input_tokens: 100, output_tokens: 200, cache_read_tokens: 50, cache_create_tokens: 15 },
   ],
+  activity: [
+    { key: "2026-06-19 AM", day: "2026-06-19", half: "AM", sessions: 1, input_tokens: 60, output_tokens: 120, cache_create_tokens: 10 },
+    { key: "2026-06-19 PM", day: "2026-06-19", half: "PM", sessions: 1, input_tokens: 40, output_tokens: 80, cache_create_tokens: 5 },
+  ],
   byModel: [
     {
       model: "claude-opus-4-8",
