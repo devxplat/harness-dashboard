@@ -53,6 +53,19 @@ pub struct DailyRow {
     pub cache_create_tokens: i64,
 }
 
+/// A finer-than-daily activity bucket (half-day: AM/PM) — feeds the dense
+/// "booking-sources"-style activity matrix so short ranges get more columns.
+#[derive(Debug, Serialize)]
+pub struct ActivityBucket {
+    pub key: String,
+    pub day: String,
+    pub half: String,
+    pub sessions: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_create_tokens: i64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ModelRow {
     pub model: Option<String>,
@@ -444,6 +457,42 @@ impl Db {
                     input_tokens: r.get(2)?,
                     output_tokens: r.get(3)?,
                     cache_read_tokens: r.get(4)?,
+                    cache_create_tokens: r.get(5)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Per-half-day (AM/PM) activity buckets — twice the columns of `daily`.
+    pub fn activity_buckets(
+        &self,
+        since: Option<&str>,
+        until: Option<&str>,
+    ) -> Result<Vec<ActivityBucket>> {
+        let conn = self.conn.lock().unwrap();
+        // ISO timestamps: chars 12-13 are the hour, zero-padded, so a string
+        // compare against '12' cleanly splits the day into AM (00-11) / PM (12-23).
+        let sql = format!(
+            "SELECT substr(timestamp,1,10) AS day, \
+             CASE WHEN substr(timestamp,12,2) < '12' THEN 'AM' ELSE 'PM' END AS half, \
+             COUNT(DISTINCT session_id), \
+             COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), \
+             COALESCE(SUM(cache_create_5m_tokens+cache_create_1h_tokens),0) \
+             FROM messages WHERE {TIME_BOUND} GROUP BY day, half ORDER BY day, half"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt
+            .query_map(params![since, until], |r| {
+                let day: String = r.get(0)?;
+                let half: String = r.get(1)?;
+                Ok(ActivityBucket {
+                    key: format!("{day} {half}"),
+                    day,
+                    half,
+                    sessions: r.get(2)?,
+                    input_tokens: r.get(3)?,
+                    output_tokens: r.get(4)?,
                     cache_create_tokens: r.get(5)?,
                 })
             })?

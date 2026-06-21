@@ -239,6 +239,12 @@ async fn overview_bundle(State(s): State<AppState>, Query(q): Query<RangeParams>
             Ok(Db::open_read(&path)?.daily(since.as_deref(), until.as_deref())?)
         })
     };
+    let activity = {
+        let (path, since, until) = (path.clone(), since.clone(), until.clone());
+        tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+            Ok(Db::open_read(&path)?.activity_buckets(since.as_deref(), until.as_deref())?)
+        })
+    };
     let by_model = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         Ok(Db::open_read(&path)?.by_model(&pr, since.as_deref(), until.as_deref())?)
     });
@@ -249,6 +255,7 @@ async fn overview_bundle(State(s): State<AppState>, Query(q): Query<RangeParams>
         "sessions": sessions.await??,
         "tools": tools.await??,
         "daily": daily.await??,
+        "activity": activity.await??,
         "byModel": by_model.await??,
     })))
 }

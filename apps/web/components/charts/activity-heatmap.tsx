@@ -6,6 +6,7 @@
 // active-tooltip hooks for the dashed line + circle marker. (Excluded from coverage:
 // these SVG callbacks need a real layout that jsdom lacks — the math lives in
 // lib/activity-grid.ts, which is unit-tested.)
+import { Button } from "@/components/ui/button";
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
 import {
   axisTicks,
@@ -21,7 +22,8 @@ import {
 } from "@/lib/activity-grid";
 import { formatInt, formatTokens } from "@/lib/format";
 import { dayTokens, parseDay } from "@/lib/heatmap";
-import type { DailyRow } from "@/lib/types";
+import type { ActivityBucket, DailyRow } from "@/lib/types";
+import { useState } from "react";
 import {
   Bar,
   BarChart,
@@ -39,10 +41,29 @@ const SESSION_COLOR = "var(--color-sessions)";
 const GRID_CELL = "color-mix(in oklch, var(--foreground) 7%, var(--background))";
 const CURSOR = "color-mix(in oklch, var(--foreground) 60%, transparent)";
 
+// Column density: fill = one wide day-column edge-to-edge; compact = tiny
+// template-sized day cells (centered); dense = half-day buckets (more columns).
+const MODES = [
+  { id: "fill", label: "Fill" },
+  { id: "compact", label: "Compact" },
+  { id: "dense", label: "Dense" },
+] as const;
+type Mode = (typeof MODES)[number]["id"];
+
 interface Point {
   key: string;
   sessions: number;
   tokens: number;
+}
+
+/** Date part of a column key ("2026-06-20" or "2026-06-20 AM"). */
+const keyDate = (key: string) => parseDay(key.slice(0, 10));
+const keyHalf = (key: string) => (key.length > 10 ? key.slice(11) : "");
+
+function bucketLabel(key: string): string {
+  const d = keyDate(key);
+  const half = keyHalf(key);
+  return `${MONTHS[d.getMonth()] ?? ""} ${d.getDate()}${half ? ` ${half}` : ""}`;
 }
 
 interface ScaleProps {
@@ -165,7 +186,7 @@ function ActivityTooltip({ active, payload }: { active?: boolean; payload?: { pa
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload;
   if (!row) return null;
-  const label = parseDay(row.key).toLocaleString(undefined, { month: "short", day: "numeric" });
+  const label = bucketLabel(row.key);
   return (
     <div className="min-w-[170px] rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-sm">
       <p className="mb-3 rounded-md border border-border/60 bg-muted/35 px-2.5 py-1 text-sm font-medium text-foreground">
@@ -191,19 +212,40 @@ function ActivityTooltip({ active, payload }: { active?: boolean; payload?: { pa
   );
 }
 
-export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
-  // Unique category key per day so recharts maps the mouse to the right column
-  // (a shared "" label would collapse every day into one category, breaking hover).
-  const points: Point[] = data.map((d) => ({
+export function ActivityHeatmap({
+  data,
+  granular,
+}: {
+  data: DailyRow[];
+  granular?: ActivityBucket[];
+}) {
+  const [mode, setMode] = useState<Mode>("dense");
+
+  // Per-day points (fill/compact) vs per-half-day buckets (dense). Unique keys per
+  // column so recharts maps the mouse to the right one.
+  const dailyPoints: Point[] = data.map((d) => ({
     key: d.day,
     sessions: d.sessions,
     tokens: dayTokens(d),
   }));
+  const densePoints: Point[] = (granular ?? []).map((b) => ({
+    key: b.key,
+    sessions: b.sessions,
+    tokens: b.input_tokens + b.output_tokens + b.cache_create_tokens,
+  }));
+  const useDense = mode === "dense" && densePoints.length > 0;
+  const points = useDense ? densePoints : dailyPoints;
+
+  // Totals are always the overall period figures (mode-independent).
   const totalSessions = data.reduce((a, d) => a + d.sessions, 0);
   const totalTokens = data.reduce((a, d) => a + dayTokens(d), 0);
+  // Bar scale comes from the active columns (per-bucket maxima).
   const maxTokens = points.reduce((m, p) => Math.max(m, p.tokens), 0);
   const maxSessions = points.reduce((m, p) => Math.max(m, p.sessions), 0);
   const yMax = niceMax(maxTokens);
+
+  // Compact centers tiny template-sized cells; fill/dense span the whole tile.
+  const compact = mode === "compact";
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -219,25 +261,38 @@ export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
             <span className="pb-0.5 text-sm text-muted-foreground">tokens</span>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
-          <span className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-primary" aria-hidden />
-            <span className="font-medium text-foreground">Sessions</span>
-            <span className="tabular-nums">{formatInt(totalSessions)}</span>
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="size-2 rounded-full" style={{ background: "var(--color-tokens)" }} aria-hidden />
-            <span className="font-medium text-foreground">Tokens</span>
-            <span className="tabular-nums">{formatTokens(totalTokens)}</span>
-          </span>
+        <div className="flex flex-col items-start gap-2 lg:items-end">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <span className="size-2 rounded-full bg-primary" aria-hidden />
+              <span className="font-medium text-foreground">Sessions</span>
+              <span className="tabular-nums">{formatInt(totalSessions)}</span>
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="size-2 rounded-full" style={{ background: "var(--color-tokens)" }} aria-hidden />
+              <span className="font-medium text-foreground">Tokens</span>
+              <span className="tabular-nums">{formatTokens(totalTokens)}</span>
+            </span>
+          </div>
+          <div className="flex gap-1" role="group" aria-label="Column density">
+            {MODES.map((m) => (
+              <Button
+                key={m.id}
+                size="sm"
+                variant={m.id === mode ? "default" : "outline"}
+                aria-pressed={m.id === mode}
+                onClick={() => setMode(m.id)}
+              >
+                {m.label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Constrain the plot width (~72% of the tile) so day-columns stay small and
-          contiguous like the template, and the panel reads ~30% smaller. */}
       <div
-        className="mx-auto min-h-[180px] w-[72%] min-w-[280px] flex-1"
-        style={{ maxWidth: points.length * 18 + 48 }}
+        className={`min-h-[180px] flex-1 ${compact ? "mx-auto w-full min-w-[280px]" : "w-full"}`}
+        style={compact ? { maxWidth: points.length * 12 + 48 } : undefined}
       >
         <ChartContainer
           config={config}
@@ -253,8 +308,10 @@ export function ActivityHeatmap({ data }: { data: DailyRow[] }) {
               tick={{ fontSize: 11, fontWeight: 500 }}
               dy={6}
               tickFormatter={(value: string, index: number) => {
-                const d = parseDay(value);
-                return index === 0 || d.getDate() === 1 ? MONTHS[d.getMonth()] ?? "" : "";
+                const d = keyDate(value);
+                // One label per month — for half-day keys only on the AM bucket.
+                const showable = keyHalf(value) === "" || keyHalf(value) === "AM";
+                return index === 0 || (d.getDate() === 1 && showable) ? MONTHS[d.getMonth()] ?? "" : "";
               }}
             />
             <YAxis

@@ -21,6 +21,16 @@ export interface DailyRow {
   cache_create_tokens: number;
 }
 
+export interface ActivityBucket {
+  key: string;
+  day: string;
+  half: string;
+  sessions: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_create_tokens: number;
+}
+
 export interface ModelRow {
   model: string | null;
   turns: number;
@@ -100,6 +110,7 @@ export interface OverviewBundle {
   sessions: SessionRow[];
   tools: ToolRow[];
   daily: DailyRow[];
+  activity: ActivityBucket[];
   byModel: ModelRow[];
 }
 
