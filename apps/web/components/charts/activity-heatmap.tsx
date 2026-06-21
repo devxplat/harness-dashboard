@@ -6,7 +6,6 @@
 // active-tooltip hooks for the dashed line + circle marker. (Excluded from coverage:
 // these SVG callbacks need a real layout that jsdom lacks — the math lives in
 // lib/activity-grid.ts, which is unit-tested.)
-import { Button } from "@/components/ui/button";
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
 import {
   axisTicks,
@@ -23,7 +22,6 @@ import {
 import { formatInt, formatTokens } from "@/lib/format";
 import { dayTokens, parseDay } from "@/lib/heatmap";
 import type { ActivityBucket, DailyRow } from "@/lib/types";
-import { useState } from "react";
 import { Bar, BarChart, Tooltip, useActiveTooltipCoordinate, usePlotArea, XAxis, YAxis } from "recharts";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -31,15 +29,6 @@ const TOKEN_COLOR = "var(--color-tokens)";
 const SESSION_COLOR = "var(--color-sessions)";
 const GRID_CELL = "color-mix(in oklch, var(--foreground) 7%, var(--background))";
 const CURSOR = "color-mix(in oklch, var(--foreground) 60%, transparent)";
-
-// Column density: fill = one wide day-column edge-to-edge; compact = tiny
-// template-sized day cells (centered); dense = half-day buckets (more columns).
-const MODES = [
-  { id: "fill", label: "Fill" },
-  { id: "compact", label: "Compact" },
-  { id: "dense", label: "Dense" },
-] as const;
-type Mode = (typeof MODES)[number]["id"];
 
 interface Point {
   key: string;
@@ -219,10 +208,8 @@ export function ActivityHeatmap({
   data: DailyRow[];
   granular?: ActivityBucket[];
 }) {
-  const [mode, setMode] = useState<Mode>("dense");
-
-  // Per-day points (fill/compact) vs per-half-day buckets (dense). Unique keys per
-  // column so recharts maps the mouse to the right one.
+  // Dense per-half-day buckets give enough columns for small contiguous squares
+  // like the template; fall back to per-day if no granular data is available.
   const dailyPoints: Point[] = data.map((d) => ({
     key: d.day,
     sessions: d.sessions,
@@ -233,23 +220,17 @@ export function ActivityHeatmap({
     sessions: b.sessions,
     tokens: b.input_tokens + b.output_tokens + b.cache_create_tokens,
   }));
-  const useDense = mode === "dense" && densePoints.length > 0;
-  const points = useDense ? densePoints : dailyPoints;
+  const points = densePoints.length ? densePoints : dailyPoints;
 
-  // Totals are always the overall period figures (mode-independent).
   const totalSessions = data.reduce((a, d) => a + d.sessions, 0);
   const totalTokens = data.reduce((a, d) => a + dayTokens(d), 0);
-  // Bar scale comes from the active columns (per-bucket maxima).
   const maxTokens = points.reduce((m, p) => Math.max(m, p.tokens), 0);
   const maxSessions = points.reduce((m, p) => Math.max(m, p.sessions), 0);
   const yMax = niceMax(maxTokens);
 
-  // Compact centers tiny template-sized cells; fill/dense span the whole tile.
-  const compact = mode === "compact";
-
   return (
-    <div className="flex h-full flex-col gap-4">
-      <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+    <div className="flex flex-col gap-3">
+      <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
             Activity
@@ -261,39 +242,21 @@ export function ActivityHeatmap({
             <span className="pb-1 text-sm text-muted-foreground">tokens</span>
           </div>
         </div>
-        <div className="flex flex-col items-start gap-2 lg:items-end">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
-            <span className="flex items-center gap-2">
-              <span className="size-2 rounded-full bg-primary" aria-hidden />
-              <span className="font-medium text-foreground">Sessions</span>
-              <span className="tabular-nums">{formatInt(totalSessions)}</span>
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="size-2 rounded-full" style={{ background: "var(--color-tokens)" }} aria-hidden />
-              <span className="font-medium text-foreground">Tokens</span>
-              <span className="tabular-nums">{formatTokens(totalTokens)}</span>
-            </span>
-          </div>
-          <div className="flex gap-1" role="group" aria-label="Column density">
-            {MODES.map((m) => (
-              <Button
-                key={m.id}
-                size="sm"
-                variant={m.id === mode ? "default" : "outline"}
-                aria-pressed={m.id === mode}
-                onClick={() => setMode(m.id)}
-              >
-                {m.label}
-              </Button>
-            ))}
-          </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground lg:justify-end">
+          <span className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-primary" aria-hidden />
+            <span className="font-medium text-foreground">Sessions</span>
+            <span className="tabular-nums">{formatInt(totalSessions)}</span>
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="size-2 rounded-full" style={{ background: "var(--color-tokens)" }} aria-hidden />
+            <span className="font-medium text-foreground">Tokens</span>
+            <span className="tabular-nums">{formatTokens(totalTokens)}</span>
+          </span>
         </div>
       </div>
 
-      <div
-        className={`min-h-[180px] flex-1 ${compact ? "mx-auto w-full min-w-[280px]" : "w-full"}`}
-        style={compact ? { maxWidth: points.length * 12 + 48 } : undefined}
-      >
+      <div className="h-[150px] w-full sm:h-[170px]">
         <ChartContainer
           config={config}
           className="h-full w-full [&_.recharts-cartesian-axis-line]:stroke-transparent [&_.recharts-cartesian-axis-tick_line]:stroke-transparent"

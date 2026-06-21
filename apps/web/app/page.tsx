@@ -68,10 +68,10 @@ export default function OverviewPage() {
       )}
 
       <div className="grid items-stretch gap-4 lg:grid-cols-3">
-        <Card className="flex flex-col lg:col-span-2">
-          <CardContent className="flex-1 pt-6">
+        <Card className="lg:col-span-2">
+          <CardContent>
             {!b ? (
-              <Skeleton className="h-72 w-full" />
+              <Skeleton className="h-44 w-full" />
             ) : b.daily.length ? (
               <ActivityHeatmap data={b.daily} granular={b.activity} />
             ) : (
@@ -80,10 +80,10 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-1">
-          <CardContent className="pt-6">
+        <Card className="flex flex-col lg:col-span-1">
+          <CardContent className="flex flex-1 flex-col">
             {!b ? (
-              <Skeleton className="h-72 w-full" />
+              <Skeleton className="h-44 w-full" />
             ) : b.daily.length ? (
               <CalendarHeatmap data={b.daily} />
             ) : (
