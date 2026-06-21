@@ -24,16 +24,7 @@ import { formatInt, formatTokens } from "@/lib/format";
 import { dayTokens, parseDay } from "@/lib/heatmap";
 import type { ActivityBucket, DailyRow } from "@/lib/types";
 import { useState } from "react";
-import {
-  Bar,
-  BarChart,
-  Tooltip,
-  useActiveTooltipCoordinate,
-  useActiveTooltipDataPoints,
-  usePlotArea,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, Tooltip, useActiveTooltipCoordinate, usePlotArea, XAxis, YAxis } from "recharts";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const TOKEN_COLOR = "var(--color-tokens)";
@@ -145,14 +136,23 @@ function SquareBar(props: { x?: number; width?: number; payload?: Point } & Scal
  * `cursor` slot draws behind the data). Reads the active-tooltip hooks, which share
  * the tooltip's active state, so the line/marker stay in sync with the card.
  */
-function CursorLayer({ yMax, maxSessions, cols }: ScaleProps) {
+function CursorLayer({
+  yMax,
+  maxSessions,
+  points,
+}: {
+  yMax: number;
+  maxSessions: number;
+  points: Point[];
+}) {
   const area = usePlotArea();
   const coordinate = useActiveTooltipCoordinate();
-  const points = useActiveTooltipDataPoints<Point>();
   if (!area || !coordinate) return null;
-  const m: GridMetrics = gridMetrics(toBox(area), cols);
+  const m: GridMetrics = gridMetrics(toBox(area), points.length);
   const cx = coordinate.x; // active category center = day-column center
-  const active = points?.[0];
+  // Derive the active column from the cursor x (robust: don't depend on a second
+  // hook that can lag/return empty, which would render the line but no marker).
+  const active = points[columnIndexAt(cx, m)];
   let cy: number | null = null;
   if (active && typeof active.tokens === "number") {
     const { tokenRows, sessionRows } = stackRows({
@@ -254,11 +254,11 @@ export function ActivityHeatmap({
           <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
             Activity
           </p>
-          <div className="flex items-end gap-2 pt-1.5">
-            <span className="text-3xl leading-none font-semibold tabular-nums">
+          <div className="flex flex-wrap items-end gap-3 pt-1.5">
+            <span className="text-4xl leading-none font-semibold text-foreground tabular-nums">
               {formatTokens(totalTokens)}
             </span>
-            <span className="pb-0.5 text-sm text-muted-foreground">tokens</span>
+            <span className="pb-1 text-sm text-muted-foreground">tokens</span>
           </div>
         </div>
         <div className="flex flex-col items-start gap-2 lg:items-end">
@@ -332,7 +332,7 @@ export function ActivityHeatmap({
                 <SquareBar {...p} yMax={yMax} maxSessions={maxSessions} cols={points.length} />
               )}
             />
-            <CursorLayer yMax={yMax} maxSessions={maxSessions} cols={points.length} />
+            <CursorLayer yMax={yMax} maxSessions={maxSessions} points={points} />
           </BarChart>
         </ChartContainer>
       </div>

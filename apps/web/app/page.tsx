@@ -67,8 +67,8 @@ export default function OverviewPage() {
         <Skeleton className="h-[196px] w-full rounded-xl" />
       )}
 
-      <div className="grid items-stretch gap-4 lg:grid-cols-5">
-        <Card className="flex flex-col lg:col-span-3">
+      <div className="grid items-stretch gap-4 lg:grid-cols-3">
+        <Card className="flex flex-col lg:col-span-2">
           <CardContent className="flex-1 pt-6">
             {!b ? (
               <Skeleton className="h-72 w-full" />
@@ -80,7 +80,7 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-1">
           <CardContent className="pt-6">
             {!b ? (
               <Skeleton className="h-72 w-full" />
