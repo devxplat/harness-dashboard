@@ -4,11 +4,13 @@ import {
   cellX,
   cellY,
   columnIndexAt,
+  dayStack,
   GAP,
   gridMetrics,
   markerY,
   niceMax,
-  stackRows,
+  SQUARE_MAX,
+  stackHeight,
 } from "./activity-grid";
 
 describe("gridMetrics", () => {
@@ -16,15 +18,26 @@ describe("gridMetrics", () => {
     const m = gridMetrics({ left: 0, top: 0, width: 100, height: 50 }, 10);
     expect(m.cols).toBe(10);
     expect(m.step).toBe(10); // 100 / 10 days
-    expect(m.square).toBe(10 - GAP); // step - GAP
+    expect(m.square).toBe(10 - GAP); // step - GAP (below the cap)
+    expect(m.vStep).toBe(10); // square + GAP
     expect(m.rows).toBe(5); // floor(50 / 10)
     expect(m.gridHeight).toBe(50);
     expect(m.gridLeft).toBe(0);
   });
 
+  it("caps the square for wide columns and gets rows from the smaller vertical pitch", () => {
+    const m = gridMetrics({ left: 0, top: 0, width: 600, height: 130 }, 20);
+    expect(m.step).toBe(30); // 600 / 20 days (wide)
+    expect(m.square).toBe(SQUARE_MAX); // 30 - GAP would be 26, capped to 13
+    expect(m.vStep).toBe(SQUARE_MAX + GAP); // 17
+    expect(m.rows).toBe(7); // floor(130 / 17)
+    expect(m.gridHeight).toBe(119); // 7 * 17
+    expect(m.gridTop).toBe(11); // bottom-anchored: 130 - 119
+  });
+
   it("clamps to safe values for an unmeasured box", () => {
     const m = gridMetrics({ left: 0, top: 0, width: 0, height: 0 }, 30);
-    expect(m).toMatchObject({ cols: 30, step: 0, square: 0, rows: 0, gridHeight: 0 });
+    expect(m).toMatchObject({ cols: 30, step: 0, square: 0, vStep: 0, rows: 0, gridHeight: 0 });
   });
 });
 
@@ -42,22 +55,50 @@ describe("cellX / cellY / columnIndexAt", () => {
   });
 });
 
-describe("stackRows", () => {
-  it("scales tokens to the y-axis and caps sessions on top", () => {
-    const r = stackRows({ tokens: 50, sessions: 10, yMax: 100, maxSessions: 10, rows: 20 });
-    expect(r.tokenRows).toBe(10);
-    expect(r.sessionRows).toBe(6);
-  });
-  it("never exceeds the available rows", () => {
-    const r = stackRows({ tokens: 1000, sessions: 1000, yMax: 100, maxSessions: 1000, rows: 12 });
-    expect(r.tokenRows).toBe(12);
-    expect(r.sessionRows).toBe(0);
-  });
-  it("handles zero maxes without NaN", () => {
-    expect(stackRows({ tokens: 0, sessions: 5, yMax: 0, maxSessions: 0, rows: 10 })).toEqual({
-      tokenRows: 0,
-      sessionRows: 0,
+describe("dayStack", () => {
+  it("splits AM (bottom) and PM (top) with a divider gap, capping sessions on top", () => {
+    const s = dayStack({
+      amTokens: 30,
+      pmTokens: 30,
+      sessions: 5,
+      yMax: 100,
+      maxSessions: 10,
+      rows: 12,
     });
+    // 30/100*12 -> 4 rows each; both halves present -> 1 gap row; sessions 0.5*12*0.3 -> 2.
+    expect(s).toEqual({ amTokenRows: 4, pmTokenRows: 4, gapRows: 1, sessionRows: 2 });
+    expect(stackHeight(s)).toBe(11); // 4 + 1 + 4 + 2
+  });
+
+  it("omits the divider when only one half has tokens", () => {
+    const s = dayStack({
+      amTokens: 50,
+      pmTokens: 0,
+      sessions: 0,
+      yMax: 100,
+      maxSessions: 10,
+      rows: 12,
+    });
+    expect(s).toEqual({ amTokenRows: 6, pmTokenRows: 0, gapRows: 0, sessionRows: 0 });
+  });
+
+  it("never exceeds the available rows", () => {
+    const s = dayStack({
+      amTokens: 1000,
+      pmTokens: 1000,
+      sessions: 1000,
+      yMax: 100,
+      maxSessions: 1000,
+      rows: 10,
+    });
+    expect(stackHeight(s)).toBeLessThanOrEqual(10);
+    expect(s.amTokenRows).toBe(10);
+  });
+
+  it("handles zero maxes without NaN", () => {
+    expect(
+      dayStack({ amTokens: 0, pmTokens: 0, sessions: 5, yMax: 0, maxSessions: 0, rows: 10 }),
+    ).toEqual({ amTokenRows: 0, pmTokenRows: 0, gapRows: 0, sessionRows: 0 });
   });
 });
 

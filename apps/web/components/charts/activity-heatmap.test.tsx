@@ -24,6 +24,6 @@ describe("ActivityHeatmap", () => {
     expect(screen.getByText("Activity")).toBeInTheDocument();
     expect(screen.getByText("Sessions")).toBeInTheDocument();
     expect(screen.getByText("Tokens")).toBeInTheDocument();
-    expect(screen.getByText(/Blue squares = tokens/)).toBeInTheDocument();
+    expect(screen.getByText(/Each column is a day/)).toBeInTheDocument();
   });
 });

@@ -12,10 +12,11 @@ import {
   cellX,
   cellY,
   columnIndexAt,
+  dayStack,
   gridMetrics,
   markerY,
   niceMax,
-  stackRows,
+  stackHeight,
   type GridMetrics,
   type PlotBox,
 } from "@/lib/activity-grid";
@@ -25,25 +26,26 @@ import type { ActivityBucket, DailyRow } from "@/lib/types";
 import { Bar, BarChart, Tooltip, useActiveTooltipCoordinate, usePlotArea, XAxis, YAxis } from "recharts";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const TOKEN_COLOR = "var(--color-tokens)";
+const TOKEN_COLOR = "var(--color-tokens)"; // AM tokens (lower)
+const TOKEN_PM_COLOR = "color-mix(in oklch, var(--color-tokens) 58%, var(--background))"; // PM tokens (upper)
 const SESSION_COLOR = "var(--color-sessions)";
 const GRID_CELL = "color-mix(in oklch, var(--foreground) 7%, var(--background))";
 const CURSOR = "color-mix(in oklch, var(--foreground) 60%, transparent)";
 
 interface Point {
-  key: string;
-  sessions: number;
-  tokens: number;
+  key: string; // day "YYYY-MM-DD"
+  sessions: number; // day total
+  tokens: number; // day total (AM + PM)
+  amTokens: number;
+  pmTokens: number;
 }
 
-/** Date part of a column key ("2026-06-20" or "2026-06-20 AM"). */
+/** Date of a day-column key ("2026-06-20"). */
 const keyDate = (key: string) => parseDay(key.slice(0, 10));
-const keyHalf = (key: string) => (key.length > 10 ? key.slice(11) : "");
 
 function bucketLabel(key: string): string {
   const d = keyDate(key);
-  const half = keyHalf(key);
-  return `${MONTHS[d.getMonth()] ?? ""} ${d.getDate()}${half ? ` ${half}` : ""}`;
+  return `${MONTHS[d.getMonth()] ?? ""} ${d.getDate()}`;
 }
 
 interface ScaleProps {
@@ -88,32 +90,41 @@ function GridBackground({ cols }: { cols: number }) {
   return <g>{rects}</g>;
 }
 
-/** One day-column of stacked squares: tokens (blue, bottom) then sessions (orange, top). */
+/** Color for row `r` of a day stack, or null for the AM/PM divider gap (empty). */
+function rowFill(r: number, s: ReturnType<typeof dayStack>): string | null {
+  const pmStart = s.amTokenRows + s.gapRows;
+  const pmEnd = pmStart + s.pmTokenRows;
+  if (r < s.amTokenRows) return TOKEN_COLOR; // AM tokens (lower)
+  if (r < pmStart) return null; // divider gap
+  if (r < pmEnd) return TOKEN_PM_COLOR; // PM tokens (upper)
+  return SESSION_COLOR; // session cap (top)
+}
+
+/**
+ * One day-column: AM tokens (blue, bottom) and PM tokens (lighter blue, top) split
+ * by a divider gap, with a relative session cap (orange) above. Each day is a single
+ * column; AM/PM read vertically within it.
+ */
 function SquareBar(props: { x?: number; width?: number; payload?: Point } & ScaleProps) {
   const { x, width, payload, yMax, maxSessions, cols } = props;
   const area = usePlotArea();
   if (typeof x !== "number" || typeof width !== "number" || !area || !payload) return null;
   const m = gridMetrics(toBox(area), cols);
   const col = columnIndexAt(x + width / 2, m);
-  const { tokenRows, sessionRows } = stackRows({
-    tokens: payload.tokens,
+  const s = dayStack({
+    amTokens: payload.amTokens,
+    pmTokens: payload.pmTokens,
     sessions: payload.sessions,
     yMax,
     maxSessions,
     rows: m.rows,
   });
   const rects = [];
-  for (let r = 0; r < tokenRows + sessionRows; r += 1) {
+  for (let r = 0; r < stackHeight(s); r += 1) {
+    const fill = rowFill(r, s);
+    if (!fill) continue;
     rects.push(
-      <rect
-        key={r}
-        x={cellX(col, m)}
-        y={cellY(r, m)}
-        width={m.square}
-        height={m.square}
-        rx={1}
-        fill={r < tokenRows ? TOKEN_COLOR : SESSION_COLOR}
-      />,
+      <rect key={r} x={cellX(col, m)} y={cellY(r, m)} width={m.square} height={m.square} rx={1} fill={fill} />,
     );
   }
   return <g>{rects}</g>;
@@ -144,14 +155,15 @@ function CursorLayer({
   const active = points[columnIndexAt(cx, m)];
   let cy: number | null = null;
   if (active && typeof active.tokens === "number") {
-    const { tokenRows, sessionRows } = stackRows({
-      tokens: active.tokens,
+    const s = dayStack({
+      amTokens: active.amTokens,
+      pmTokens: active.pmTokens,
       sessions: active.sessions,
       yMax,
       maxSessions,
       rows: m.rows,
     });
-    cy = markerY(tokenRows + sessionRows, m);
+    cy = markerY(stackHeight(s), m);
   }
   return (
     <g>
@@ -196,6 +208,10 @@ function ActivityTooltip({ active, payload }: { active?: boolean; payload?: { pa
           </span>
           <span className="font-semibold text-foreground">{formatTokens(row.tokens)}</span>
         </div>
+        <div className="flex items-center justify-between gap-5 border-t border-border/50 pt-2 text-xs text-muted-foreground">
+          <span>AM {formatTokens(row.amTokens)}</span>
+          <span>PM {formatTokens(row.pmTokens)}</span>
+        </div>
       </div>
     </div>
   );
@@ -208,19 +224,27 @@ export function ActivityHeatmap({
   data: DailyRow[];
   granular?: ActivityBucket[];
 }) {
-  // Dense per-half-day buckets give enough columns for small contiguous squares
-  // like the template; fall back to per-day if no granular data is available.
-  const dailyPoints: Point[] = data.map((d) => ({
-    key: d.day,
-    sessions: d.sessions,
-    tokens: dayTokens(d),
-  }));
-  const densePoints: Point[] = (granular ?? []).map((b) => ({
-    key: b.key,
-    sessions: b.sessions,
-    tokens: b.input_tokens + b.output_tokens + b.cache_create_tokens,
-  }));
-  const points = densePoints.length ? densePoints : dailyPoints;
+  // One column per day; the AM/PM token split (from the half-day granular buckets)
+  // stacks vertically inside that column. Without granular data a day renders as a
+  // single AM block.
+  const amPm = new Map<string, { am: number; pm: number }>();
+  for (const b of granular ?? []) {
+    const tok = b.input_tokens + b.output_tokens + b.cache_create_tokens;
+    const e = amPm.get(b.day) ?? { am: 0, pm: 0 };
+    if (b.half === "AM") e.am += tok;
+    else e.pm += tok;
+    amPm.set(b.day, e);
+  }
+  const points: Point[] = data.map((d) => {
+    const split = amPm.get(d.day) ?? { am: dayTokens(d), pm: 0 };
+    return {
+      key: d.day,
+      sessions: d.sessions,
+      tokens: split.am + split.pm,
+      amTokens: split.am,
+      pmTokens: split.pm,
+    };
+  });
 
   const totalSessions = data.reduce((a, d) => a + d.sessions, 0);
   const totalTokens = data.reduce((a, d) => a + dayTokens(d), 0);
@@ -272,9 +296,8 @@ export function ActivityHeatmap({
               dy={6}
               tickFormatter={(value: string, index: number) => {
                 const d = keyDate(value);
-                // One label per month — for half-day keys only on the AM bucket.
-                const showable = keyHalf(value) === "" || keyHalf(value) === "AM";
-                return index === 0 || (d.getDate() === 1 && showable) ? MONTHS[d.getMonth()] ?? "" : "";
+                // One label per month (range start + each first-of-month).
+                return index === 0 || d.getDate() === 1 ? MONTHS[d.getMonth()] ?? "" : "";
               }}
             />
             <YAxis
@@ -301,7 +324,8 @@ export function ActivityHeatmap({
       </div>
 
       <p className="shrink-0 text-[11px] text-muted-foreground">
-        Blue squares = tokens (left axis); orange caps = relative session volume.
+        Each column is a day — tokens split lower&nbsp;AM / upper&nbsp;PM (left axis); orange caps =
+        relative session volume.
       </p>
     </div>
   );
