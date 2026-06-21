@@ -22,7 +22,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-sm font-medium">Welcome back 👋</span>
             <span className="text-xs text-muted-foreground">Your Claude Code usage</span>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2 [&_button]:shadow-sm">
             <RangeSelector />
             <DateRangePicker />
             <RealtimeToggle />
