@@ -3,7 +3,6 @@ import {
   dayMap,
   dayTokens,
   dayValue,
-  dotScale,
   intensity,
   isoDay,
   maxValue,
@@ -83,20 +82,5 @@ describe("dayMap / maxValue", () => {
     expect(maxValue(rows, "sessions")).toBe(5);
     expect(maxValue(rows, "tokens")).toBe(1000);
     expect(maxValue([], "sessions")).toBe(0);
-  });
-});
-
-describe("dotScale", () => {
-  it("sizes quanta so the busiest day is ~targetDots tall", () => {
-    const rows = [row("2026-06-01", 4, 0, 0, 0), row("2026-06-02", 32, 0, 0, 160)];
-    const s = dotScale(rows, 16);
-    expect(s.sessionsPerDot).toBe(2); // ceil(32/16)
-    expect(s.tokensPerDot).toBe(10); // ceil(160/16)
-    expect(s.columns[1]).toEqual({ day: "2026-06-02", sessionDots: 16, tokenDots: 16 });
-    expect(s.columns[0]).toEqual({ day: "2026-06-01", sessionDots: 2, tokenDots: 0 });
-  });
-  it("defaults quanta to 1 with no data", () => {
-    const s = dotScale([]);
-    expect(s).toEqual({ columns: [], sessionsPerDot: 1, tokensPerDot: 1 });
   });
 });
