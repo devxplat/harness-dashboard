@@ -54,6 +54,8 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   /** Adds a search box that matches the listed row fields (case-insensitive substring). */
   search?: { fields: (keyof TData)[]; placeholder: string; ariaLabel: string };
+  /** Controls rendered in the top toolbar (right-aligned, before the Columns menu). */
+  actions?: ReactNode;
   pageSize?: number;
   /** Choices offered in the rows-per-page selector. */
   pageSizeOptions?: number[];
@@ -66,6 +68,7 @@ export function DataTable<TData, TValue>({
   columns,
   data,
   search,
+  actions,
   pageSize = 20,
   pageSizeOptions = [10, 25, 50, 100],
   emptyMessage = "No results.",
@@ -142,30 +145,33 @@ export function DataTable<TData, TValue>({
             </datalist>
           </>
         ) : null}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="ml-auto">
-              <SlidersHorizontal />
-              <span className="hidden sm:inline">Columns</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {table
-              .getAllColumns()
-              .filter((c) => c.getCanHide())
-              .map((c) => (
-                <DropdownMenuCheckboxItem
-                  key={c.id}
-                  checked={c.getIsVisible()}
-                  onCheckedChange={(v) => c.toggleVisibility(!!v)}
-                >
-                  {typeof c.columnDef.header === "string" ? c.columnDef.header : c.id}
-                </DropdownMenuCheckboxItem>
-              ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="ml-auto flex items-center gap-2">
+          {actions}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <SlidersHorizontal />
+                <span className="hidden sm:inline">Columns</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {table
+                .getAllColumns()
+                .filter((c) => c.getCanHide())
+                .map((c) => (
+                  <DropdownMenuCheckboxItem
+                    key={c.id}
+                    checked={c.getIsVisible()}
+                    onCheckedChange={(v) => c.toggleVisibility(!!v)}
+                  >
+                    {typeof c.columnDef.header === "string" ? c.columnDef.header : c.id}
+                  </DropdownMenuCheckboxItem>
+                ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {rows.length === 0 ? (

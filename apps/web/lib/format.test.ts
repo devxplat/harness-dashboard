@@ -9,6 +9,7 @@ import {
   formatUSD,
   projectLabel,
   shortId,
+  tidyPath,
 } from "./format";
 
 describe("formatTokens", () => {
@@ -79,6 +80,14 @@ describe("baseName", () => {
   });
 });
 
+describe("tidyPath", () => {
+  it("strips the Windows extended-length prefix, leaving others untouched", () => {
+    expect(tidyPath("\\\\?\\D:\\Github\\proj")).toBe("D:\\Github\\proj");
+    expect(tidyPath("\\\\?\\UNC\\server\\share")).toBe("\\\\server\\share");
+    expect(tidyPath("D:\\Github\\proj")).toBe("D:\\Github\\proj");
+  });
+});
+
 describe("projectLabel", () => {
   it("prefers cwd, falls back to slug, and can shorten", () => {
     expect(projectLabel("D:\\Github\\harness-dashboard", "D--Github-harness-dashboard")).toBe(
@@ -89,5 +98,10 @@ describe("projectLabel", () => {
       "D--Github-token-dashboard-community",
     );
     expect(projectLabel(null, null)).toBe("—");
+  });
+
+  it("tidies the extended-length prefix in the full path", () => {
+    expect(projectLabel("\\\\?\\D:\\Github\\proj", null)).toBe("D:\\Github\\proj");
+    expect(projectLabel("\\\\?\\D:\\Github\\proj", null, true)).toBe("proj");
   });
 });

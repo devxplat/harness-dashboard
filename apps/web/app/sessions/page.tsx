@@ -1,20 +1,21 @@
 "use client";
 
 import { DataTable } from "@/components/data-table";
+import { PathToggle, ProjectCell } from "@/components/path-display";
 import { ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApi } from "@/hooks/use-api";
 import { withRange } from "@/lib/api";
-import { formatDate, formatInt, formatTokens, formatUSD, projectLabel } from "@/lib/format";
+import { formatDate, formatInt, formatTokens, formatUSD } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { MessageDetail, SessionRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useMemo, useState } from "react";
 
-const sessionColumns: ColumnDef<SessionRow>[] = [
+const makeSessionColumns = (short: boolean): ColumnDef<SessionRow>[] => [
   {
     accessorKey: "started",
     header: "Started",
@@ -28,13 +29,13 @@ const sessionColumns: ColumnDef<SessionRow>[] = [
     accessorKey: "project_slug",
     header: "Project",
     cell: ({ row }) => (
-      <Link
-        className="block max-w-[240px] truncate hover:underline"
+      <ProjectCell
+        cwd={row.original.sample_cwd}
+        slug={row.original.project_slug}
+        short={short}
         href={`/sessions/?id=${row.original.session_id}`}
-        title={projectLabel(row.original.sample_cwd, row.original.project_slug)}
-      >
-        {projectLabel(row.original.sample_cwd, row.original.project_slug, true)}
-      </Link>
+        className="max-w-[240px]"
+      />
     ),
   },
   {
@@ -58,6 +59,8 @@ const sessionColumns: ColumnDef<SessionRow>[] = [
 ];
 
 function SessionsList() {
+  const [shortNames, setShortNames] = useState(true);
+  const columns = useMemo(() => makeSessionColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
   const { data, error, loading } = useApi<SessionRow[]>(
     withRange("/api/sessions?limit=500", since, until),
@@ -67,13 +70,14 @@ function SessionsList() {
 
   return (
     <DataTable
-      columns={sessionColumns}
+      columns={columns}
       data={data}
       search={{
-        fields: ["project_slug", "session_id"],
+        fields: ["project_slug", "sample_cwd", "session_id"],
         placeholder: "Filter by project or session id…",
         ariaLabel: "Filter sessions",
       }}
+      actions={<PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />}
       pageSize={25}
       emptyMessage="No sessions match."
       footer={(rows) => {

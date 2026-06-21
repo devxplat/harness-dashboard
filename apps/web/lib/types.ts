@@ -94,6 +94,7 @@ export interface PromptRow {
   user_uuid: string;
   session_id: string;
   project_slug: string;
+  sample_cwd: string | null;
   timestamp: string;
   prompt_text: string | null;
   prompt_chars: number | null;
@@ -158,6 +159,7 @@ export interface SubagentsResponse {
 
 export interface WorkspaceRow {
   workspace: string;
+  sample_cwd: string | null;
   calls: number;
   files: number;
 }

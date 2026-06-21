@@ -136,6 +136,7 @@ pub struct PromptRow {
     pub user_uuid: String,
     pub session_id: String,
     pub project_slug: String,
+    pub sample_cwd: Option<String>,
     pub timestamp: String,
     pub prompt_text: Option<String>,
     pub prompt_chars: Option<i64>,
@@ -683,12 +684,12 @@ impl Db {
         // subquery for every prompt in the history. Identical results, far less work.
         let sql = format!(
             "WITH prompts AS ( \
-               SELECT uuid, session_id, project_slug, timestamp, prompt_text, prompt_chars, \
+               SELECT uuid, session_id, project_slug, cwd, timestamp, prompt_text, prompt_chars, \
                       LEAD(timestamp) OVER (PARTITION BY session_id ORDER BY timestamp) AS next_ts \
                FROM messages WHERE type='user' AND prompt_text IS NOT NULL AND {TIME_BOUND} \
              ), \
              ranked AS ( \
-               SELECT p.uuid, p.session_id, p.project_slug, p.timestamp, p.prompt_text, p.prompt_chars, p.next_ts, \
+               SELECT p.uuid, p.session_id, p.project_slug, p.cwd, p.timestamp, p.prompt_text, p.prompt_chars, p.next_ts, \
                  COALESCE(SUM(a.input_tokens),0) AS in_tok, COALESCE(SUM(a.output_tokens),0) AS out_tok, \
                  COALESCE(SUM(a.cache_read_tokens),0) AS cr_tok, COALESCE(SUM(a.cache_create_5m_tokens),0) AS c5_tok, \
                  COALESCE(SUM(a.cache_create_1h_tokens),0) AS c1_tok, \
@@ -703,7 +704,7 @@ impl Db {
                (SELECT a.model FROM messages a WHERE a.session_id=r.session_id AND a.type='assistant' \
                   AND a.is_sidechain=0 AND a.model IS NOT NULL AND a.timestamp>=r.timestamp \
                   AND (r.next_ts IS NULL OR a.timestamp<r.next_ts) ORDER BY a.timestamp LIMIT 1) AS model, \
-               r.in_tok, r.out_tok, r.cr_tok, r.c5_tok, r.c1_tok, r.billable \
+               r.in_tok, r.out_tok, r.cr_tok, r.c5_tok, r.c1_tok, r.billable, r.cwd \
              FROM ranked r ORDER BY {outer_order}"
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -727,28 +728,32 @@ impl Db {
                     model,
                     u,
                     r.get::<_, i64>(12)?,
+                    r.get::<_, Option<String>>(13)?,
                 ))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(rows
             .into_iter()
-            .map(|(uuid, sid, proj, ts, text, chars, model, u, billable)| {
-                let c = pricing.cost_for(model.as_deref(), &u);
-                PromptRow {
-                    user_uuid: uuid,
-                    session_id: sid,
-                    project_slug: proj,
-                    timestamp: ts,
-                    prompt_text: text,
-                    prompt_chars: chars,
-                    model,
-                    billable_tokens: billable,
-                    cache_read_tokens: u.cache_read_tokens,
-                    estimated_cost_usd: c.usd,
-                    cost_estimated: c.estimated,
-                }
-            })
+            .map(
+                |(uuid, sid, proj, ts, text, chars, model, u, billable, cwd)| {
+                    let c = pricing.cost_for(model.as_deref(), &u);
+                    PromptRow {
+                        user_uuid: uuid,
+                        session_id: sid,
+                        project_slug: proj,
+                        sample_cwd: cwd,
+                        timestamp: ts,
+                        prompt_text: text,
+                        prompt_chars: chars,
+                        model,
+                        billable_tokens: billable,
+                        cache_read_tokens: u.cache_read_tokens,
+                        estimated_cost_usd: c.usd,
+                        cost_estimated: c.estimated,
+                    }
+                },
+            )
             .collect())
     }
 }
@@ -890,6 +895,7 @@ impl Db {
 #[derive(Debug, Serialize)]
 pub struct WorkspaceRow {
     pub workspace: String,
+    pub sample_cwd: Option<String>,
     pub calls: i64,
     pub files: i64,
 }
@@ -914,9 +920,10 @@ impl Db {
     ) -> Result<Vec<WorkspaceRow>> {
         let conn = self.conn.lock().unwrap();
         let sql = format!(
-            "SELECT project_slug, COUNT(*), COUNT(DISTINCT target) \
-             FROM tool_calls WHERE tool_name IN {FILE_TOOLS} AND target IS NOT NULL AND {TIME_BOUND} \
-             GROUP BY project_slug ORDER BY 2 DESC"
+            "SELECT t.project_slug, COUNT(*), COUNT(DISTINCT t.target), \
+               (SELECT m.cwd FROM messages m WHERE m.project_slug=t.project_slug AND m.cwd IS NOT NULL LIMIT 1) \
+             FROM tool_calls t WHERE t.tool_name IN {FILE_TOOLS} AND t.target IS NOT NULL AND {TIME_BOUND} \
+             GROUP BY t.project_slug ORDER BY 2 DESC"
         );
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt
@@ -925,6 +932,7 @@ impl Db {
                     workspace: r.get(0)?,
                     calls: r.get(1)?,
                     files: r.get(2)?,
+                    sample_cwd: r.get(3)?,
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
