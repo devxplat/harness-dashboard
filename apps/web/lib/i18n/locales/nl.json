@@ -25,6 +25,7 @@
   },
   "topbar": {
     "welcome": "Welkom terug 👋",
+    "welcomeNamed": "Welkom terug, {{name}} 👋",
     "subtitle": "Je lokale AI-codeergebruik",
     "live": "Live",
     "paused": "Gepauzeerd",
@@ -157,6 +158,36 @@
     "settings": {
       "title": "Instellingen",
       "description": "Integraties, AI-bronnen, abonnement en scanlocaties."
+    }
+  },
+  "settings": {
+    "nav": {
+      "profile": "Profiel",
+      "profileDesc": "Persoonlijke voorkeuren en weergave-instellingen.",
+      "integrations": "Integraties",
+      "integrationsDesc": "Verbinding maken met GitHub en Google Agenda.",
+      "sources": "AI-bronnen",
+      "sourcesDesc": "Welke lokale AI-tools worden gescand.",
+      "general": "Algemeen",
+      "generalDesc": "Prijsplan en scanlocaties.",
+      "onboarding": "Inrichting",
+      "onboardingDesc": "De installatiewizard opnieuw uitvoeren."
+    },
+    "profile": {
+      "displayName": "Weergavenaam",
+      "displayNamePlaceholder": "Uw naam",
+      "displayNameHint": "Weergegeven in de begroeting in de topbalk.",
+      "language": "Taal",
+      "languageHint": "Weergavetaal van de interface.",
+      "theme": "Thema",
+      "themeSystem": "Systeem",
+      "themeLight": "Licht",
+      "themeDark": "Donker",
+      "themeHint": "Licht, donker of systeem volgen.",
+      "defaultRange": "Standaard datumbereik",
+      "defaultRangeHint": "Beginbereik bij het openen van de app.",
+      "save": "Opslaan",
+      "saved": "Voorkeuren opgeslagen"
     }
   },
   "language": {

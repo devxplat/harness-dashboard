@@ -49,6 +49,12 @@ interface RangeCtx {
   previous: PreviousWindow | null;
 }
 
+function getStoredDefaultRange(): Exclude<Range, "custom"> {
+  if (typeof window === "undefined") return "30d";
+  const v = localStorage.getItem("harness.defaultRange") as Exclude<Range, "custom"> | null;
+  return v && (["7d", "30d", "90d", "all"] as const).includes(v) ? v : "30d";
+}
+
 const initial = presetWindow("30d");
 const Ctx = createContext<RangeCtx>({
   range: "30d",
@@ -60,7 +66,7 @@ const Ctx = createContext<RangeCtx>({
 });
 
 export function RangeProvider({ children }: { children: React.ReactNode }) {
-  const [range, setRangeState] = useState<Range>("30d");
+  const [range, setRangeState] = useState<Range>(() => getStoredDefaultRange());
   const [custom, setCustomState] = useState<{ since: string; until: string } | null>(null);
 
   const setRange = (r: Exclude<Range, "custom">) => setRangeState(r);

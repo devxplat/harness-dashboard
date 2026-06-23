@@ -25,6 +25,7 @@
   },
   "topbar": {
     "welcome": "Willkommen zurück 👋",
+    "welcomeNamed": "Willkommen zurück, {{name}} 👋",
     "subtitle": "Deine lokale KI-Coding-Nutzung",
     "live": "Live",
     "paused": "Pausiert",
@@ -157,6 +158,36 @@
     "settings": {
       "title": "Einstellungen",
       "description": "Integrationen, KI-Quellen, Plan und Scan-Speicherorte."
+    }
+  },
+  "settings": {
+    "nav": {
+      "profile": "Profil",
+      "profileDesc": "Persönliche Einstellungen und Anzeigeoptionen.",
+      "integrations": "Integrationen",
+      "integrationsDesc": "GitHub und Google Kalender verbinden.",
+      "sources": "KI-Quellen",
+      "sourcesDesc": "Welche lokalen KI-Tools gescannt werden sollen.",
+      "general": "Allgemein",
+      "generalDesc": "Preisplan und Scan-Speicherorte.",
+      "onboarding": "Einrichtung",
+      "onboardingDesc": "Den Einrichtungsassistenten erneut ausführen."
+    },
+    "profile": {
+      "displayName": "Anzeigename",
+      "displayNamePlaceholder": "Ihr Name",
+      "displayNameHint": "Wird im Topbar-Gruß angezeigt.",
+      "language": "Sprache",
+      "languageHint": "Anzeigesprache der Benutzeroberfläche.",
+      "theme": "Design",
+      "themeSystem": "System",
+      "themeLight": "Hell",
+      "themeDark": "Dunkel",
+      "themeHint": "Hell, dunkel oder Systemmodus.",
+      "defaultRange": "Standard-Datumsbereich",
+      "defaultRangeHint": "Startbereich beim Öffnen der App.",
+      "save": "Speichern",
+      "saved": "Einstellungen gespeichert"
     }
   },
   "language": {

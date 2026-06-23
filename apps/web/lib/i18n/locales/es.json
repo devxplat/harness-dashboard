@@ -25,6 +25,7 @@
   },
   "topbar": {
     "welcome": "Te damos la bienvenida 👋",
+    "welcomeNamed": "Bienvenido, {{name}} 👋",
     "subtitle": "Tu uso local de IA para programar",
     "live": "En vivo",
     "paused": "Pausado",
@@ -157,6 +158,36 @@
     "settings": {
       "title": "Ajustes",
       "description": "Integraciones, fuentes de IA, plan y ubicaciones de escaneo."
+    }
+  },
+  "settings": {
+    "nav": {
+      "profile": "Perfil",
+      "profileDesc": "Preferencias personales y configuración de visualización.",
+      "integrations": "Integraciones",
+      "integrationsDesc": "Conectar GitHub y Google Calendar.",
+      "sources": "Fuentes de IA",
+      "sourcesDesc": "Qué herramientas locales de IA escanear.",
+      "general": "General",
+      "generalDesc": "Plan de precios y ubicaciones de escaneo.",
+      "onboarding": "Configuración inicial",
+      "onboardingDesc": "Volver a ejecutar el asistente de configuración."
+    },
+    "profile": {
+      "displayName": "Nombre para mostrar",
+      "displayNamePlaceholder": "Tu nombre",
+      "displayNameHint": "Se muestra en el saludo de la barra superior.",
+      "language": "Idioma",
+      "languageHint": "Idioma de visualización de la interfaz.",
+      "theme": "Tema",
+      "themeSystem": "Sistema",
+      "themeLight": "Claro",
+      "themeDark": "Oscuro",
+      "themeHint": "Claro, oscuro o según el sistema operativo.",
+      "defaultRange": "Rango de fechas predeterminado",
+      "defaultRangeHint": "Rango de inicio al abrir la aplicación.",
+      "save": "Guardar",
+      "saved": "Preferencias guardadas"
     }
   },
   "language": {

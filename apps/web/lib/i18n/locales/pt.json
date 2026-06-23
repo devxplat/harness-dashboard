@@ -25,6 +25,7 @@
   },
   "topbar": {
     "welcome": "Bem-vindo de volta 👋",
+    "welcomeNamed": "Olá, {{name}} 👋",
     "subtitle": "Seu uso local de IA para codar",
     "live": "Ao vivo",
     "paused": "Pausado",
@@ -157,6 +158,36 @@
     "settings": {
       "title": "Configurações",
       "description": "Integrações, fontes de IA, plano e locais de varredura."
+    }
+  },
+  "settings": {
+    "nav": {
+      "profile": "Perfil",
+      "profileDesc": "Preferências pessoais e configurações de exibição.",
+      "integrations": "Integrações",
+      "integrationsDesc": "Conectar GitHub e Google Agenda.",
+      "sources": "Fontes de IA",
+      "sourcesDesc": "Quais ferramentas de IA locais verificar.",
+      "general": "Geral",
+      "generalDesc": "Plano de preços e locais de varredura.",
+      "onboarding": "Onboarding",
+      "onboardingDesc": "Re-executar o assistente de configuração inicial."
+    },
+    "profile": {
+      "displayName": "Nome de exibição",
+      "displayNamePlaceholder": "Seu nome",
+      "displayNameHint": "Exibido na saudação da barra superior.",
+      "language": "Idioma",
+      "languageHint": "Idioma de exibição da interface.",
+      "theme": "Tema",
+      "themeSystem": "Sistema",
+      "themeLight": "Claro",
+      "themeDark": "Escuro",
+      "themeHint": "Claro, escuro ou seguir o sistema.",
+      "defaultRange": "Período padrão",
+      "defaultRangeHint": "Período inicial ao abrir o app.",
+      "save": "Salvar",
+      "saved": "Preferências salvas"
     }
   },
   "language": {

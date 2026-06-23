@@ -25,6 +25,7 @@
   },
   "topbar": {
     "welcome": "Welcome back 👋",
+    "welcomeNamed": "Welcome back, {{name}} 👋",
     "subtitle": "Your local AI coding usage",
     "live": "Live",
     "paused": "Paused",
@@ -108,6 +109,36 @@
     "tips": { "title": "Tips", "description": "Rule-based suggestions to cut token spend." },
     "rtk": { "title": "RTK", "description": "Token savings from the RTK CLI." },
     "settings": { "title": "Settings", "description": "Integrations, AI sources, plan and scan locations." }
+  },
+  "settings": {
+    "nav": {
+      "profile": "Profile",
+      "profileDesc": "Personal preferences and display settings.",
+      "integrations": "Integrations",
+      "integrationsDesc": "Connect GitHub and Google Calendar.",
+      "sources": "AI sources",
+      "sourcesDesc": "Which local AI coding tools to scan.",
+      "general": "General",
+      "generalDesc": "Pricing plan and scan locations.",
+      "onboarding": "Onboarding",
+      "onboardingDesc": "Re-run the first-run setup wizard."
+    },
+    "profile": {
+      "displayName": "Display name",
+      "displayNamePlaceholder": "Your name",
+      "displayNameHint": "Shown in the topbar greeting.",
+      "language": "Language",
+      "languageHint": "UI display language.",
+      "theme": "Theme",
+      "themeSystem": "System",
+      "themeLight": "Light",
+      "themeDark": "Dark",
+      "themeHint": "Light, dark, or follow your OS.",
+      "defaultRange": "Default date range",
+      "defaultRangeHint": "Starting range when the app loads.",
+      "save": "Save",
+      "saved": "Preferences saved"
+    }
   },
   "language": {
     "en": "English",
