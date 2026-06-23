@@ -13,6 +13,7 @@ import {
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
 import { formatInt, formatTokens, formatUSD } from "@/lib/format";
+import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { AgentGroupRow, SubagentsResponse } from "@/lib/types";
 
@@ -47,11 +48,17 @@ function AgentTable({ rows, label }: { rows: AgentGroupRow[]; label: string }) {
 
 export default function SubagentsPage() {
   const { since, until } = useRange();
+  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<SubagentsResponse>(
-    `/api/subagents${rangeQuery(since, until)}`,
+    settingsLoaded && hasAvailableProviders
+      ? `/api/subagents${rangeQuery(since, until, queryProviders)}`
+      : null,
   );
 
   if (error) return <ErrorBlock error={error} />;
+  if (settingsLoaded && !hasAvailableProviders) {
+    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+  }
   if (loading || !data) return <LoadingBlock />;
 
   const empty = data.by_kind.length === 0 && data.by_entrypoint.length === 0;

@@ -5,6 +5,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/st
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
 import { formatDate, formatInt } from "@/lib/format";
+import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { SkillRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -44,9 +45,17 @@ const columns: ColumnDef<SkillRow>[] = [
 
 export default function SkillsPage() {
   const { since, until } = useRange();
-  const { data, error, loading } = useApi<SkillRow[]>(`/api/skills${rangeQuery(since, until)}`);
+  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { data, error, loading } = useApi<SkillRow[]>(
+    settingsLoaded && hasAvailableProviders
+      ? `/api/skills${rangeQuery(since, until, queryProviders)}`
+      : null,
+  );
 
   if (error) return <ErrorBlock error={error} />;
+  if (settingsLoaded && !hasAvailableProviders) {
+    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+  }
   if (loading || !data) return <LoadingBlock />;
 
   return (

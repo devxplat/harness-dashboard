@@ -6,6 +6,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/st
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
 import { formatInt } from "@/lib/format";
+import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { WorkspaceRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -42,11 +43,17 @@ export default function WorkspacesPage() {
   const [shortNames, setShortNames] = useState(true);
   const columns = useMemo(() => makeColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
+  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<WorkspaceRow[]>(
-    `/api/workspaces${rangeQuery(since, until)}`,
+    settingsLoaded && hasAvailableProviders
+      ? `/api/workspaces${rangeQuery(since, until, queryProviders)}`
+      : null,
   );
 
   if (error) return <ErrorBlock error={error} />;
+  if (settingsLoaded && !hasAvailableProviders) {
+    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+  }
   if (loading || !data) return <LoadingBlock />;
 
   return (

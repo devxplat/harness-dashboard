@@ -13,6 +13,7 @@ const totals: Totals = {
   cache_create_1h_tokens: 5,
   cost_usd: 2,
   cost_estimated: true,
+  reported_cost_usd: null,
 };
 
 const prev: Totals = { ...totals, turns: 3, cost_usd: 1 };

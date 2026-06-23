@@ -3,7 +3,10 @@ import { AppShell } from "@/components/shell/app-shell";
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+}));
 
 class ES {
   onmessage: ((e: { data: string }) => void) | null = null;
@@ -27,7 +30,7 @@ describe("AppShell", () => {
         </AppShell>
       </Providers>,
     );
-    expect(screen.getByText("Your Claude Code usage")).toBeInTheDocument();
+    expect(screen.getByText("Your local AI coding usage")).toBeInTheDocument();
     expect(screen.getByText("page-body")).toBeInTheDocument();
   });
 });

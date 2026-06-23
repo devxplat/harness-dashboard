@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 function row(day: string, sessions: number, tokens: number): DailyRow {
   return {
+    provider: "claude",
     day,
     sessions,
     input_tokens: tokens,

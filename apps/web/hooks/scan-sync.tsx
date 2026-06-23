@@ -1,13 +1,15 @@
 "use client";
 
 import { API_BASE } from "@/lib/api-base";
-import { createContext, useEffect, useRef, useState, type ReactNode } from "react";
+import type { GithubProgress } from "@/lib/types";
+import { createContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export interface ScanEvent {
   type: string;
   n?: { files: number; messages: number; tools: number };
   reason?: string;
   message?: string;
+  progress?: GithubProgress;
 }
 
 export interface ScanSync {
@@ -18,6 +20,13 @@ export interface ScanSync {
   setLive: (v: boolean) => void;
   /** The most recent scan event (for status / counts). */
   last: ScanEvent | null;
+  /** A local-transcript scan is in flight (live, from `scan-start`/`scan` events).
+   *  Optional so existing `ScanSync` literals stay valid; the provider always sets it. */
+  scanning?: boolean;
+  /** Latest GitHub-sync progress snapshot (live), or null when idle. */
+  githubProgress: GithubProgress | null;
+  /** Bumps when a GitHub sync finishes; integration views refetch on it. */
+  githubSyncVersion: number;
 }
 
 export const ScanSyncContext = createContext<ScanSync>({
@@ -25,6 +34,9 @@ export const ScanSyncContext = createContext<ScanSync>({
   live: true,
   setLive: () => {},
   last: null,
+  scanning: false,
+  githubProgress: null,
+  githubSyncVersion: 0,
 });
 
 // Coalesce bursts of scans (you may be actively writing transcripts) into at most
@@ -35,6 +47,9 @@ export function ScanSyncProvider({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState(0);
   const [live, setLive] = useState(true);
   const [last, setLast] = useState<ScanEvent | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [githubProgress, setGithubProgress] = useState<GithubProgress | null>(null);
+  const [githubSyncVersion, setGithubSyncVersion] = useState(0);
 
   const liveRef = useRef(live);
   liveRef.current = live;
@@ -53,7 +68,26 @@ export function ScanSyncProvider({ children }: { children: ReactNode }) {
       } catch {
         return; // keep-alive / malformed
       }
+      // GitHub sync: surface live progress without bumping the global data version
+      // (avoids refetch thrash on every tick); the terminal event bumps its own
+      // version so integration views refresh once when it's done.
+      if (e.type === "github-progress" || e.type === "github-sync") {
+        if (e.progress) setGithubProgress(e.progress);
+        if (e.type === "github-sync") setGithubSyncVersion((v) => v + 1);
+        return;
+      }
+      // Live scan lifecycle: `scan-start` flips the indexing flag on; the terminal
+      // `scan` (or `error` / `scan-skip`) clears it.
+      if (e.type === "scan-start") {
+        setScanning(true);
+        return;
+      }
+      if (e.type === "error" || e.type === "scan-skip") {
+        setScanning(false);
+        return;
+      }
       if (e.type !== "scan") return;
+      setScanning(false);
       setLast(e);
       if (!liveRef.current) return; // paused → don't trigger refetches
 
@@ -76,8 +110,14 @@ export function ScanSyncProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Stable identity so consumers (and `useApi`) don't see a new object every render.
+  const value = useMemo(
+    () => ({ version, live, setLive, last, scanning, githubProgress, githubSyncVersion }),
+    [version, live, last, scanning, githubProgress, githubSyncVersion],
+  );
+
   return (
-    <ScanSyncContext.Provider value={{ version, live, setLive, last }}>
+    <ScanSyncContext.Provider value={value}>
       {children}
     </ScanSyncContext.Provider>
   );

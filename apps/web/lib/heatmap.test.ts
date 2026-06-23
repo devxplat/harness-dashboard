@@ -14,6 +14,7 @@ import type { DailyRow } from "./types";
 
 function row(day: string, sessions: number, input = 0, output = 0, cacheCreate = 0): DailyRow {
   return {
+    provider: "claude",
     day,
     sessions,
     input_tokens: input,

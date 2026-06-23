@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScanSyncContext } from "@/hooks/scan-sync";
 import { apiPost } from "@/lib/api";
 import { RefreshCw } from "lucide-react";
@@ -27,16 +28,22 @@ export function ScanStatus() {
   }
 
   return (
-    <Button
-      size="sm"
-      variant="ghost"
-      onClick={refresh}
-      disabled={scanning}
-      aria-label="Rescan transcripts"
-      title="Rescan transcripts"
-    >
-      <RefreshCw className={scanning ? "animate-spin" : ""} />
-      <span className="hidden sm:inline">{scanning ? "Scanning…" : "Refresh"}</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={refresh}
+          disabled={scanning}
+          aria-label="Rescan transcripts"
+        >
+          <RefreshCw className={scanning ? "animate-spin" : ""} />
+          <span className="hidden sm:inline">{scanning ? "Scanning…" : "Refresh"}</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={8}>
+        {scanning ? "Scanning local transcripts" : "Rescan local transcripts"}
+      </TooltipContent>
+    </Tooltip>
   );
 }

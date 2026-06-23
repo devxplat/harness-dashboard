@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRange } from "@/lib/range";
 import { addDays, format, startOfDay } from "date-fns";
 import { CalendarRange } from "lucide-react";
@@ -21,6 +22,11 @@ function activeWindow(since: string | null, until: string | null): DateRange | u
 function triggerLabel(range: string, since: string | null, until: string | null): string {
   if (range !== "custom" || !since || !until) return "Custom range";
   return `${format(new Date(since), "MMM d")} – ${format(addDays(new Date(until), -1), "MMM d, yyyy")}`;
+}
+
+function tooltipLabel(range: string, since: string | null, until: string | null): string {
+  if (range !== "custom" || !since || !until) return "Select a custom date range";
+  return `Custom range: ${triggerLabel(range, since, until)}. Click to change`;
 }
 
 export function DateRangePicker() {
@@ -59,29 +65,36 @@ export function DateRangePicker() {
   if (picks === 0 && win) modifiers.preset = win; // show the active preset highlighted
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          size="sm"
-          variant={range === "custom" ? "default" : "outline"}
-          aria-label="Pick a custom date range"
-        >
-          <CalendarRange className="size-3.5" />
-          {triggerLabel(range, since, until)}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="end">
-        <Calendar
-          mode="range"
-          numberOfMonths={2}
-          defaultMonth={win?.from ?? addDays(new Date(), -30)}
-          selected={draft}
-          onSelect={onSelect}
-          modifiers={modifiers}
-          modifiersClassNames={{ preset: "rdp-preset rounded-md bg-primary/20 text-foreground" }}
-          autoFocus
-        />
-      </PopoverContent>
-    </Popover>
+    <Tooltip>
+      <Popover open={open} onOpenChange={onOpenChange}>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              size="sm"
+              variant={range === "custom" ? "default" : "outline"}
+              aria-label="Pick a custom date range"
+            >
+              <CalendarRange className="size-3.5" />
+              {triggerLabel(range, since, until)}
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <PopoverContent className="w-auto p-0" align="end">
+          <Calendar
+            mode="range"
+            numberOfMonths={2}
+            defaultMonth={win?.from ?? addDays(new Date(), -30)}
+            selected={draft}
+            onSelect={onSelect}
+            modifiers={modifiers}
+            modifiersClassNames={{ preset: "rdp-preset rounded-md bg-primary/20 text-foreground" }}
+            autoFocus
+          />
+        </PopoverContent>
+      </Popover>
+      <TooltipContent side="bottom" sideOffset={8}>
+        {tooltipLabel(range, since, until)}
+      </TooltipContent>
+    </Tooltip>
   );
 }

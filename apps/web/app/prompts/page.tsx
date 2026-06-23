@@ -2,12 +2,14 @@
 
 import { DataTable } from "@/components/data-table";
 import { PathToggle, ProjectCell } from "@/components/path-display";
+import { ProviderBadge } from "@/components/provider-badge";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/hooks/use-api";
 import { withRange } from "@/lib/api";
 import { formatDate, formatTokens, formatUSD } from "@/lib/format";
+import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { PromptRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -34,6 +36,11 @@ const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
         className="max-w-[200px] text-xs"
       />
     ),
+  },
+  {
+    accessorKey: "provider",
+    header: "Provider",
+    cell: ({ row }) => <ProviderBadge provider={row.original.provider} compact />,
   },
   {
     accessorKey: "prompt_text",
@@ -69,8 +76,11 @@ export default function PromptsPage() {
   const [shortNames, setShortNames] = useState(true);
   const columns = useMemo(() => makePromptColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
+  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<PromptRow[]>(
-    withRange(`/api/prompts?limit=50&sort=${sort}`, since, until),
+    settingsLoaded && hasAvailableProviders
+      ? withRange(`/api/prompts?limit=50&sort=${sort}`, since, until, queryProviders)
+      : null,
   );
 
   return (
@@ -89,6 +99,8 @@ export default function PromptsPage() {
 
       {error ? (
         <ErrorBlock error={error} />
+      ) : settingsLoaded && !hasAvailableProviders ? (
+        <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />
       ) : loading || !data ? (
         <LoadingBlock />
       ) : data.length === 0 ? (
@@ -98,7 +110,7 @@ export default function PromptsPage() {
           columns={columns}
           data={data}
           search={{
-            fields: ["project_slug", "sample_cwd", "prompt_text"],
+            fields: ["provider", "project_slug", "sample_cwd", "prompt_text"],
             placeholder: "Filter prompts…",
             ariaLabel: "Filter prompts",
           }}

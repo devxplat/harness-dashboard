@@ -2,12 +2,14 @@
 
 import { DataTable } from "@/components/data-table";
 import { PathToggle, ProjectCell } from "@/components/path-display";
-import { ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
+import { ProviderBadge } from "@/components/provider-badge";
+import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useApi } from "@/hooks/use-api";
 import { withRange } from "@/lib/api";
 import { formatDate, formatInt, formatTokens, formatUSD } from "@/lib/format";
+import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { MessageDetail, SessionRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -33,10 +35,15 @@ const makeSessionColumns = (short: boolean): ColumnDef<SessionRow>[] => [
         cwd={row.original.sample_cwd}
         slug={row.original.project_slug}
         short={short}
-        href={`/sessions/?id=${row.original.session_id}`}
+        href={`/sessions/?id=${row.original.session_id}&provider=${row.original.provider}`}
         className="max-w-[240px]"
       />
     ),
+  },
+  {
+    accessorKey: "provider",
+    header: "Provider",
+    cell: ({ row }) => <ProviderBadge provider={row.original.provider} compact />,
   },
   {
     accessorKey: "turns",
@@ -62,10 +69,16 @@ function SessionsList() {
   const [shortNames, setShortNames] = useState(true);
   const columns = useMemo(() => makeSessionColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
+  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<SessionRow[]>(
-    withRange("/api/sessions?limit=500", since, until),
+    settingsLoaded && hasAvailableProviders
+      ? withRange("/api/sessions?limit=500", since, until, queryProviders)
+      : null,
   );
   if (error) return <ErrorBlock error={error} />;
+  if (settingsLoaded && !hasAvailableProviders) {
+    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+  }
   if (loading || !data) return <LoadingBlock />;
 
   return (
@@ -73,7 +86,7 @@ function SessionsList() {
       columns={columns}
       data={data}
       search={{
-        fields: ["project_slug", "sample_cwd", "session_id"],
+        fields: ["provider", "project_slug", "sample_cwd", "session_id"],
         placeholder: "Filter by project or session id…",
         ariaLabel: "Filter sessions",
       }}
@@ -94,8 +107,10 @@ function SessionsList() {
   );
 }
 
-function SessionDetail({ id }: { id: string }) {
-  const { data, error, loading } = useApi<MessageDetail[]>(`/api/sessions/${id}`);
+function SessionDetail({ id, provider }: { id: string; provider: string | null }) {
+  const { data, error, loading } = useApi<MessageDetail[]>(
+    `/api/sessions/${id}${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`,
+  );
   if (error) return <ErrorBlock error={error} />;
   if (loading || !data) return <LoadingBlock />;
 
@@ -111,6 +126,7 @@ function SessionDetail({ id }: { id: string }) {
             <CardContent className="space-y-1 py-3">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Badge variant={m.type === "user" ? "default" : "secondary"}>{m.type}</Badge>
+                <ProviderBadge provider={m.provider} compact />
                 {m.is_sidechain ? <Badge variant="outline">subagent</Badge> : null}
                 {m.model ? <span className="font-mono">{m.model}</span> : null}
                 <span className="ml-auto">{formatDate(m.timestamp)}</span>
@@ -131,9 +147,11 @@ function SessionDetail({ id }: { id: string }) {
 }
 
 function SessionsContent() {
-  const id = useSearchParams().get("id");
+  const params = useSearchParams();
+  const id = params.get("id");
+  const provider = params.get("provider");
   return id ? (
-    <SessionDetail id={id} />
+    <SessionDetail id={id} provider={provider} />
   ) : (
     <>
       <PageTitle title="Sessions" description="Browse and drill into individual sessions." />

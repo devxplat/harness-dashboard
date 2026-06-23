@@ -12,21 +12,55 @@ const settings = {
   projects_overridden: false,
   claude_dirs: ["/home/.claude"],
   plan: "api",
+  providers: [],
+};
+const integrations = {
+  github: { configured: false, repo_count: 0, last_sync: null },
+  google: { configured: false, last_sync: null },
 };
 
 describe("SettingsPage", () => {
-  it("renders settings and changes the plan", async () => {
-    const fetchMock = installFetch({ "/api/settings": settings, "/api/plan": { ok: true } });
+  it("shows Integrations by default and switches sections", async () => {
+    installFetch({ "/api/settings": settings, "/api/integrations": integrations });
     renderWithRange(<SettingsPage />);
-    await waitFor(() => expect(screen.getByText("Pricing plan")).toBeInTheDocument());
+    // Integrations is the default section → the GitHub integration card is shown.
+    await waitFor(() => expect(screen.getByText("GitHub")).toBeInTheDocument());
 
+    await userEvent.click(screen.getByRole("button", { name: /AI sources/ }));
+    expect(screen.getByText(/No AI sources detected yet/)).toBeInTheDocument();
+  });
+
+  it("changes the plan from the General section", async () => {
+    const fetchMock = installFetch({
+      "/api/settings": settings,
+      "/api/integrations": integrations,
+      "/api/plan": { ok: true },
+    });
+    renderWithRange(<SettingsPage />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /General/ })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /General/ }));
     await userEvent.click(screen.getByRole("combobox", { name: "Pricing plan" }));
     await userEvent.click(screen.getByRole("option", { name: "pro" }));
 
     await waitFor(() =>
       expect(
-        fetchMock.mock.calls.some(([u, o]) => String(u).includes("/api/plan") && (o as RequestInit)?.method === "POST"),
+        fetchMock.mock.calls.some(
+          ([u, o]) => String(u).includes("/api/plan") && (o as RequestInit)?.method === "POST",
+        ),
       ).toBe(true),
+    );
+  });
+
+  it("offers re-running the wizard from the Onboarding section", async () => {
+    installFetch({ "/api/settings": settings, "/api/integrations": integrations });
+    renderWithRange(<SettingsPage />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /Onboarding/ })).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: /Onboarding/ }));
+    expect(screen.getByRole("link", { name: /Open setup wizard/ })).toHaveAttribute(
+      "href",
+      "/onboarding",
     );
   });
 
