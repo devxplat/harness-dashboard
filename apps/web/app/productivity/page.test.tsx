@@ -1,6 +1,7 @@
 import ProductivityPage from "@/app/productivity/page";
 import { installFailingFetch, installFetch, renderWithRange } from "@/lib/test-utils";
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(() => vi.restoreAllMocks());
@@ -12,6 +13,94 @@ const prod = {
   ],
   aiByDay: [{ key: "2026-06-20", ai_commits: 2, human_commits: 1 }],
   aiByProject: [{ key: "proj", ai_commits: 2, human_commits: 1 }],
+};
+
+const insights = {
+  grain: "day",
+  summary: {
+    commits: 3,
+    ai_commits: 2,
+    messages: 8,
+    meeting_minutes: 90,
+    focus_minutes: 180,
+    flow_minutes: 120,
+    pr_count: 2,
+    merged_pr_count: 1,
+    avg_warmup_minutes: 18,
+    estimated: true,
+  },
+  periods: [
+    {
+      period: "2026-06-20",
+      commits: 3,
+      ai_commits: 2,
+      messages: 8,
+      pr_count: 2,
+      merged_pr_count: 1,
+      meeting_minutes: 90,
+      focus_minutes: 180,
+      flow_minutes: 120,
+      avg_warmup_minutes: 18,
+    },
+  ],
+  focusBlocks: [
+    {
+      period: "2026-06-20",
+      started_at: "2026-06-20T10:00:00Z",
+      ended_at: "2026-06-20T11:15:00Z",
+      duration_minutes: 75,
+      events: 3,
+      commits: 1,
+      messages: 2,
+      flow: true,
+    },
+  ],
+  warmup: [
+    { bucket: "0-15", count: 1, avg_minutes: 10 },
+    { bucket: "15-30", count: 1, avg_minutes: 18 },
+    { bucket: "30-60", count: 0, avg_minutes: null },
+    { bucket: "60-120", count: 0, avg_minutes: null },
+    { bucket: "120+", count: 0, avg_minutes: null },
+  ],
+  prCorrelation: [
+    {
+      repo_key: "r",
+      pr_count: 2,
+      merged_pr_count: 1,
+      avg_lead_hours: 4,
+      avg_review_wait_hours: 1.5,
+      churn: 42,
+      ai_overlap_prs: 1,
+      commits: 3,
+      messages: 8,
+    },
+  ],
+};
+
+const emptyInsights = {
+  grain: "day",
+  summary: {
+    commits: 0,
+    ai_commits: 0,
+    messages: 0,
+    meeting_minutes: 0,
+    focus_minutes: 0,
+    flow_minutes: 0,
+    pr_count: 0,
+    merged_pr_count: 0,
+    avg_warmup_minutes: null,
+    estimated: true,
+  },
+  periods: [],
+  focusBlocks: [],
+  warmup: [
+    { bucket: "0-15", count: 0, avg_minutes: null },
+    { bucket: "15-30", count: 0, avg_minutes: null },
+    { bucket: "30-60", count: 0, avg_minutes: null },
+    { bucket: "60-120", count: 0, avg_minutes: null },
+    { bucket: "120+", count: 0, avg_minutes: null },
+  ],
+  prCorrelation: [],
 };
 
 const commit = (over: Record<string, unknown>) => ({
@@ -48,64 +137,89 @@ const commits = [
   }),
 ];
 
+const prs = [
+  {
+    repo_key: "r",
+    number: 7,
+    title: "My PR",
+    state: "merged",
+    author: "dev",
+    created_at_utc: "2026-06-20T10:00:00Z",
+    merged_at_utc: "2026-06-20T11:00:00Z",
+    head_branch: "f",
+    base_branch: "main",
+    additions: 9,
+    deletions: 1,
+    changed_files: 2,
+    review_count: 1,
+    html_url: "https://github.com/o/r/pull/7",
+    ai_session_overlap: true,
+  },
+];
+
+const deployments = [
+  {
+    repo_key: "r",
+    kind: "release",
+    ext_id: "1",
+    name: "v1.0.0",
+    created_at_utc: "2026-06-20T12:00:00Z",
+    status: "success",
+    html_url: null,
+  },
+];
+
 describe("ProductivityPage", () => {
-  it("renders the AI split, peak hour, and the commits table", async () => {
-    installFetch({ "/api/productivity": prod, "/api/commits": commits });
+  it("renders summary cards, AI split, peak hour, and the commits table", async () => {
+    installFetch({
+      "/api/productivity/insights": insights,
+      "/api/productivity": prod,
+      "/api/commits": commits,
+      "/api/pull-requests": prs,
+      "/api/deployments": deployments,
+    });
     renderWithRange(<ProductivityPage />);
     await waitFor(() => expect(screen.getByText("feat: a thing")).toBeInTheDocument());
-    // Peak bucket from the productive-hours matrix (Wed 22:00).
+    expect(screen.getByText("Post-meeting warm-up")).toBeInTheDocument();
     expect(screen.getByText(/Peak: Wed 10p/)).toBeInTheDocument();
-    // The AI-assisted summary/legend and at least one AI badge are present.
     expect(screen.getAllByText(/AI-assisted/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("AI").length).toBeGreaterThan(0);
   });
 
-  it("surfaces pull requests and deployments when present", async () => {
+  it("renders focus and PR impact tabs", async () => {
+    const user = userEvent.setup();
     installFetch({
+      "/api/productivity/insights": insights,
       "/api/productivity": prod,
       "/api/commits": commits,
-      "/api/pull-requests": [
-        {
-          repo_key: "r",
-          number: 7,
-          title: "My PR",
-          state: "merged",
-          author: "dev",
-          created_at_utc: "2026-06-20T10:00:00Z",
-          merged_at_utc: "2026-06-20T11:00:00Z",
-          head_branch: "f",
-          base_branch: "main",
-          additions: 9,
-          deletions: 1,
-          changed_files: 2,
-          review_count: 1,
-          html_url: "https://github.com/o/r/pull/7",
-          ai_session_overlap: true,
-        },
-      ],
-      "/api/deployments": [
-        {
-          repo_key: "r",
-          kind: "release",
-          ext_id: "1",
-          name: "v1.0.0",
-          created_at_utc: "2026-06-20T12:00:00Z",
-          status: "success",
-          html_url: null,
-        },
-      ],
+      "/api/pull-requests": prs,
+      "/api/deployments": deployments,
     });
     renderWithRange(<ProductivityPage />);
-    await waitFor(() => expect(screen.getByText("My PR")).toBeInTheDocument());
+
+    await user.click(await screen.findByRole("tab", { name: "Focus" }));
+    expect(screen.getByText("Estimated focus active span and flow trend")).toBeInTheDocument();
+    expect(screen.getByText("Longest estimated focus blocks")).toBeInTheDocument();
+    expect(screen.getByText("flow")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "PR Impact" }));
+    expect(screen.getByText("Repo and PR comparison")).toBeInTheDocument();
+    expect(screen.getByText("PR impact rows")).toBeInTheDocument();
     expect(screen.getByText("Pull requests")).toBeInTheDocument();
     expect(screen.getByText("Deployments")).toBeInTheDocument();
+    expect(screen.getByText("My PR")).toBeInTheDocument();
     expect(screen.getByText("v1.0.0")).toBeInTheDocument();
+    expect(screen.getByText("r")).toBeInTheDocument();
   });
 
-  it("shows meeting impact when a calendar is synced", async () => {
+  it("shows calendar impact when a calendar is synced", async () => {
+    const user = userEvent.setup();
     installFetch({
+      "/api/productivity/insights": insights,
       "/api/productivity": prod,
       "/api/commits": commits,
+      "/api/pull-requests": prs,
+      "/api/deployments": deployments,
       "/api/meetings/impact": {
         during_commits: 1,
         free_commits: 1,
@@ -114,25 +228,27 @@ describe("ProductivityPage", () => {
       },
     });
     renderWithRange(<ProductivityPage />);
-    await waitFor(() => expect(screen.getByText("Meeting impact")).toBeInTheDocument());
-    expect(screen.getByText("25%")).toBeInTheDocument(); // 5 of 20 messages
-    expect(screen.getByText("50%")).toBeInTheDocument(); // 1 of 2 commits
+    await user.click(await screen.findByRole("tab", { name: "Calendar Impact" }));
+    expect(screen.getByText("Assistant messages during meetings")).toBeInTheDocument();
+    expect(screen.getByText("25%")).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("Meeting-heavy periods")).toBeInTheDocument();
   });
 
-  it("renders empty states when there are no commits", async () => {
+  it("renders empty states when there are no commits or insight rows", async () => {
     installFetch({
+      "/api/productivity/insights": emptyInsights,
       "/api/productivity": { hours: [], aiByDay: [], aiByProject: [] },
       "/api/commits": [],
+      "/api/pull-requests": [],
+      "/api/deployments": [],
     });
     renderWithRange(<ProductivityPage />);
-    // The commits card's empty note is uniquely worded (the AI card also shows a
-    // short "No commits in range." block).
-    await waitFor(() =>
-      expect(screen.getByText(/Local git history is read/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/No productivity data/)).toBeInTheDocument());
+    expect(screen.getByText(/Local git history is read/)).toBeInTheDocument();
   });
 
-  it("renders the error state when productivity fails", async () => {
+  it("renders the error state when productivity insights fail", async () => {
     installFailingFetch();
     renderWithRange(<ProductivityPage />);
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
@@ -143,6 +259,9 @@ describe("ProductivityPage", () => {
       "fetch",
       vi.fn((url: string | URL) => {
         const path = String(url);
+        if (path.includes("/api/productivity/insights")) {
+          return Promise.resolve({ ok: true, json: async () => insights });
+        }
         if (path.includes("/api/productivity")) {
           return Promise.resolve({ ok: true, json: async () => prod });
         }
