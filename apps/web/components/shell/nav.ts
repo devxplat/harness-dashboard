@@ -1,8 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Activity,
   Boxes,
   Coins,
   FolderGit2,
+  Gauge,
   LayoutDashboard,
   Lightbulb,
   MessagesSquare,
@@ -40,6 +42,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: "Skills", href: "/skills", icon: Sparkles },
       { title: "Subagents", href: "/subagents", icon: Network },
       { title: "Workspaces", href: "/workspaces", icon: Boxes },
+    ],
+  },
+  {
+    label: "Performance",
+    items: [
+      { title: "Productivity", href: "/productivity", icon: Gauge },
+      { title: "DORA", href: "/dora", icon: Activity },
     ],
   },
   {
