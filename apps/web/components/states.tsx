@@ -1,4 +1,7 @@
+"use client";
+
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTranslation } from "react-i18next";
 
 export function LoadingBlock() {
   return (
@@ -10,10 +13,10 @@ export function LoadingBlock() {
 }
 
 export function ErrorBlock({ error }: { error: string }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm" role="alert">
-      Could not reach the API: {error}
-      <p className="mt-1 text-muted-foreground">Is the harness-dashboard server running?</p>
+      {t("common.error")} {error}
     </div>
   );
 }

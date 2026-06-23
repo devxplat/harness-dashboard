@@ -21,10 +21,12 @@ import { formatInt } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { AllocationBundle } from "@/lib/types";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type Grain = "day" | "week" | "month";
 
 export default function AllocationPage() {
+  const { t } = useTranslation();
   const { since, until } = useRange();
   const [grain, setGrain] = useState<Grain>("week");
   const { data, error, loading } = useApi<AllocationBundle>(
@@ -42,8 +44,8 @@ export default function AllocationPage() {
     <>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PageTitle
-          title="Allocation"
-          description="Investment split (feature / fix / KTLO / chore) inferred from conventional-commit prefixes."
+          title={t("pages.allocation.title")}
+          description={t("pages.allocation.description")}
         />
         <div className="flex gap-1" role="group" aria-label="Allocation grain">
           {(["day", "week", "month"] as Grain[]).map((g) => (

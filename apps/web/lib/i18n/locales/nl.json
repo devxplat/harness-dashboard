@@ -1,0 +1,171 @@
+{
+  "nav": {
+    "groups": {
+      "usage": "Gebruik",
+      "tools": "Tools en agents",
+      "performance": "Prestaties",
+      "more": "Meer"
+    },
+    "overview": "Overzicht",
+    "prompts": "Prompts",
+    "sessions": "Sessies",
+    "projects": "Projecten",
+    "tools": "Tools",
+    "skills": "Skills",
+    "subagents": "Subagents",
+    "workspaces": "Workspaces",
+    "productivity": "Productiviteit",
+    "aiImpact": "AI-impact",
+    "dora": "DORA",
+    "allocation": "Verdeling",
+    "devex": "DevEx",
+    "team": "Team",
+    "tips": "Tips",
+    "settings": "Instellingen"
+  },
+  "topbar": {
+    "welcome": "Welkom terug 👋",
+    "subtitle": "Je lokale AI-codeergebruik",
+    "live": "Live",
+    "paused": "Gepauzeerd",
+    "pauseLive": "Live-updates pauzeren",
+    "resumeLive": "Live-updates hervatten",
+    "refresh": "Vernieuwen",
+    "customRange": "Aangepast bereik",
+    "language": "Taal",
+    "theme": "Thema wisselen"
+  },
+  "range": {
+    "all": "alles",
+    "custom": "Aangepast bereik"
+  },
+  "rangeLabel": {
+    "7d": "Laatste 7 dagen",
+    "30d": "Laatste 30 dagen",
+    "90d": "Laatste 90 dagen",
+    "all": "Alle tijd",
+    "custom": "Aangepast bereik",
+    "selected": "Geselecteerd bereik"
+  },
+  "common": {
+    "loading": "Laden…",
+    "error": "Er is iets misgegaan.",
+    "noProviders": "Geen AI-providers gevonden. Configureer bronnen in Instellingen.",
+    "vsPrev": "t.o.v. vorige",
+    "search": "Deze pagina filteren…",
+    "shortNames": "Korte namen",
+    "fullNames": "Volledige namen",
+    "columns": "Kolommen",
+    "rowsPerPage": "Rijen per pagina",
+    "page": "Pagina",
+    "of": "van",
+    "rows": "rijen",
+    "previous": "Vorige",
+    "next": "Volgende",
+    "noResults": "Geen resultaten."
+  },
+  "overview": {
+    "title": "Gebruiksoverzicht",
+    "turns": "Beurten",
+    "cache": "Cache",
+    "cards": {
+      "sessions": "Sessies",
+      "input": "Invoertokens",
+      "output": "Uitvoertokens",
+      "cost": "Geschatte kosten"
+    },
+    "dailyTokens": "Dagelijkse tokens",
+    "byModel": "Per model",
+    "recentSessions": "Recente sessies",
+    "noActivity": "Geen activiteit in bereik.",
+    "th": {
+      "model": "Model",
+      "provider": "Provider",
+      "input": "Invoer",
+      "output": "Uitvoer",
+      "cost": "Kosten",
+      "project": "Project",
+      "started": "Gestart",
+      "turns": "Beurten",
+      "tokens": "Tokens"
+    }
+  },
+  "pages": {
+    "prompts": {
+      "title": "Prompts",
+      "description": "Je duurste prompts op basis van toegekende tokens."
+    },
+    "sessions": {
+      "title": "Sessies",
+      "description": "Blader door individuele sessies en zoom erop in."
+    },
+    "sessionDetail": {
+      "title": "Sessie"
+    },
+    "projects": {
+      "title": "Projecten",
+      "description": "Tokengebruik gegroepeerd per project."
+    },
+    "tools": {
+      "title": "Tools",
+      "description": "Toolaanroepen en de resultaattokens die ze opleverden."
+    },
+    "skills": {
+      "title": "Skills en commando's",
+      "description": "Slash-commando's die je uitvoerde vs. Skill-tools die Claude aanriep."
+    },
+    "subagents": {
+      "title": "Subagents en orkestratie",
+      "description": "Verbruik uitgesplitst per agenttype (main / auto-compaction / subagent) en client-entrypoint."
+    },
+    "workspaces": {
+      "title": "Workspaces",
+      "description": "Activiteit van bestandsbewerkingstools per workspace."
+    },
+    "productivity": {
+      "title": "Productiviteit",
+      "description": "Geschatte focus, flow, opwarming, commits, assistentactiviteit en PR-impact uit lokale bronnen."
+    },
+    "aiImpact": {
+      "title": "AI-impact",
+      "description": "Benutting, code-aandeel, kosten en ROI van AI-codeertools — gemeten uit echte token-/sessiegegevens en vervolgens gecorreleerd met levering."
+    },
+    "dora": {
+      "title": "DORA",
+      "description": "DORA-weergaven op individueel en repo-niveau uit lokale git plus gesynchroniseerde GitHub-PR- en deploymentgegevens."
+    },
+    "allocation": {
+      "title": "Verdeling",
+      "description": "Investeringsverdeling (feature / fix / KTLO / chore) afgeleid uit conventional-commit-prefixen."
+    },
+    "devex": {
+      "title": "DevEx",
+      "description": "Een vrijwillige lokale zelfpeiling, gecorreleerd met je harde metrieken. Richtinggevend, niet causaal — en verlaat nooit je machine."
+    },
+    "team": {
+      "title": "Team",
+      "description": "Bijdrage per auteur en DORA-lite, gegroepeerd op commit-auteur-e-mail (lokale git)."
+    },
+    "tips": {
+      "title": "Tips",
+      "description": "Op regels gebaseerde suggesties om tokenverbruik te verlagen."
+    },
+    "rtk": {
+      "title": "RTK",
+      "description": "Tokenbesparing via de RTK CLI."
+    },
+    "settings": {
+      "title": "Instellingen",
+      "description": "Integraties, AI-bronnen, abonnement en scanlocaties."
+    }
+  },
+  "language": {
+    "en": "English",
+    "pt": "Português",
+    "es": "Español",
+    "de": "Deutsch",
+    "nl": "Nederlands",
+    "zh": "中文",
+    "ja": "日本語"
+  }
+}

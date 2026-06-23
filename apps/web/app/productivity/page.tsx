@@ -39,6 +39,7 @@ import type {
   PullRequestRow,
 } from "@/lib/types";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type Grain = "day" | "week" | "month";
 
@@ -185,6 +186,7 @@ function MeetingImpactCards({ impact }: { impact: MeetingImpact | null }) {
 }
 
 export default function ProductivityPage() {
+  const { t } = useTranslation();
   const { since, until } = useRange();
   const [grain, setGrain] = useState<Grain>("day");
   const tz = -new Date().getTimezoneOffset();
@@ -221,8 +223,8 @@ export default function ProductivityPage() {
     <>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PageTitle
-          title="Productivity"
-          description="Estimated focus, flow, warm-up, commits, assistant activity, and PR impact from local sources."
+          title={t("pages.productivity.title")}
+          description={t("pages.productivity.description")}
         />
         <div className="flex gap-1" role="group" aria-label="Productivity grain">
           {(["day", "week", "month"] as Grain[]).map((g) => (

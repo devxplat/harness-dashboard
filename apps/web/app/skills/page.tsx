@@ -9,6 +9,7 @@ import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { SkillRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
+import { useTranslation } from "react-i18next";
 
 const columns: ColumnDef<SkillRow>[] = [
   {
@@ -44,6 +45,7 @@ const columns: ColumnDef<SkillRow>[] = [
 ];
 
 export default function SkillsPage() {
+  const { t } = useTranslation();
   const { since, until } = useRange();
   const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<SkillRow[]>(
@@ -61,8 +63,8 @@ export default function SkillsPage() {
   return (
     <>
       <PageTitle
-        title="Skills & commands"
-        description="Slash commands you ran vs. Skill tools Claude invoked."
+        title={t("pages.skills.title")}
+        description={t("pages.skills.description")}
       />
       {data.length === 0 ? (
         <EmptyBlock message="No skill or slash-command activity in range." />

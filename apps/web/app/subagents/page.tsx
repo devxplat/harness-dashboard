@@ -16,6 +16,7 @@ import { formatInt, formatTokens, formatUSD } from "@/lib/format";
 import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { AgentGroupRow, SubagentsResponse } from "@/lib/types";
+import { useTranslation } from "react-i18next";
 
 function AgentTable({ rows, label }: { rows: AgentGroupRow[]; label: string }) {
   return (
@@ -47,6 +48,7 @@ function AgentTable({ rows, label }: { rows: AgentGroupRow[]; label: string }) {
 }
 
 export default function SubagentsPage() {
+  const { t } = useTranslation();
   const { since, until } = useRange();
   const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<SubagentsResponse>(
@@ -66,8 +68,8 @@ export default function SubagentsPage() {
   return (
     <>
       <PageTitle
-        title="Subagents & orchestration"
-        description="Spend split by agent kind (main / auto-compaction / subagent) and client entrypoint."
+        title={t("pages.subagents.title")}
+        description={t("pages.subagents.description")}
       />
       {empty ? (
         <EmptyBlock message="No assistant activity in range." />

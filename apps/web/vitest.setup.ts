@@ -1,4 +1,6 @@
 import "@testing-library/jest-dom/vitest";
+// Initialize the i18n instance (en resources) so `t()` returns English in tests.
+import "@/lib/i18n/config";
 import { vi } from "vitest";
 
 // jsdom lacks a few browser APIs that shadcn/radix components touch.

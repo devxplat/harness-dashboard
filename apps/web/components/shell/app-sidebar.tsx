@@ -21,6 +21,7 @@ import { Database, Zap } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslation } from "react-i18next";
 import { NAV_GROUPS } from "./nav";
 
 function norm(p: string): string {
@@ -28,6 +29,7 @@ function norm(p: string): string {
 }
 
 export function AppSidebar() {
+  const { t } = useTranslation();
   const pathname = norm(usePathname() ?? "/");
   const { data: rtk } = useApi<RtkInfo>("/api/rtk");
 
@@ -57,8 +59,8 @@ export function AppSidebar() {
       <SidebarContent>
         <ScrollArea className="h-full">
           {NAV_GROUPS.map((group) => (
-            <SidebarGroup key={group.label}>
-              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroup key={group.id}>
+              <SidebarGroupLabel>{t(group.key)}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu className="gap-1">
                   {group.items.map((item) => (
@@ -66,17 +68,17 @@ export function AppSidebar() {
                       <SidebarMenuButton
                         asChild
                         isActive={pathname === norm(item.href)}
-                        tooltip={item.title}
+                        tooltip={t(item.key)}
                         className="transition-transform duration-150 hover:translate-x-0.5"
                       >
                         <Link href={item.href}>
                           <item.icon className="size-4" />
-                          <span>{item.title}</span>
+                          <span>{t(item.key)}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
-                  {group.label === "More" && rtk?.available ? (
+                  {group.id === "more" && rtk?.available ? (
                     <SidebarMenuItem>
                       <SidebarMenuButton
                         asChild

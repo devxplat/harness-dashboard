@@ -19,8 +19,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApi } from "@/hooks/use-api";
 import { withRange } from "@/lib/api";
 import { formatInt, formatUSD } from "@/lib/format";
+import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { AiImpactBundle, AiRoiByGroupRow } from "@/lib/types";
+import { useTranslation } from "react-i18next";
 
 function pctText(v: number | null | undefined): string {
   return v == null ? "—" : `${v.toFixed(1)}%`;
@@ -86,12 +88,18 @@ function RoiTable({ rows }: { rows: AiRoiByGroupRow[] }) {
 }
 
 export default function AiImpactPage() {
+  const { t } = useTranslation();
   const { since, until } = useRange();
+  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<AiImpactBundle>(
-    withRange("/api/ai/impact-bundle", since, until),
+    settingsLoaded && hasAvailableProviders
+      ? withRange("/api/ai/impact-bundle", since, until, queryProviders)
+      : null,
   );
 
   if (error) return <ErrorBlock error={error} />;
+  if (settingsLoaded && !hasAvailableProviders)
+    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
   const b = data && !Array.isArray(data) ? data : null;
   if (loading || !b) return <LoadingBlock />;
 
@@ -103,8 +111,8 @@ export default function AiImpactPage() {
   return (
     <>
       <PageTitle
-        title="AI Impact"
-        description="Utilization, code share, cost and ROI of AI coding tools — measured from real token/session data, then correlated with delivery."
+        title={t("pages.aiImpact.title")}
+        description={t("pages.aiImpact.description")}
       />
 
       {empty ? (

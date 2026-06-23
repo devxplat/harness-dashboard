@@ -1,0 +1,171 @@
+{
+  "nav": {
+    "groups": {
+      "usage": "使用状況",
+      "tools": "ツールとエージェント",
+      "performance": "パフォーマンス",
+      "more": "その他"
+    },
+    "overview": "概要",
+    "prompts": "プロンプト",
+    "sessions": "セッション",
+    "projects": "プロジェクト",
+    "tools": "ツール",
+    "skills": "スキル",
+    "subagents": "サブエージェント",
+    "workspaces": "ワークスペース",
+    "productivity": "生産性",
+    "aiImpact": "AIの効果",
+    "dora": "DORA",
+    "allocation": "配分",
+    "devex": "DevEx",
+    "team": "チーム",
+    "tips": "ヒント",
+    "settings": "設定"
+  },
+  "topbar": {
+    "welcome": "おかえりなさい 👋",
+    "subtitle": "ローカルのAIコーディング使用状況",
+    "live": "ライブ",
+    "paused": "一時停止中",
+    "pauseLive": "ライブ更新を一時停止",
+    "resumeLive": "ライブ更新を再開",
+    "refresh": "更新",
+    "customRange": "カスタム範囲",
+    "language": "言語",
+    "theme": "テーマを切り替え"
+  },
+  "range": {
+    "all": "すべて",
+    "custom": "カスタム範囲"
+  },
+  "rangeLabel": {
+    "7d": "過去7日間",
+    "30d": "過去30日間",
+    "90d": "過去90日間",
+    "all": "全期間",
+    "custom": "カスタム範囲",
+    "selected": "選択した範囲"
+  },
+  "common": {
+    "loading": "読み込み中…",
+    "error": "問題が発生しました。",
+    "noProviders": "AIプロバイダーが見つかりません。設定でソースを構成してください。",
+    "vsPrev": "前期比",
+    "search": "このページを絞り込み…",
+    "shortNames": "短縮名",
+    "fullNames": "正式名称",
+    "columns": "列",
+    "rowsPerPage": "1ページの行数",
+    "page": "ページ",
+    "of": "/",
+    "rows": "行",
+    "previous": "前へ",
+    "next": "次へ",
+    "noResults": "結果がありません。"
+  },
+  "overview": {
+    "title": "使用状況の概要",
+    "turns": "ターン",
+    "cache": "キャッシュ",
+    "cards": {
+      "sessions": "セッション",
+      "input": "入力トークン",
+      "output": "出力トークン",
+      "cost": "推定コスト"
+    },
+    "dailyTokens": "日次トークン",
+    "byModel": "モデル別",
+    "recentSessions": "最近のセッション",
+    "noActivity": "この範囲にアクティビティはありません。",
+    "th": {
+      "model": "モデル",
+      "provider": "プロバイダー",
+      "input": "入力",
+      "output": "出力",
+      "cost": "コスト",
+      "project": "プロジェクト",
+      "started": "開始",
+      "turns": "ターン",
+      "tokens": "トークン"
+    }
+  },
+  "pages": {
+    "prompts": {
+      "title": "プロンプト",
+      "description": "割り当てトークン数が多い順の高コストなプロンプト。"
+    },
+    "sessions": {
+      "title": "セッション",
+      "description": "個々のセッションを閲覧・詳細表示します。"
+    },
+    "sessionDetail": {
+      "title": "セッション"
+    },
+    "projects": {
+      "title": "プロジェクト",
+      "description": "プロジェクト別のトークン使用状況。"
+    },
+    "tools": {
+      "title": "ツール",
+      "description": "ツールの呼び出しと、返された結果トークン。"
+    },
+    "skills": {
+      "title": "スキルとコマンド",
+      "description": "実行したスラッシュコマンドと、Claudeが呼び出したSkillツールの比較。"
+    },
+    "subagents": {
+      "title": "サブエージェントとオーケストレーション",
+      "description": "エージェントの種類（メイン / 自動コンパクション / サブエージェント）とクライアントの起点別のコスト内訳。"
+    },
+    "workspaces": {
+      "title": "ワークスペース",
+      "description": "ワークスペースごとのファイル編集ツールのアクティビティ。"
+    },
+    "productivity": {
+      "title": "生産性",
+      "description": "ローカルソースから推定したフォーカス、フロー、ウォームアップ、コミット、アシスタントのアクティビティ、PRの効果。"
+    },
+    "aiImpact": {
+      "title": "AIの効果",
+      "description": "AIコーディングツールの利用状況、コード貢献率、コスト、ROI。実際のトークン/セッションデータから測定し、デリバリーと相関を取ります。"
+    },
+    "dora": {
+      "title": "DORA",
+      "description": "ローカルのgitと、同期したGitHubのPR・デプロイデータによる、個人およびリポジトリ単位のDORAビュー。"
+    },
+    "allocation": {
+      "title": "配分",
+      "description": "Conventional Commitsのプレフィックスから推定した投資配分（機能 / 修正 / KTLO / 雑務）。"
+    },
+    "devex": {
+      "title": "DevEx",
+      "description": "任意のローカル自己評価を、ハードな指標と相関させます。因果ではなく傾向を示すもので、マシン外には一切送信されません。"
+    },
+    "team": {
+      "title": "チーム",
+      "description": "コミット作成者のメールアドレス（ローカルgit）でグループ化した、作成者ごとの貢献とDORAライト。"
+    },
+    "tips": {
+      "title": "ヒント",
+      "description": "トークン消費を削減するためのルールベースの提案。"
+    },
+    "rtk": {
+      "title": "RTK",
+      "description": "RTK CLIによるトークン削減量。"
+    },
+    "settings": {
+      "title": "設定",
+      "description": "連携、AIソース、プラン、スキャン対象の場所。"
+    }
+  },
+  "language": {
+    "en": "English",
+    "pt": "Português",
+    "es": "Español",
+    "de": "Deutsch",
+    "nl": "Nederlands",
+    "zh": "中文",
+    "ja": "日本語"
+  }
+}

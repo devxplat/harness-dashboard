@@ -1243,10 +1243,17 @@ async fn ai_lines(State(s): State<AppState>, Query(q): Query<RangeParams>) -> Ap
 }
 
 async fn ai_adoption(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    if q.providers_none() {
+        return Ok(Json(json!({
+            "active_days": 0, "span_days": 0, "sessions": 0, "messages": 0, "agent_tasks": 0,
+            "pct_active_days": null, "avg_sessions_per_active_day": null, "daily": [],
+        })));
+    }
     let since = q.since().map(str::to_owned);
     let until = q.until().map(str::to_owned);
+    let providers = q.providers();
     read_json(&s, move |db, _| {
-        db.ai_adoption(since.as_deref(), until.as_deref())
+        db.ai_adoption(since.as_deref(), until.as_deref(), &providers)
     })
     .await
 }
@@ -1265,13 +1272,22 @@ async fn ai_roi(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiR
 }
 
 async fn ai_correlation(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    if q.providers_none() {
+        return Ok(Json(json!({
+            "series": [],
+            "coeffs": { "usage_vs_commits": null, "usage_vs_merged_prs": null, "tokens_vs_lead_hours": null },
+            "previous_period": null,
+        })));
+    }
     let since = q.since().map(str::to_owned);
     let until = q.until().map(str::to_owned);
+    let providers = q.providers();
     let prev = prev_window(since.as_deref(), until.as_deref());
     read_json(&s, move |db, _| {
-        let mut bundle = db.ai_correlation(since.as_deref(), until.as_deref())?;
+        let mut bundle = db.ai_correlation(since.as_deref(), until.as_deref(), &providers)?;
         if let Some((ps, pu)) = &prev {
-            bundle.previous_period = Some(db.ai_correlation(Some(ps), Some(pu))?.coeffs);
+            bundle.previous_period =
+                Some(db.ai_correlation(Some(ps), Some(pu), &providers)?.coeffs);
         }
         Ok(bundle)
     })
@@ -1290,7 +1306,7 @@ async fn ai_impact_bundle(State(s): State<AppState>, Query(q): Query<RangeParams
         let mut bundle = db.ai_impact_bundle(pr, since.as_deref(), until.as_deref(), &providers)?;
         if let Some((ps, pu)) = &prev {
             bundle.correlation.previous_period =
-                Some(db.ai_correlation(Some(ps), Some(pu))?.coeffs);
+                Some(db.ai_correlation(Some(ps), Some(pu), &providers)?.coeffs);
         }
         Ok(bundle)
     })

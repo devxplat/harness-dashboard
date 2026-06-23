@@ -78,9 +78,8 @@ describe("OverviewPage", () => {
     await waitFor(() => expect(screen.getByText("Est. cost")).toBeInTheDocument());
     expect(screen.getByText("claude-opus-4-8")).toBeInTheDocument();
     expect(screen.getByText("Daily tokens")).toBeInTheDocument();
-    // Genuine period-over-period deltas from the previous-window fetch.
-    expect(await screen.findByText("+50.0%")).toBeInTheDocument(); // turns 3 vs 2
-    expect(screen.getByText("+25.0%")).toBeInTheDocument(); // cost 1.5 vs 1.2
+    // The cost card shows the period-over-period change (cost 1.5 vs 1.2 = +25%).
+    expect(await screen.findByText(/\+25%/)).toBeInTheDocument();
   });
 
   it("renders the empty chart state when there is no daily data", async () => {

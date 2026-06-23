@@ -19,20 +19,28 @@ const totals: Totals = {
 const prev: Totals = { ...totals, turns: 3, cost_usd: 1 };
 
 describe("OverviewStats", () => {
-  it("shows the stat grid, deltas and quick-action tiles", () => {
+  it("shows the metric cards, the cost delta, and drill-down links", () => {
     render(<OverviewStats totals={totals} prev={prev} rangeLabel="Last 30 days" />);
     expect(screen.getByText("Usage Overview")).toBeInTheDocument();
     expect(screen.getByText(/Last 30 days/)).toBeInTheDocument();
     expect(screen.getByText("Sessions")).toBeInTheDocument();
+    expect(screen.getByText("Input Tokens")).toBeInTheDocument();
+    expect(screen.getByText("Output Tokens")).toBeInTheDocument();
     expect(screen.getByText("Est. cost")).toBeInTheDocument();
-    // turns 6 vs 3 = +100%, cost 2 vs 1 = +100%.
-    expect(screen.getAllByText("+100.0%").length).toBeGreaterThan(0);
-    // Quick-action tiles link to the sub-pages.
-    expect(screen.getByRole("link", { name: /Expensive prompts/ })).toHaveAttribute("href", "/prompts");
-    expect(screen.getByRole("link", { name: /By project/ })).toHaveAttribute("href", "/projects");
+    // turns 6 vs 3 and cost 2 vs 1 both = +100% (trend shown on the cards/stats).
+    expect(screen.getAllByText(/\+100%/).length).toBeGreaterThan(0);
+    // Cards link to their drill-down pages.
+    expect(screen.getByRole("link", { name: /Browse sessions/i })).toHaveAttribute(
+      "href",
+      "/sessions",
+    );
+    expect(screen.getByRole("link", { name: /expensive prompts/i })).toHaveAttribute(
+      "href",
+      "/prompts",
+    );
   });
 
-  it("omits deltas when there is no comparable prior window", () => {
+  it("omits the cost delta when there is no comparable prior window", () => {
     render(<OverviewStats totals={totals} prev={null} rangeLabel="All time" />);
     expect(screen.queryByText(/vs prev/)).toBeNull();
   });

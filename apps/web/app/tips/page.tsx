@@ -7,6 +7,7 @@ import { useApi } from "@/hooks/use-api";
 import { withRange } from "@/lib/api";
 import { useRange } from "@/lib/range";
 import type { Tip } from "@/lib/types";
+import { useTranslation } from "react-i18next";
 
 function severityVariant(s: string): "default" | "secondary" | "destructive" | "outline" {
   if (s === "cost") return "destructive";
@@ -15,6 +16,7 @@ function severityVariant(s: string): "default" | "secondary" | "destructive" | "
 }
 
 export default function TipsPage() {
+  const { t: tr } = useTranslation();
   const { since, until } = useRange();
   const { data, error, loading } = useApi<Tip[]>(withRange("/api/tips", since, until));
 
@@ -23,7 +25,7 @@ export default function TipsPage() {
 
   return (
     <>
-      <PageTitle title="Tips" description="Rule-based suggestions to cut token spend." />
+      <PageTitle title={tr("pages.tips.title")} description={tr("pages.tips.description")} />
       {data.length === 0 ? (
         <EmptyBlock message="No tips right now — nothing to flag in this range." />
       ) : (

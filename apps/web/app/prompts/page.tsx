@@ -14,6 +14,7 @@ import { useRange } from "@/lib/range";
 import type { Paged, PromptRow } from "@/lib/types";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
   {
@@ -75,6 +76,7 @@ const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
 ];
 
 export default function PromptsPage() {
+  const { t } = useTranslation();
   const [sort, setSort] = useState<"tokens" | "recent">("tokens");
   const [shortNames, setShortNames] = useState(true);
   const [page, setPage] = useState(0);
@@ -103,7 +105,7 @@ export default function PromptsPage() {
   return (
     <>
       <div className="flex items-center justify-between">
-        <PageTitle title="Prompts" description="Your most expensive prompts by attributed tokens." />
+        <PageTitle title={t("pages.prompts.title")} description={t("pages.prompts.description")} />
         <div className="flex gap-1">
           <Button size="sm" variant={sort === "tokens" ? "default" : "outline"} onClick={() => setSort("tokens")}>
             By tokens

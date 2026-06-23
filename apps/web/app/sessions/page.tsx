@@ -16,6 +16,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const makeSessionColumns = (short: boolean): ColumnDef<SessionRow>[] => [
   {
@@ -126,6 +127,7 @@ function SessionsList() {
 }
 
 function SessionDetail({ id, provider }: { id: string; provider: string | null }) {
+  const { t } = useTranslation();
   const { data, error, loading } = useApi<MessageDetail[]>(
     `/api/sessions/${id}${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`,
   );
@@ -137,7 +139,7 @@ function SessionDetail({ id, provider }: { id: string; provider: string | null }
       <Link className="text-sm text-muted-foreground hover:underline" href="/sessions/">
         ← All sessions
       </Link>
-      <PageTitle title="Session" description={id} />
+      <PageTitle title={t("pages.sessionDetail.title")} description={id} />
       <div className="space-y-2">
         {data.map((m) => (
           <Card key={m.uuid}>
@@ -165,6 +167,7 @@ function SessionDetail({ id, provider }: { id: string; provider: string | null }
 }
 
 function SessionsContent() {
+  const { t } = useTranslation();
   const params = useSearchParams();
   const id = params.get("id");
   const provider = params.get("provider");
@@ -172,7 +175,10 @@ function SessionsContent() {
     <SessionDetail id={id} provider={provider} />
   ) : (
     <>
-      <PageTitle title="Sessions" description="Browse and drill into individual sessions." />
+      <PageTitle
+        title={t("pages.sessions.title")}
+        description={t("pages.sessions.description")}
+      />
       <SessionsList />
     </>
   );
