@@ -20,10 +20,14 @@ const integrations = {
 };
 
 describe("SettingsPage", () => {
-  it("shows Integrations by default and switches sections", async () => {
+  it("shows Profile by default and switches sections", async () => {
     installFetch({ "/api/settings": settings, "/api/integrations": integrations });
     renderWithRange(<SettingsPage />);
-    // Integrations is the default section → the GitHub integration card is shown.
+    // Profile is the default section → the display name input is shown.
+    await waitFor(() => expect(screen.getByRole("button", { name: /Profile/ })).toBeInTheDocument());
+
+    // Navigate to Integrations → GitHub card appears.
+    await userEvent.click(screen.getByRole("button", { name: /Integrations/ }));
     await waitFor(() => expect(screen.getByText("GitHub")).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole("button", { name: /AI sources/ }));

@@ -25,6 +25,7 @@
   },
   "topbar": {
     "welcome": "おかえりなさい 👋",
+    "welcomeNamed": "おかえりなさい、{{name}} 👋",
     "subtitle": "ローカルのAIコーディング使用状況",
     "live": "ライブ",
     "paused": "一時停止中",
@@ -157,6 +158,36 @@
     "settings": {
       "title": "設定",
       "description": "連携、AIソース、プラン、スキャン対象の場所。"
+    }
+  },
+  "settings": {
+    "nav": {
+      "profile": "プロフィール",
+      "profileDesc": "個人設定と表示オプション。",
+      "integrations": "インテグレーション",
+      "integrationsDesc": "GitHubとGoogleカレンダーを接続。",
+      "sources": "AIソース",
+      "sourcesDesc": "スキャンするローカルAIツール。",
+      "general": "一般",
+      "generalDesc": "料金プランとスキャン場所。",
+      "onboarding": "セットアップ",
+      "onboardingDesc": "初回設定ウィザードを再実行。"
+    },
+    "profile": {
+      "displayName": "表示名",
+      "displayNamePlaceholder": "お名前",
+      "displayNameHint": "トップバーのあいさつに表示されます。",
+      "language": "言語",
+      "languageHint": "UIの表示言語。",
+      "theme": "テーマ",
+      "themeSystem": "システム",
+      "themeLight": "ライト",
+      "themeDark": "ダーク",
+      "themeHint": "ライト、ダーク、またはシステムに従う。",
+      "defaultRange": "デフォルトの日付範囲",
+      "defaultRangeHint": "アプリ起動時の初期範囲。",
+      "save": "保存",
+      "saved": "設定が保存されました"
     }
   },
   "language": {

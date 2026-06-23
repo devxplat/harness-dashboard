@@ -13,6 +13,7 @@ import { RangeSelector } from "./range-selector";
 import { RealtimeToggle } from "./realtime-toggle";
 import { ScanStatus } from "./scan-status";
 import { ThemeToggle } from "./theme-toggle";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // Screens whose data is provider-attributed (the AI-tool usage views). The selector
@@ -32,6 +33,15 @@ const PROVIDER_SCOPED_ROUTES = new Set([
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
+  const [displayName, setDisplayName] = useState("");
+  useEffect(() => {
+    function readName() {
+      setDisplayName(localStorage.getItem("harness.displayName") ?? "");
+    }
+    readName();
+    window.addEventListener("harness.profile-saved", readName);
+    return () => window.removeEventListener("harness.profile-saved", readName);
+  }, []);
   const raw = usePathname() ?? "/";
   // `trailingSlash: true` (static export) makes routes look like "/onboarding/",
   // so normalize before matching — otherwise the shell would wrap onboarding.
@@ -58,7 +68,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Image src="/logo.png" alt="" width={40} height={40} className="size-9" priority />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-medium">{t("topbar.welcome")}</span>
+            <span className="text-sm font-medium">
+              {displayName ? t("topbar.welcomeNamed", { name: displayName }) : t("topbar.welcome")}
+            </span>
             <span className="text-xs text-muted-foreground">{t("topbar.subtitle")}</span>
           </div>
           <div className="flex flex-1 justify-center">{providerScoped ? <ProviderSelector /> : null}</div>

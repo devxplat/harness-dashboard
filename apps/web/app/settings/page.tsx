@@ -10,6 +10,7 @@ import { IntegrationCard } from "@/components/settings/integration-card";
 import { ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -19,7 +20,9 @@ import {
 } from "@/components/ui/select";
 import { useApi } from "@/hooks/use-api";
 import { apiPost } from "@/lib/api";
+import { LOCALES } from "@/lib/i18n/config";
 import { providerMeta } from "@/lib/providers";
+import { RANGES } from "@/lib/range";
 import type {
   ProviderCapabilitySet,
   ProviderConfig,
@@ -27,21 +30,126 @@ import type {
   SettingsInfo,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Boxes, Plug, Rocket, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { Boxes, Plug, Rocket, SlidersHorizontal, User } from "lucide-react";
+import { useTheme } from "next-themes";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 const PLANS = ["api", "pro", "max", "max-20x", "team", "team-premium"];
 
-type SectionId = "integrations" | "sources" | "general" | "onboarding";
-const SECTIONS: { id: SectionId; label: string; icon: LucideIcon; description: string }[] = [
-  { id: "integrations", label: "Integrations", icon: Plug, description: "Connect GitHub and Google Calendar." },
-  { id: "sources", label: "AI sources", icon: Boxes, description: "Which local AI coding tools to scan." },
-  { id: "general", label: "General", icon: SlidersHorizontal, description: "Pricing plan and scan locations." },
-  { id: "onboarding", label: "Onboarding", icon: Rocket, description: "Re-run the first-run setup wizard." },
-];
+type SectionId = "profile" | "integrations" | "sources" | "general" | "onboarding";
+
+function FieldRow({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm font-medium leading-none">{label}</label>
+      {children}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+function ProfileSettings() {
+  const { t, i18n } = useTranslation();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [defaultRange, setDefaultRange] = useState("30d");
+
+  useEffect(() => {
+    setMounted(true);
+    setDisplayName(localStorage.getItem("harness.displayName") ?? "");
+    const saved = localStorage.getItem("harness.defaultRange");
+    if (saved && ["7d", "30d", "90d", "all"].includes(saved)) setDefaultRange(saved);
+  }, []);
+
+  function save() {
+    localStorage.setItem("harness.displayName", displayName);
+    localStorage.setItem("harness.defaultRange", defaultRange);
+    // Notify app-shell to re-read the display name on next paint.
+    window.dispatchEvent(new Event("harness.profile-saved"));
+    toast.success(t("settings.profile.saved"));
+  }
+
+  const currentLang = i18n.resolvedLanguage ?? i18n.language;
+
+  return (
+    <Card className="max-w-xl">
+      <CardHeader>
+        <CardTitle>{t("settings.nav.profile")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <FieldRow label={t("settings.profile.displayName")} hint={t("settings.profile.displayNameHint")}>
+          <Input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder={t("settings.profile.displayNamePlaceholder")}
+            className="max-w-xs"
+          />
+        </FieldRow>
+
+        <FieldRow label={t("settings.profile.language")} hint={t("settings.profile.languageHint")}>
+          <Select value={currentLang} onValueChange={(v) => void i18n.changeLanguage(v)}>
+            <SelectTrigger className="w-48" aria-label={t("settings.profile.language")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LOCALES.map((l) => (
+                <SelectItem key={l.code} value={l.code}>
+                  {l.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FieldRow>
+
+        {mounted && (
+          <FieldRow label={t("settings.profile.theme")} hint={t("settings.profile.themeHint")}>
+            <Select value={theme ?? "system"} onValueChange={setTheme}>
+              <SelectTrigger className="w-48" aria-label={t("settings.profile.theme")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system">{t("settings.profile.themeSystem")}</SelectItem>
+                <SelectItem value="light">{t("settings.profile.themeLight")}</SelectItem>
+                <SelectItem value="dark">{t("settings.profile.themeDark")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </FieldRow>
+        )}
+
+        <FieldRow label={t("settings.profile.defaultRange")} hint={t("settings.profile.defaultRangeHint")}>
+          <Select value={defaultRange} onValueChange={setDefaultRange}>
+            <SelectTrigger className="w-48" aria-label={t("settings.profile.defaultRange")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {RANGES.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {t(`rangeLabel.${r}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FieldRow>
+
+        <div className="pt-2">
+          <Button onClick={save}>{t("settings.profile.save")}</Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function Capability({ enabled, label }: { enabled: boolean; label: string }) {
   return (
@@ -297,8 +405,19 @@ function OnboardingSettings() {
 export default function SettingsPage() {
   const { t } = useTranslation();
   const { data, error, loading, refetch } = useApi<SettingsInfo>("/api/settings");
-  const [section, setSection] = useState<SectionId>("integrations");
+  const [section, setSection] = useState<SectionId>("profile");
   const [saving, setSaving] = useState(false);
+
+  const SECTIONS = useMemo(
+    () => [
+      { id: "profile" as SectionId, label: t("settings.nav.profile"), icon: User, description: t("settings.nav.profileDesc") },
+      { id: "integrations" as SectionId, label: t("settings.nav.integrations"), icon: Plug, description: t("settings.nav.integrationsDesc") },
+      { id: "sources" as SectionId, label: t("settings.nav.sources"), icon: Boxes, description: t("settings.nav.sourcesDesc") },
+      { id: "general" as SectionId, label: t("settings.nav.general"), icon: SlidersHorizontal, description: t("settings.nav.generalDesc") },
+      { id: "onboarding" as SectionId, label: t("settings.nav.onboarding"), icon: Rocket, description: t("settings.nav.onboardingDesc") },
+    ],
+    [t],
+  );
 
   async function setPlan(plan: string) {
     setSaving(true);
@@ -352,6 +471,8 @@ export default function SettingsPage() {
             <h2 className="text-lg font-semibold tracking-tight">{active.label}</h2>
             <p className="text-sm text-muted-foreground">{active.description}</p>
           </div>
+
+          {section === "profile" && <ProfileSettings />}
 
           {section === "integrations" && (
             <div className="space-y-4">
