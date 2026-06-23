@@ -58,6 +58,27 @@ fn provider_only_params<'a>(providers: &'a [&'static str]) -> Vec<&'a dyn ToSql>
     out
 }
 
+/// Parse a stored timestamp into a comparable instant (epoch millis). Providers store
+/// `timestamp` in their own RFC3339 variant (offset / `Z` / precision differ), so a raw
+/// string compare mis-orders *across* providers — sort on this instead. Unparseable
+/// values sort last (oldest).
+fn ts_millis(s: &str) -> i64 {
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        return dt.timestamp_millis();
+    }
+    // Offset-less ISO timestamps: assume UTC.
+    for fmt in [
+        "%Y-%m-%dT%H:%M:%S%.f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+    ] {
+        if let Ok(nd) = chrono::NaiveDateTime::parse_from_str(s, fmt) {
+            return nd.and_utc().timestamp_millis();
+        }
+    }
+    i64::MIN
+}
+
 fn brief_json(row: &MessageRow) -> Option<String> {
     let briefs: Vec<_> = row
         .tool_calls
@@ -2181,13 +2202,19 @@ impl Db {
         drop(stmt);
 
         if sort == "recent" {
-            prompts.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+            // Sort on the parsed instant (not the raw string) so providers with
+            // differing timestamp formats interleave in true chronological order.
+            prompts.sort_by(|a, b| {
+                ts_millis(&b.timestamp)
+                    .cmp(&ts_millis(&a.timestamp))
+                    .then_with(|| b.timestamp.cmp(&a.timestamp))
+            });
         } else {
             prompts.sort_by(|a, b| {
                 b.tokens
                     .billable_tokens()
                     .cmp(&a.tokens.billable_tokens())
-                    .then_with(|| b.timestamp.cmp(&a.timestamp))
+                    .then_with(|| ts_millis(&b.timestamp).cmp(&ts_millis(&a.timestamp)))
             });
         }
         prompts.truncate(limit.max(0) as usize);
@@ -2532,5 +2559,54 @@ impl Db {
         }
 
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ts_millis_orders_provider_formats_by_instant() {
+        // 15:30 at -07:00 == 22:30Z, later than 20:00Z despite a smaller raw string.
+        assert!(ts_millis("2026-06-22T15:30:00-07:00") > ts_millis("2026-06-22T20:00:00.000Z"));
+        // Fractional precision compares correctly.
+        assert!(ts_millis("2026-06-22T20:00:00Z") > ts_millis("2026-06-22T19:59:59.999Z"));
+        // Offset-less ISO is treated as UTC.
+        assert_eq!(
+            ts_millis("2026-06-22T20:00:00"),
+            ts_millis("2026-06-22T20:00:00Z")
+        );
+        // Unparseable sorts last (oldest).
+        assert_eq!(ts_millis("not-a-date"), i64::MIN);
+    }
+
+    #[test]
+    fn recent_sort_interleaves_providers_by_instant() {
+        let db = Db::open_in_memory().unwrap();
+        {
+            let conn = db.conn.lock().unwrap();
+            // Claude prompt at 20:00Z; Codex prompt at 15:30-07:00 == 22:30Z (later instant,
+            // but a *smaller* raw string — the bug a string sort would get wrong).
+            conn.execute(
+                "INSERT INTO messages(uuid, provider, session_id, project_slug, type, timestamp, prompt_chars) \
+                 VALUES ('u1','claude','s1','p','user','2026-06-22T20:00:00.000Z',10)",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO messages(uuid, provider, session_id, project_slug, type, timestamp, prompt_chars) \
+                 VALUES ('u2','codex','s2','p','user','2026-06-22T15:30:00-07:00',10)",
+                [],
+            )
+            .unwrap();
+        }
+        let pricing = Pricing::load_default();
+        let rows = db
+            .expensive_prompts_for_providers(&pricing, 10, "recent", None, None, &[])
+            .unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].provider, "codex", "later instant first");
+        assert_eq!(rows[1].provider, "claude");
     }
 }

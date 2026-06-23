@@ -70,6 +70,12 @@ interface DataTableProps<TData, TValue> {
     pageSize: number;
     onPageChange: (pageIndex: number) => void;
     onPageSizeChange: (pageSize: number) => void;
+    /** Server-driven sorting: clicking a sortable header updates this (and the server
+     *  re-ranks the whole dataset) instead of sorting only the current page client-side. */
+    sort?: {
+      state: SortingState;
+      onChange: (next: SortingState) => void;
+    };
   };
 }
 
@@ -84,7 +90,9 @@ export function DataTable<TData, TValue>({
   footer,
   server,
 }: DataTableProps<TData, TValue>) {
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [internalSorting, setInternalSorting] = useState<SortingState>([]);
+  // Server-driven sorting is controlled by the parent; otherwise sort the page locally.
+  const sorting = server?.sort ? server.sort.state : internalSorting;
   const [globalFilter, setGlobalFilter] = useState("");
   const [rawFilter, setRawFilter] = useState("");
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
@@ -122,9 +130,14 @@ export function DataTable<TData, TValue>({
         ? { pagination: { pageIndex: server.pageIndex, pageSize: server.pageSize } }
         : {}),
     },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      const next = typeof updater === "function" ? updater(sorting) : updater;
+      if (server?.sort) server.sort.onChange(next);
+      else setInternalSorting(next);
+    },
     onGlobalFilterChange: setGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
+    manualSorting: !!server?.sort,
     ...(server
       ? {
           manualPagination: true,
