@@ -3,22 +3,43 @@
 //! v0.1 uses a single connection behind a `Mutex` (one writer, serialized
 //! readers). A reader pool is a future optimization, not a v0.1 need.
 
+mod ai_impact;
+mod authors;
 mod calendar;
 mod dora;
 mod git;
+mod incidents;
+mod insights;
 mod queries;
 mod schema;
+mod survey;
 
+pub use ai_impact::{
+    AiAdoptionBundle, AiAdoptionDayRow, AiCorrelationBundle, AiCorrelationCoeffs,
+    AiCorrelationSeriesRow, AiImpactBundle, AiLinesBundle, AiLinesRow, AiLinesSummary, AiRoiBundle,
+    AiRoiByGroupRow,
+};
+pub use authors::{AuthorDoraRow, AuthorRow};
 pub use calendar::{MeetingDay, MeetingImpact};
-pub use dora::DoraMetric;
+pub use dora::{DoraBand, DoraMetric};
 pub use git::{
     AiSplitGroup, AiSplitRow, CommitDailyRow, CommitRowDto, DeploymentDto, GithubRepo,
     GithubRepoMeta, ProductiveHourRow, PullRequestDto, SyncState,
+};
+pub use incidents::{IncidentDoraStats, IncidentDto};
+pub use insights::{
+    AllocationBundle, AllocationPeriodRow, AllocationRow, DeploymentTimelineRow, DoraBundle,
+    DoraRepoRow, DoraTrendRow, FocusBlockRow, Grain, LeadTimeBucketRow, PrChurnSummary,
+    PrCorrelationRow, PrCycleTimeRow, PrSizeBucketRow, ProductivityInsightsBundle,
+    ProductivityPeriodRow, ProductivitySummary, WarmupBucketRow,
 };
 pub use queries::{
     AgentGroupRow, DailyRow, MessageDetail, ModelRow, OverviewUsageBundle, ProjectRow, PromptRow,
     ProviderObservedStats, ProviderSummary, SessionRow, SkillRow, Tip, ToolRow, Totals,
     WorkspaceRow,
+};
+pub use survey::{
+    SurveyCorrelationBundle, SurveyCorrelationRow, SurveyResponseRow, SurveyTrendRow,
 };
 
 use crate::error::Result;

@@ -249,6 +249,21 @@ pub struct DeploymentRow {
     pub html_url: Option<String>,
 }
 
+/// An incident, parsed from a source (GitHub issues today). Times are RFC3339 "…Z".
+/// The `deploy_*` correlation columns are filled later in the DB, not at parse time.
+#[derive(Debug, Clone)]
+pub struct IncidentRow {
+    pub source: String,
+    pub repo_key: Option<String>,
+    pub ext_id: String,
+    pub title: Option<String>,
+    pub severity: Option<String>,
+    pub opened_at_utc: Option<String>,
+    pub resolved_at_utc: Option<String>,
+    pub state: Option<String>,
+    pub html_url: Option<String>,
+}
+
 /// A calendar event, parsed from the Google Calendar API, ready to insert.
 #[derive(Debug, Clone)]
 pub struct CalendarEventRow {

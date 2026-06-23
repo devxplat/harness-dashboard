@@ -34,6 +34,53 @@ pub fn detect_ai_trailer(message: &str) -> bool {
     AI_TRAILERS.iter().any(|m| lower.contains(m))
 }
 
+/// Coarse investment category derived from a conventional-commit subject prefix.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AllocationClass {
+    Feature,
+    Fix,
+    Ktlo,
+    Chore,
+    Other,
+}
+
+impl AllocationClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Feature => "feature",
+            Self::Fix => "fix",
+            Self::Ktlo => "ktlo",
+            Self::Chore => "chore",
+            Self::Other => "other",
+        }
+    }
+}
+
+/// Classify a commit subject by its conventional-commit type (the token before the
+/// first `:`, ignoring an optional `(scope)` and a trailing `!`), case-insensitively.
+/// `feat`→Feature; `fix`→Fix; refactor/perf/build/ci/revert→KTLO (keep-the-lights-on
+/// maintenance); docs/style/test/chore→Chore; anything else→Other. Pure / unit-tested.
+pub fn classify_allocation(subject: Option<&str>) -> AllocationClass {
+    let Some(subject) = subject else {
+        return AllocationClass::Other;
+    };
+    let head = subject.split(':').next().unwrap_or("");
+    let token = head
+        .split('(')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .trim_end_matches('!')
+        .to_ascii_lowercase();
+    match token.as_str() {
+        "feat" => AllocationClass::Feature,
+        "fix" => AllocationClass::Fix,
+        "refactor" | "perf" | "build" | "ci" | "revert" => AllocationClass::Ktlo,
+        "chore" | "docs" | "style" | "test" => AllocationClass::Chore,
+        _ => AllocationClass::Other,
+    }
+}
+
 /// Extract `Co-authored-by:` trailer values ("Name <email>") from a commit message,
 /// case-insensitively. Order-preserving, de-duplicated.
 pub fn parse_coauthors(message: &str) -> Vec<String> {
@@ -474,6 +521,22 @@ mod tests {
         assert!(detect_ai_trailer("🤖 Generated with [Claude Code]"));
         assert!(detect_ai_trailer("CO-AUTHORED-BY: CLAUDE"));
         assert!(!detect_ai_trailer("a perfectly ordinary human commit"));
+    }
+
+    #[test]
+    fn allocation_classifies_conventional_commits() {
+        use AllocationClass::*;
+        assert_eq!(classify_allocation(Some("feat: add page")), Feature);
+        assert_eq!(classify_allocation(Some("FEAT: caps")), Feature);
+        assert_eq!(classify_allocation(Some("fix(api): bug")), Fix);
+        assert_eq!(classify_allocation(Some("feat!: breaking")), Feature);
+        assert_eq!(classify_allocation(Some("refactor: tidy")), Ktlo);
+        assert_eq!(classify_allocation(Some("ci: bump action")), Ktlo);
+        assert_eq!(classify_allocation(Some("revert: oops")), Ktlo);
+        assert_eq!(classify_allocation(Some("chore(deps): bump")), Chore);
+        assert_eq!(classify_allocation(Some("docs: readme")), Chore);
+        assert_eq!(classify_allocation(Some("random message")), Other);
+        assert_eq!(classify_allocation(None), Other);
     }
 
     #[test]
