@@ -228,6 +228,8 @@ CREATE TABLE IF NOT EXISTS pull_requests (
 );
 CREATE INDEX IF NOT EXISTS idx_pr_created ON pull_requests(created_at_utc);
 CREATE INDEX IF NOT EXISTS idx_pr_merged  ON pull_requests(merged_at_utc);
+CREATE INDEX IF NOT EXISTS idx_pr_repo_created ON pull_requests(repo_key, created_at_utc);
+CREATE INDEX IF NOT EXISTS idx_pr_repo_merged  ON pull_requests(repo_key, merged_at_utc);
 
 -- A "deployment" abstraction over git tags (local), GitHub releases, and GitHub
 -- Actions workflow runs — whatever sources are configured. `kind` disambiguates.
@@ -243,6 +245,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     PRIMARY KEY (repo_key, kind, ext_id)
 );
 CREATE INDEX IF NOT EXISTS idx_deploy_created ON deployments(created_at_utc);
+CREATE INDEX IF NOT EXISTS idx_deploy_repo_created ON deployments(repo_key, created_at_utc);
 
 CREATE TABLE IF NOT EXISTS calendar_events (
     event_id       TEXT PRIMARY KEY,
@@ -256,18 +259,55 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     updated_at_utc TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_cal_start ON calendar_events(start_utc);
+CREATE INDEX IF NOT EXISTS idx_cal_end ON calendar_events(end_utc);
 
 -- Per-(repo, resource) GitHub sync state: the ETag for conditional requests and the
 -- high-water mark for incremental fetches, so steady-state syncs cost ~1 request.
 CREATE TABLE IF NOT EXISTS github_sync_state (
     repo_key       TEXT NOT NULL,
-    resource       TEXT NOT NULL,   -- pulls | releases | runs
+    resource       TEXT NOT NULL,   -- pulls | releases | runs | issues
     etag           TEXT,            -- last ETag for the conditional GET of page 1
     high_water_utc TEXT,            -- max created/merged time seen (incremental bound)
     last_status    TEXT,            -- ok | not_modified | error | rate_limited
     last_synced_at TEXT,
     PRIMARY KEY (repo_key, resource)
 );
+
+-- Incidents (opt-in): GitHub issues labeled `incident` today; the `source` column +
+-- per-source parsers let Sentry/PagerDuty slot in later. `deploy_*` link an incident
+-- to the deployment immediately preceding it (filled by a correlate pass), so real
+-- MTTR and change-failure-rate can replace the commit-message heuristics.
+CREATE TABLE IF NOT EXISTS incidents (
+    source          TEXT NOT NULL,   -- github_issue | sentry | pagerduty
+    repo_key        TEXT,
+    ext_id          TEXT NOT NULL,   -- issue number / external id (stringified)
+    title           TEXT,
+    severity        TEXT,            -- critical | high | medium | low | NULL
+    opened_at_utc   TEXT,
+    resolved_at_utc TEXT,            -- NULL while open
+    state           TEXT,            -- open | resolved
+    html_url        TEXT,
+    deploy_repo_key TEXT,
+    deploy_kind     TEXT,
+    deploy_ext_id   TEXT,
+    PRIMARY KEY (source, ext_id)
+);
+CREATE INDEX IF NOT EXISTS idx_incidents_opened ON incidents(opened_at_utc);
+CREATE INDEX IF NOT EXISTS idx_incidents_repo_opened ON incidents(repo_key, opened_at_utc);
+CREATE INDEX IF NOT EXISTS idx_incidents_state ON incidents(state);
+
+-- Local DevEx self-survey (opt-in, no telemetry): a periodic self-pulse whose Likert
+-- answers (1..5, NULL = skipped) can be correlated with the hard metrics. Append-only.
+CREATE TABLE IF NOT EXISTS survey_responses (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    submitted_at_utc TEXT NOT NULL,
+    flow             INTEGER,
+    productivity     INTEGER,
+    ai_helpful       INTEGER,
+    satisfaction     INTEGER,
+    note             TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_survey_submitted ON survey_responses(submitted_at_utc);
 "#;
 
 /// Idempotent `ADD COLUMN` migrations (SQLite has no `IF NOT EXISTS` for columns,
@@ -314,9 +354,22 @@ pub const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_tools_provider_useid ON tool_calls(provider, tool_use_id)",
     "CREATE INDEX IF NOT EXISTS idx_tools_ts_provider_name ON tool_calls(timestamp, provider, tool_name)",
     "CREATE INDEX IF NOT EXISTS idx_tools_result_ts_provider_useid ON tool_calls(timestamp, provider, tool_use_id) WHERE tool_name='_tool_result'",
+    "CREATE INDEX IF NOT EXISTS idx_cal_end ON calendar_events(end_utc)",
+    "CREATE INDEX IF NOT EXISTS idx_pr_repo_created ON pull_requests(repo_key, created_at_utc)",
+    "CREATE INDEX IF NOT EXISTS idx_pr_repo_merged ON pull_requests(repo_key, merged_at_utc)",
+    "CREATE INDEX IF NOT EXISTS idx_deploy_repo_created ON deployments(repo_key, created_at_utc)",
     "ALTER TABLE git_repos ADD COLUMN remote_url TEXT",
     "ALTER TABLE git_repos ADD COLUMN gh_owner TEXT",
     "ALTER TABLE git_repos ADD COLUMN gh_repo TEXT",
     "ALTER TABLE git_repos ADD COLUMN gh_sync_enabled INTEGER NOT NULL DEFAULT 1",
     "ALTER TABLE commits ADD COLUMN coauthors TEXT",
+    // Incidents table for existing DBs (new installs get it from SCHEMA_SQL).
+    "CREATE TABLE IF NOT EXISTS incidents (\
+        source TEXT NOT NULL, repo_key TEXT, ext_id TEXT NOT NULL, title TEXT, severity TEXT, \
+        opened_at_utc TEXT, resolved_at_utc TEXT, state TEXT, html_url TEXT, \
+        deploy_repo_key TEXT, deploy_kind TEXT, deploy_ext_id TEXT, \
+        PRIMARY KEY (source, ext_id))",
+    "CREATE INDEX IF NOT EXISTS idx_incidents_opened ON incidents(opened_at_utc)",
+    "CREATE INDEX IF NOT EXISTS idx_incidents_repo_opened ON incidents(repo_key, opened_at_utc)",
+    "CREATE INDEX IF NOT EXISTS idx_incidents_state ON incidents(state)",
 ];

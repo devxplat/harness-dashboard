@@ -4,7 +4,7 @@
 //! offline, deterministic half — so the field extraction and edge cases are fully
 //! `cargo test`-able from fixture JSON without any HTTP.
 
-use crate::model::{DeploymentRow, PullRequestRow};
+use crate::model::{DeploymentRow, IncidentRow, PullRequestRow};
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use serde_json::Value;
 
@@ -14,6 +14,49 @@ fn s(v: &Value, key: &str) -> Option<String> {
 
 fn i(v: &Value, key: &str) -> i64 {
     v.get(key).and_then(Value::as_i64).unwrap_or(0)
+}
+
+/// Best-effort severity from an issue's labels array (`severity:high`, `sev1`, `p1`…).
+fn parse_severity(labels: &Value) -> Option<String> {
+    let arr = labels.as_array()?;
+    for label in arr {
+        let Some(name) = label.get("name").and_then(Value::as_str) else {
+            continue;
+        };
+        let name = name.to_ascii_lowercase();
+        let token = name.strip_prefix("severity:").unwrap_or(&name).trim();
+        let sev = match token {
+            "critical" | "sev1" | "p0" => "critical",
+            "high" | "sev2" | "p1" => "high",
+            "medium" | "sev3" | "p2" => "medium",
+            "low" | "sev4" | "p3" => "low",
+            _ => continue,
+        };
+        return Some(sev.to_string());
+    }
+    None
+}
+
+/// Parse one item from `GET /repos/{o}/{r}/issues?labels=incident&state=all` into an
+/// incident. The issues endpoint also returns PRs (they carry a `pull_request` key) —
+/// those are skipped. A closed issue is treated as a resolved incident.
+pub fn parse_incident_issue(v: &Value, repo_key: &str) -> Option<IncidentRow> {
+    if v.get("pull_request").is_some() {
+        return None;
+    }
+    let number = v.get("number").and_then(Value::as_i64)?;
+    let closed = v.get("state").and_then(Value::as_str) == Some("closed");
+    Some(IncidentRow {
+        source: "github_issue".to_string(),
+        repo_key: Some(repo_key.to_string()),
+        ext_id: number.to_string(),
+        title: s(v, "title"),
+        severity: v.get("labels").and_then(parse_severity),
+        opened_at_utc: s(v, "created_at"),
+        resolved_at_utc: if closed { s(v, "closed_at") } else { None },
+        state: Some(if closed { "resolved" } else { "open" }.to_string()),
+        html_url: s(v, "html_url"),
+    })
 }
 
 /// Parse one item from `GET /repos/{o}/{r}/pulls?state=all`. `review_count` and
@@ -289,6 +332,41 @@ pub fn autosync_due(last_sync: Option<&str>, interval_min: i64, now: DateTime<Ut
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn parses_incident_issue_and_skips_prs() {
+        let inc = parse_incident_issue(
+            &json!({
+                "number": 7,
+                "title": "API down",
+                "state": "closed",
+                "created_at": "2026-06-20T09:00:00Z",
+                "closed_at": "2026-06-20T13:00:00Z",
+                "labels": [{ "name": "incident" }, { "name": "severity:high" }],
+                "html_url": "https://github.com/o/r/issues/7"
+            }),
+            "repo-key",
+        )
+        .unwrap();
+        assert_eq!(inc.ext_id, "7");
+        assert_eq!(inc.state.as_deref(), Some("resolved"));
+        assert_eq!(inc.resolved_at_utc.as_deref(), Some("2026-06-20T13:00:00Z"));
+        assert_eq!(inc.severity.as_deref(), Some("high"));
+
+        // An open issue has no resolved time.
+        let open = parse_incident_issue(
+            &json!({ "number": 8, "state": "open", "created_at": "2026-06-20T09:00:00Z" }),
+            "repo-key",
+        )
+        .unwrap();
+        assert_eq!(open.state.as_deref(), Some("open"));
+        assert!(open.resolved_at_utc.is_none());
+
+        // A PR returned by the issues endpoint is skipped.
+        assert!(
+            parse_incident_issue(&json!({ "number": 9, "pull_request": {} }), "repo-key").is_none()
+        );
+    }
 
     #[test]
     fn parses_a_merged_pr() {
