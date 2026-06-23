@@ -173,7 +173,7 @@ export default function DoraPage() {
           title={t("pages.dora.title")}
           description={t("pages.dora.description")}
         />
-        <div className="flex gap-1" role="group" aria-label="DORA grain">
+        <div className="flex gap-1" role="group" aria-label={t("pages.dora.grain")}>
           {(["day", "week", "month"] as Grain[]).map((g) => (
             <Button
               key={g}
@@ -189,19 +189,19 @@ export default function DoraPage() {
         </div>
       </div>
 
-      {empty ? <EmptyBlock message="No DORA data yet. Sync commits and optionally GitHub PRs/deployments first." /> : null}
+      {empty ? <EmptyBlock message={t("pages.dora.noData")} /> : null}
 
       <Tabs defaultValue="overview">
         <TabsList className="w-full justify-start overflow-x-auto" variant="line">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="trends">Trends</TabsTrigger>
-          <TabsTrigger value="prs">PRs</TabsTrigger>
-          <TabsTrigger value="deployments">Deployments</TabsTrigger>
+          <TabsTrigger value="trends">{t("pages.dora.trends")}</TabsTrigger>
+          <TabsTrigger value="prs">{t("pages.dora.prs")}</TabsTrigger>
+          <TabsTrigger value="deployments">{t("pages.dora.deployments")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
           {bundle.metrics.length === 0 ? (
-            <EmptyBlock message="No DORA metrics in range." />
+            <EmptyBlock message={t("pages.dora.noMetrics")} />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {bundle.metrics.map((m) => (
@@ -212,19 +212,19 @@ export default function DoraPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Repo comparison</CardTitle>
+              <CardTitle>{t("pages.dora.repoComparison")}</CardTitle>
             </CardHeader>
             <CardContent>
               {bundle.repoComparison.length ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Repo</TableHead>
+                      <TableHead>{t("pages.dora.repo")}</TableHead>
                       <TableHead className="text-right">Commits</TableHead>
-                      <TableHead className="text-right">Deploys</TableHead>
-                      <TableHead className="text-right">PRs</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.deploys")}</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.prs")}</TableHead>
                       <TableHead className="text-right">Lead</TableHead>
-                      <TableHead className="text-right">Failure proxy</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.failureProxy")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -238,7 +238,7 @@ export default function DoraPage() {
                         <TableCell className="text-right tabular-nums">
                           {formatInt(r.pr_count)}{" "}
                           <span className="text-xs text-muted-foreground">
-                            ({formatInt(r.merged_pr_count)} merged)
+                            ({formatInt(r.merged_pr_count)} {t("pages.dora.merged")})
                           </span>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{formatHours(r.avg_lead_hours)}</TableCell>
@@ -250,7 +250,7 @@ export default function DoraPage() {
                   </TableBody>
                 </Table>
               ) : (
-                <EmptyBlock message="No repo comparison rows in range." />
+                <EmptyBlock message={t("pages.dora.noRepoComparison")} />
               )}
             </CardContent>
           </Card>
@@ -259,64 +259,64 @@ export default function DoraPage() {
         <TabsContent value="trends" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Throughput and deploy frequency</CardTitle>
+              <CardTitle>{t("pages.dora.throughput")}</CardTitle>
             </CardHeader>
             <CardContent>
               {bundle.trends.length ? (
                 <DoraTrendChart data={bundle.trends} />
               ) : (
-                <EmptyBlock message="No trend data in range." />
+                <EmptyBlock message={t("pages.dora.noTrendData")} />
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Lead time trend</CardTitle>
+              <CardTitle>{t("pages.dora.leadTimeTrend")}</CardTitle>
             </CardHeader>
             <CardContent>
-              {bundle.trends.some((t) => t.avg_lead_hours != null) ? (
+              {bundle.trends.some((tr) => tr.avg_lead_hours != null) ? (
                 <DoraLeadTimeTrendChart data={bundle.trends} />
               ) : (
-                <EmptyBlock message="No merged PR lead-time samples in range." />
+                <EmptyBlock message={t("pages.dora.noLeadTime")} />
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Trend rows</CardTitle>
+              <CardTitle>{t("pages.dora.trendRows")}</CardTitle>
             </CardHeader>
             <CardContent>
               {bundle.trends.length ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Period</TableHead>
+                      <TableHead>{t("pages.dora.period")}</TableHead>
                       <TableHead className="text-right">Commits</TableHead>
-                      <TableHead className="text-right">Deploys</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.deploys")}</TableHead>
                       <TableHead className="text-right">Lead</TableHead>
-                      <TableHead className="text-right">Failure proxy</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.failureProxy")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {bundle.trends.map((t) => (
-                      <TableRow key={t.period}>
-                        <TableCell className="font-mono text-xs">{t.period}</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatInt(t.commits)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatInt(t.deploys)}</TableCell>
+                    {bundle.trends.map((tr) => (
+                      <TableRow key={tr.period}>
+                        <TableCell className="font-mono text-xs">{tr.period}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatInt(tr.commits)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatInt(tr.deploys)}</TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {formatHours(t.avg_lead_hours)}
+                          {formatHours(tr.avg_lead_hours)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {formatRate(t.change_failure_rate)}
+                          {formatRate(tr.change_failure_rate)}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               ) : (
-                <EmptyBlock message="No trend rows in range." />
+                <EmptyBlock message={t("pages.dora.noTrendRows")} />
               )}
             </CardContent>
           </Card>
@@ -325,39 +325,38 @@ export default function DoraPage() {
         <TabsContent value="prs" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>PR lead-time distribution</CardTitle>
+              <CardTitle>{t("pages.dora.prLeadTime")}</CardTitle>
             </CardHeader>
             <CardContent>
               {bundle.leadTimeDistribution.some((b) => b.pull_requests > 0) ? (
                 <LeadTimeDistributionChart data={bundle.leadTimeDistribution} />
               ) : (
-                <EmptyBlock message="No merged PR lead-time samples in range." />
+                <EmptyBlock message={t("pages.dora.noLeadTime")} />
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>PR cycle-time breakdown</CardTitle>
+              <CardTitle>{t("pages.dora.prCycleTime")}</CardTitle>
             </CardHeader>
             <CardContent>
               {bundle.prCycleTime.length ? (
                 <>
                   <PrCycleTimeChart data={bundle.prCycleTime.slice(0, 12)} />
                   <p className="pt-2 text-xs text-muted-foreground">
-                    Pickup = open → first review, Review = first review → merge. Coding time isn’t
-                    captured yet (needs feature-branch first-commit data).
+                    {t("pages.dora.prCycleTimeNote")}
                   </p>
                 </>
               ) : (
-                <EmptyBlock message="No merged PRs with timestamps in range." />
+                <EmptyBlock message={t("pages.dora.noPrTimestamps")} />
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>PR size distribution</CardTitle>
+              <CardTitle>{t("pages.dora.prSize")}</CardTitle>
             </CardHeader>
             <CardContent>
               {bundle.prSizeDistribution.some((b) => b.pull_requests > 0) ? (
@@ -365,43 +364,43 @@ export default function DoraPage() {
                   <PrSizeHistogramChart data={bundle.prSizeDistribution} />
                   <div className="grid grid-cols-2 gap-3 pt-3 text-sm sm:grid-cols-4">
                     <div>
-                      <p className="text-xs text-muted-foreground">Median churn</p>
+                      <p className="text-xs text-muted-foreground">{t("pages.dora.medianChurn")}</p>
                       <p className="tabular-nums">{formatInt(bundle.prChurnSummary.medianChurn)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">p90 churn</p>
+                      <p className="text-xs text-muted-foreground">{t("pages.dora.p90Churn")}</p>
                       <p className="tabular-nums">{formatInt(bundle.prChurnSummary.p90Churn)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Avg files</p>
+                      <p className="text-xs text-muted-foreground">{t("pages.dora.avgFiles")}</p>
                       <p className="tabular-nums">{num1(bundle.prChurnSummary.avgChangedFiles)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Rework proxy</p>
+                      <p className="text-xs text-muted-foreground">{t("pages.dora.reworkProxy")}</p>
                       <p className="tabular-nums">{formatRate(bundle.prChurnSummary.reworkProxyPct)}</p>
                     </div>
                   </div>
                 </>
               ) : (
-                <EmptyBlock message="No PRs in range." />
+                <EmptyBlock message={t("pages.dora.noPrs")} />
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>PR comparison</CardTitle>
+              <CardTitle>{t("pages.dora.prComparison")}</CardTitle>
             </CardHeader>
             <CardContent>
               {bundle.repoComparison.length ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Repo</TableHead>
-                      <TableHead className="text-right">PRs</TableHead>
-                      <TableHead className="text-right">Merged</TableHead>
+                      <TableHead>{t("pages.dora.repo")}</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.prs")}</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.merged")}</TableHead>
                       <TableHead className="text-right">Lead</TableHead>
-                      <TableHead className="text-right">AI overlap</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.aiOverlap")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -423,7 +422,7 @@ export default function DoraPage() {
                   </TableBody>
                 </Table>
               ) : (
-                <EmptyBlock message="No PR comparison rows in range." />
+                <EmptyBlock message={t("pages.dora.noRepoComparison")} />
               )}
             </CardContent>
           </Card>
@@ -432,29 +431,29 @@ export default function DoraPage() {
         <TabsContent value="deployments" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Deployment timeline</CardTitle>
+              <CardTitle>{t("pages.dora.deployTimeline")}</CardTitle>
             </CardHeader>
             <CardContent>
               {bundle.deploymentTimeline.length ? (
                 <DeploymentTimelineChart data={bundle.deploymentTimeline} />
               ) : (
-                <EmptyBlock message="No deployment data in range." />
+                <EmptyBlock message={t("pages.dora.noDeployments")} />
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Deployment rows by repo</CardTitle>
+              <CardTitle>{t("pages.dora.deployRows")}</CardTitle>
             </CardHeader>
             <CardContent>
               {bundle.repoComparison.some((r) => r.deploys > 0) ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Repo</TableHead>
-                      <TableHead className="text-right">Deploys</TableHead>
-                      <TableHead className="text-right">Failure proxy</TableHead>
+                      <TableHead>{t("pages.dora.repo")}</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.deploys")}</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.failureProxy")}</TableHead>
                       <TableHead className="text-right">Commits</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -477,25 +476,25 @@ export default function DoraPage() {
                   </TableBody>
                 </Table>
               ) : (
-                <EmptyBlock message="No deployment rows in range." />
+                <EmptyBlock message={t("pages.dora.noDeployments")} />
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Incidents</CardTitle>
+              <CardTitle>{t("pages.dora.incidents")}</CardTitle>
             </CardHeader>
             <CardContent>
               {incidents.length ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Opened</TableHead>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Severity</TableHead>
-                      <TableHead>State</TableHead>
-                      <TableHead className="text-right">MTTR</TableHead>
+                      <TableHead>{t("pages.dora.opened")}</TableHead>
+                      <TableHead>{t("pages.dora.incidentTitle")}</TableHead>
+                      <TableHead>{t("pages.dora.severity")}</TableHead>
+                      <TableHead>{t("pages.dora.state")}</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.mttr")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -517,7 +516,7 @@ export default function DoraPage() {
                   </TableBody>
                 </Table>
               ) : (
-                <EmptyBlock message="No incidents in range. Label GitHub issues “incident” to populate exact MTTR and change-failure rate." />
+                <EmptyBlock message={t("pages.dora.noIncidents")} />
               )}
             </CardContent>
           </Card>
@@ -525,8 +524,7 @@ export default function DoraPage() {
       </Tabs>
 
       <p className="text-xs text-muted-foreground">
-        Reverts/hotfixes and failed deploys are proxies; connect GitHub and label incident issues
-        “incident” for exact MTTR and change-failure rate.
+        {t("pages.dora.incidentNote")}
       </p>
     </>
   );

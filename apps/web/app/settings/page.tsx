@@ -164,18 +164,18 @@ function Capability({ enabled, label }: { enabled: boolean; label: string }) {
   );
 }
 
-function usageLabel(capabilities: ProviderCapabilitySet) {
+function usageLabel(capabilities: ProviderCapabilitySet, t: (key: string) => string) {
   const usage = capabilities.usage;
-  if (usage === "exact") return "exact tokens";
-  if (usage === "reported") return "reported tokens";
-  return "missing tokens";
+  if (usage === "exact") return t("settings.capability.exactTokens");
+  if (usage === "reported") return t("settings.capability.reportedTokens");
+  return t("settings.capability.missingTokens");
 }
 
-function costLabel(capabilities: ProviderCapabilitySet) {
+function costLabel(capabilities: ProviderCapabilitySet, t: (key: string) => string) {
   const cost = capabilities.cost;
-  if (cost === "estimated") return "estimated cost";
-  if (cost === "reported") return "reported cost";
-  return "missing cost";
+  if (cost === "estimated") return t("settings.capability.estimatedCost");
+  if (cost === "reported") return t("settings.capability.reportedCost");
+  return t("settings.capability.missingCost");
 }
 
 function CapabilityBadges({
@@ -185,16 +185,17 @@ function CapabilityBadges({
   label: string;
   capabilities: ProviderCapabilitySet;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1">
       <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
       <div className="flex flex-wrap gap-1.5">
-        <Capability enabled={capabilities.tokens} label={usageLabel(capabilities)} />
-        <Capability enabled={capabilities.tools} label="tools" />
-        <Capability enabled={capabilities.costs} label={costLabel(capabilities)} />
-        <Capability enabled={capabilities.prompts} label="prompts" />
+        <Capability enabled={capabilities.tokens} label={usageLabel(capabilities, t)} />
+        <Capability enabled={capabilities.tools} label={t("settings.capability.tools")} />
+        <Capability enabled={capabilities.costs} label={costLabel(capabilities, t)} />
+        <Capability enabled={capabilities.prompts} label={t("settings.capability.prompts")} />
       </div>
     </div>
   );
@@ -207,6 +208,7 @@ function ProviderSettingsCard({
   provider: ProviderConfig;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
   const [enabled, setEnabled] = useState(provider.enabled);
   const [sources, setSources] = useState<ProviderSourceConfig[]>(provider.sources ?? []);
   const [saving, setSaving] = useState(false);
@@ -261,23 +263,23 @@ function ProviderSettingsCard({
     <IntegrationCard
       icon={<Icon className="size-5" />}
       name={provider.label}
-      description="Local CLI sessions scanned for tokens, tools and cost."
+      description={t("settings.provider.description")}
       connected={provider.discovered}
       statusText={statusText}
     >
       <div className="space-y-3">
-        <CapabilityBadges label="Supports" capabilities={provider.supported ?? provider.capabilities} />
-        <CapabilityBadges label="Observed" capabilities={provider.observed ?? provider.capabilities} />
+        <CapabilityBadges label={t("settings.provider.supports")} capabilities={provider.supported ?? provider.capabilities} />
+        <CapabilityBadges label={t("settings.provider.observed")} capabilities={provider.observed ?? provider.capabilities} />
         {sources.length > 0 && (
           <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-            <div className="text-xs font-medium text-muted-foreground">Sources</div>
+            <div className="text-xs font-medium text-muted-foreground">{t("settings.provider.sources")}</div>
             {sources.map((source) => (
               <div key={source.key} className="space-y-2 rounded-md border bg-background p-2">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-medium">{source.label}</div>
                     <div className="text-[11px] text-muted-foreground">
-                      {source.discovered ? "Discovered" : "Not discovered"}
+                      {source.discovered ? t("settings.provider.discovered") : t("settings.provider.notDiscovered")}
                       {source.env_var ? ` - ${source.env_var}` : ""}
                     </div>
                   </div>
@@ -290,7 +292,7 @@ function ProviderSettingsCard({
                       }
                       className="size-4 accent-primary"
                     />
-                    Enabled
+                    {t("settings.provider.enabled")}
                   </label>
                 </div>
                 <input
@@ -298,23 +300,23 @@ function ProviderSettingsCard({
                   onChange={(event) =>
                     updateSource(source.key, { configured_path: event.target.value })
                   }
-                  placeholder={source.default_path ?? "Set path"}
+                  placeholder={source.default_path ?? t("settings.provider.setPath")}
                   className="h-8 w-full rounded-md border bg-background px-2 font-mono text-[11px] outline-none transition-colors focus:border-primary"
                   aria-label={`${source.label} path`}
                 />
                 <p className="break-all text-[11px] text-muted-foreground">
-                  Active: {source.active_path ?? "not configured"}
+                  {t("settings.provider.active")} {source.active_path ?? t("settings.provider.notConfigured")}
                 </p>
                 {!source.discovered && source.setup_hint ? (
                   <p className="text-[11px] text-muted-foreground">{source.setup_hint}</p>
                 ) : null}
                 <div className="grid gap-2 sm:grid-cols-2">
                   <CapabilityBadges
-                    label="Supports"
+                    label={t("settings.provider.supports")}
                     capabilities={source.supported ?? source.capabilities}
                   />
                   <CapabilityBadges
-                    label="Observed"
+                    label={t("settings.provider.observed")}
                     capabilities={source.observed ?? source.capabilities}
                   />
                 </div>
@@ -330,10 +332,10 @@ function ProviderSettingsCard({
               onChange={(event) => setEnabled(event.target.checked)}
               className="size-4 accent-primary"
             />
-            Enabled
+            {t("settings.provider.enabled")}
           </label>
           <Button size="sm" onClick={save} disabled={saving}>
-            Save
+            {t("settings.provider.save")}
           </Button>
         </div>
       </div>
@@ -350,14 +352,15 @@ function GeneralSettings({
   onPlan: (plan: string) => void;
   saving: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <Card className="max-w-xl">
       <CardHeader>
-        <CardTitle>Pricing plan</CardTitle>
+        <CardTitle>{t("settings.general.pricingPlan")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <Select defaultValue={data.plan} onValueChange={onPlan} disabled={saving}>
-          <SelectTrigger className="w-56" aria-label="Pricing plan">
+          <SelectTrigger className="w-56" aria-label={t("settings.general.pricingPlan")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -370,11 +373,11 @@ function GeneralSettings({
         </Select>
         <dl className="space-y-1 text-sm">
           <div className="flex gap-2">
-            <dt className="text-muted-foreground">Claude dir</dt>
+            <dt className="text-muted-foreground">{t("settings.general.claudeDir")}</dt>
             <dd className="font-mono text-xs">{data.claude_dir}</dd>
           </div>
           <div className="flex gap-2">
-            <dt className="text-muted-foreground">Projects dir</dt>
+            <dt className="text-muted-foreground">{t("settings.general.projectsDir")}</dt>
             <dd className="font-mono text-xs">{data.projects_dir}</dd>
           </div>
         </dl>
@@ -384,18 +387,18 @@ function GeneralSettings({
 }
 
 function OnboardingSettings() {
+  const { t } = useTranslation();
   return (
     <Card className="max-w-xl">
       <CardHeader>
-        <CardTitle>Setup wizard</CardTitle>
+        <CardTitle>{t("settings.onboarding.title")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Run the first-run setup again any time — pick your copilots, connect GitHub and your
-          calendar, and configure the initial scan + backfill. It opens as a full-screen flow.
+          {t("settings.onboarding.description")}
         </p>
         <Button asChild>
-          <Link href="/onboarding">Open setup wizard</Link>
+          <Link href="/onboarding">{t("settings.onboarding.openWizard")}</Link>
         </Button>
       </CardContent>
     </Card>
@@ -489,7 +492,7 @@ export default function SettingsPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No AI sources detected yet.</p>
+              <p className="text-sm text-muted-foreground">{t("settings.provider.noSources")}</p>
             ))}
 
           {section === "general" && <GeneralSettings data={data} onPlan={setPlan} saving={saving} />}

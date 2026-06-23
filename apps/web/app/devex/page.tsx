@@ -63,6 +63,7 @@ function LikertRow({
 }
 
 function PulseForm({ onSubmitted }: { onSubmitted: () => void }) {
+  const { t } = useTranslation();
   const [answers, setAnswers] = useState<Answers>({});
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -92,13 +93,13 @@ function PulseForm({ onSubmitted }: { onSubmitted: () => void }) {
         />
       ))}
       <Input
-        placeholder="Optional note (journal line)…"
+        placeholder={t("pages.devex.notePlaceholder")}
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />
       <div className="flex justify-end">
         <Button onClick={submit} disabled={saving || !hasAny}>
-          {saving ? "Saving…" : "Log pulse"}
+          {saving ? t("pages.devex.saving") : t("pages.devex.logPulse")}
         </Button>
       </div>
     </div>
@@ -136,12 +137,14 @@ export default function DevExPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{loggedToday ? "Today's pulse logged" : "How was today?"}</CardTitle>
+          <CardTitle>
+            {loggedToday ? t("pages.devex.todayLogged") : t("pages.devex.howWasToday")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {loggedToday ? (
             <p className="text-sm text-muted-foreground">
-              You already logged a pulse today. Add another any time.
+              {t("pages.devex.alreadyLogged")}
             </p>
           ) : null}
           <div className={cn(loggedToday && "pt-3")}>
@@ -152,27 +155,27 @@ export default function DevExPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Sentiment vs commits</CardTitle>
+          <CardTitle>{t("pages.devex.sentimentVsCommits")}</CardTitle>
         </CardHeader>
         <CardContent>
           {b.trend.some((t) => t.responses > 0) ? (
             <SentimentTrendChart data={b.trend} />
           ) : (
-            <EmptyBlock message="Log a few pulses to see sentiment trends." />
+            <EmptyBlock message={t("pages.devex.noSentiment")} />
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Correlations (sentiment × output)</CardTitle>
+          <CardTitle>{t("pages.devex.correlations")}</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Sentiment</TableHead>
-                <TableHead>Metric</TableHead>
+                <TableHead>{t("pages.devex.sentiment")}</TableHead>
+                <TableHead>{t("pages.devex.metric")}</TableHead>
                 <TableHead className="text-right">r</TableHead>
                 <TableHead className="text-right">n</TableHead>
               </TableRow>
@@ -197,26 +200,26 @@ export default function DevExPage() {
             </TableBody>
           </Table>
           <p className="pt-2 text-xs text-muted-foreground">
-            Pearson r over the daily series; shown only at n ≥ 3. Directional, not causal.
+            {t("pages.devex.correlationNote")}
           </p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Journal</CardTitle>
+          <CardTitle>{t("pages.devex.journal")}</CardTitle>
         </CardHeader>
         <CardContent>
           {b.responses.length ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead className="text-right">Flow</TableHead>
-                  <TableHead className="text-right">Prod.</TableHead>
+                  <TableHead>{t("pages.devex.when")}</TableHead>
+                  <TableHead className="text-right">{t("pages.devex.flow")}</TableHead>
+                  <TableHead className="text-right">{t("pages.devex.prod")}</TableHead>
                   <TableHead className="text-right">AI</TableHead>
-                  <TableHead className="text-right">Satisf.</TableHead>
-                  <TableHead>Note</TableHead>
+                  <TableHead className="text-right">{t("pages.devex.satisf")}</TableHead>
+                  <TableHead>{t("pages.devex.note")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -235,7 +238,7 @@ export default function DevExPage() {
               </TableBody>
             </Table>
           ) : (
-            <EmptyBlock message="No pulses logged yet." />
+            <EmptyBlock message={t("pages.devex.noPulses")} />
           )}
         </CardContent>
       </Card>

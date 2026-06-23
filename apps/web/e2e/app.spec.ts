@@ -67,6 +67,7 @@ test.describe("projects and tools", () => {
 test.describe("settings", () => {
   test("plan select updates the trigger", async ({ page }) => {
     await page.goto("/settings/");
+    await page.getByRole("button", { name: /General/ }).click();
     await expect(page.getByText("Pricing plan", { exact: true })).toBeVisible();
     const combobox = page.getByRole("combobox", { name: "Pricing plan" });
     await combobox.click();

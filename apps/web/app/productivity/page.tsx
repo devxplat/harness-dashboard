@@ -38,7 +38,8 @@ import type {
   ProductivitySummary,
   PullRequestRow,
 } from "@/lib/types";
-import { useState } from "react";
+import type { TFunction } from "i18next";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 type Grain = "day" | "week" | "month";
@@ -60,11 +61,13 @@ function StatCard({
   value,
   detail,
   estimated,
+  estimatedLabel,
 }: {
   label: string;
   value: string;
   detail?: string;
   estimated?: boolean;
+  estimatedLabel?: string;
 }) {
   return (
     <Card>
@@ -72,7 +75,7 @@ function StatCard({
         <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
         {estimated ? (
           <Badge variant="outline" className="text-[10px]">
-            estimated
+            {estimatedLabel}
           </Badge>
         ) : null}
       </CardHeader>
@@ -84,15 +87,16 @@ function StatCard({
   );
 }
 
-function SummaryGrid({ summary }: { summary: ProductivitySummary }) {
+function SummaryGrid({ summary, t }: { summary: ProductivitySummary; t: TFunction }) {
   const aiPct =
     summary.commits > 0 ? Math.round((summary.ai_commits / summary.commits) * 100) : 0;
+  const estimatedLabel = t("pages.productivity.estimated");
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard
-        label="Commits"
+        label={t("pages.productivity.commits")}
         value={formatInt(summary.commits)}
-        detail={`${formatInt(summary.ai_commits)} AI-assisted (${aiPct}%)`}
+        detail={`${formatInt(summary.ai_commits)} ${t("pages.productivity.aiAssisted")} (${aiPct}%)`}
       />
       <StatCard
         label="Assistant messages"
@@ -104,29 +108,32 @@ function SummaryGrid({ summary }: { summary: ProductivitySummary }) {
         value={formatMinutes(summary.focus_minutes)}
         detail={`${formatMinutes(summary.flow_minutes)} estimated flow time`}
         estimated
+        estimatedLabel={estimatedLabel}
       />
       <StatCard
         label="Post-meeting warm-up"
         value={formatMinutes(summary.avg_warmup_minutes)}
         detail={`${formatMinutes(summary.meeting_minutes)} in busy meetings`}
         estimated
+        estimatedLabel={estimatedLabel}
       />
     </div>
   );
 }
 
-function FocusBlocksTable({ blocks }: { blocks: FocusBlockRow[] }) {
+
+function FocusBlocksTable({ blocks, t }: { blocks: FocusBlockRow[]; t: TFunction }) {
   const rows = [...blocks].sort((a, b) => b.duration_minutes - a.duration_minutes).slice(0, 10);
-  if (!rows.length) return <EmptyBlock message="No focus blocks found in this range." />;
+  if (!rows.length) return <EmptyBlock message={t("pages.productivity.noFocusBlocks")} />;
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Started</TableHead>
-          <TableHead>Ended</TableHead>
-          <TableHead className="text-right">Active span</TableHead>
-          <TableHead className="text-right">Events</TableHead>
-          <TableHead>Mode</TableHead>
+          <TableHead>{t("pages.productivity.started")}</TableHead>
+          <TableHead>{t("pages.productivity.ended")}</TableHead>
+          <TableHead className="text-right">{t("pages.productivity.activeSpan")}</TableHead>
+          <TableHead className="text-right">{t("pages.productivity.events")}</TableHead>
+          <TableHead>{t("pages.productivity.mode")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -146,7 +153,9 @@ function FocusBlocksTable({ blocks }: { blocks: FocusBlockRow[] }) {
               </span>
             </TableCell>
             <TableCell>
-              <Badge variant={b.flow ? "default" : "outline"}>{b.flow ? "flow" : "focus"}</Badge>
+              <Badge variant={b.flow ? "default" : "outline"}>
+                {b.flow ? t("pages.productivity.flowMode") : t("pages.productivity.focusMode")}
+              </Badge>
             </TableCell>
           </TableRow>
         ))}
@@ -155,31 +164,32 @@ function FocusBlocksTable({ blocks }: { blocks: FocusBlockRow[] }) {
   );
 }
 
-function MeetingImpactCards({ impact }: { impact: MeetingImpact | null }) {
+function MeetingImpactCards({ impact, t }: { impact: MeetingImpact | null; t: TFunction }) {
   if (!impact) {
-    return (
-      <EmptyBlock message="No calendar overlap was found. Connect Google Calendar to compare meetings and productive output." />
-    );
+    return <EmptyBlock message={t("pages.productivity.noCalendarOverlap")} />;
   }
   const pct = (during: number, free: number) =>
     Math.round((during / Math.max(1, during + free)) * 100);
+  const estimatedLabel = t("pages.productivity.estimated");
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <StatCard
-        label="Assistant messages during meetings"
+        label={t("pages.productivity.assistantDuringMeetings")}
         value={`${pct(impact.during_messages, impact.free_messages)}%`}
         detail={`${formatInt(impact.during_messages)} of ${formatInt(
           impact.during_messages + impact.free_messages,
         )} messages`}
         estimated
+        estimatedLabel={estimatedLabel}
       />
       <StatCard
-        label="Commits during meetings"
+        label={t("pages.productivity.commitsDuringMeetings")}
         value={`${pct(impact.during_commits, impact.free_commits)}%`}
         detail={`${formatInt(impact.during_commits)} of ${formatInt(
           impact.during_commits + impact.free_commits,
         )} commits`}
         estimated
+        estimatedLabel={estimatedLabel}
       />
     </div>
   );
@@ -243,10 +253,10 @@ export default function ProductivityPage() {
       </div>
 
       {!hasActivity ? (
-        <EmptyBlock message="No productivity data in range. Sync commits, PRs, calendar events, or assistant activity first." />
+        <EmptyBlock message={t("pages.productivity.noData")} />
       ) : null}
 
-      <SummaryGrid summary={data.summary} />
+      <SummaryGrid summary={data.summary} t={t} />
 
       <Tabs defaultValue="overview">
         <TabsList className="w-full justify-start overflow-x-auto" variant="line">
@@ -260,11 +270,11 @@ export default function ProductivityPage() {
           <div className="grid items-stretch gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle>AI-assisted vs by hand</CardTitle>
+                <CardTitle>{t("pages.productivity.aiVsHand")}</CardTitle>
                 {ai && ai.total > 0 ? (
                   <span className="text-sm text-muted-foreground">
                     <span className="font-semibold text-foreground">{Math.round(ai.pct * 100)}%</span>{" "}
-                    AI-assisted - {formatInt(ai.ai)}/{formatInt(ai.total)} commits
+                    {t("pages.productivity.aiAssisted")} - {formatInt(ai.ai)}/{formatInt(ai.total)} {t("pages.productivity.commits")}
                   </span>
                 ) : null}
               </CardHeader>
@@ -274,7 +284,7 @@ export default function ProductivityPage() {
                 ) : legacyProd.aiByDay.length ? (
                   <AiSplitChart data={legacyProd.aiByDay} />
                 ) : (
-                  <EmptyBlock message="No commits in range." />
+                  <EmptyBlock message={t("pages.productivity.noCommits")} />
                 )}
               </CardContent>
             </Card>
@@ -292,20 +302,20 @@ export default function ProductivityPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Productivity trend</CardTitle>
+              <CardTitle>{t("pages.productivity.productivityTrend")}</CardTitle>
             </CardHeader>
             <CardContent>
               {data.periods.length ? (
                 <ProductivityPeriodChart data={data.periods} />
               ) : (
-                <EmptyBlock message="No trend data in range." />
+                <EmptyBlock message={t("pages.productivity.noTrendData")} />
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Commits</CardTitle>
+              <CardTitle>{t("pages.productivity.commits")}</CardTitle>
             </CardHeader>
             <CardContent>
               {!commits.data ? (
@@ -315,7 +325,7 @@ export default function ProductivityPage() {
                   ))}
                 </div>
               ) : commits.data.length === 0 ? (
-                <EmptyBlock message="No commits in range. Local git history is read from discovered workspaces." />
+                <EmptyBlock message={t("pages.productivity.noCommits")} />
               ) : (
                 <CommitsTable commits={commits.data} />
               )}
@@ -327,25 +337,25 @@ export default function ProductivityPage() {
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader>
-              <CardTitle>Estimated focus active span and flow trend</CardTitle>
+                <CardTitle>{t("pages.productivity.focusTrend")}</CardTitle>
               </CardHeader>
               <CardContent>
                 {data.periods.length ? (
                   <FocusTrendChart data={data.periods} />
                 ) : (
-                  <EmptyBlock message="No focus trend in range." />
+                  <EmptyBlock message={t("pages.productivity.noFocusTrend")} />
                 )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Warm-up buckets</CardTitle>
+                <CardTitle>{t("pages.productivity.warmupBuckets")}</CardTitle>
               </CardHeader>
               <CardContent>
                 {data.warmup.some((b) => b.count > 0) ? (
                   <WarmupBucketChart data={data.warmup} />
                 ) : (
-                  <EmptyBlock message="No post-meeting warm-up samples in range." />
+                  <EmptyBlock message={t("pages.productivity.noWarmup")} />
                 )}
               </CardContent>
             </Card>
@@ -353,33 +363,33 @@ export default function ProductivityPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Longest estimated focus blocks</CardTitle>
+              <CardTitle>{t("pages.productivity.longestFocusBlocks")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <FocusBlocksTable blocks={data.focusBlocks} />
+              <FocusBlocksTable blocks={data.focusBlocks} t={t} />
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="calendar" className="space-y-4">
-          <MeetingImpactCards impact={meetingImpact} />
+          <MeetingImpactCards impact={meetingImpact} t={t} />
 
           <Card>
             <CardHeader>
-              <CardTitle>Meeting load vs productive time</CardTitle>
+              <CardTitle>{t("pages.productivity.meetingVsProductive")}</CardTitle>
             </CardHeader>
             <CardContent>
               {data.periods.length ? (
                 <FocusTrendChart data={data.periods} />
               ) : (
-                <EmptyBlock message="No calendar trend in range." />
+                <EmptyBlock message={t("pages.productivity.noCalendarTrend")} />
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Meeting-heavy periods</CardTitle>
+              <CardTitle>{t("pages.productivity.meetingHeavy")}</CardTitle>
             </CardHeader>
             <CardContent>
               {meetingHeavy.length ? (
@@ -387,10 +397,10 @@ export default function ProductivityPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Period</TableHead>
-                      <TableHead className="text-right">Meetings</TableHead>
-                      <TableHead className="text-right">Focus</TableHead>
+                      <TableHead className="text-right">{t("pages.productivity.meetings")}</TableHead>
+                      <TableHead className="text-right">{t("pages.productivity.focus")}</TableHead>
                       <TableHead className="text-right">Flow</TableHead>
-                      <TableHead className="text-right">Avg warm-up</TableHead>
+                      <TableHead className="text-right">{t("pages.productivity.avgWarmup")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -410,7 +420,7 @@ export default function ProductivityPage() {
                   </TableBody>
                 </Table>
               ) : (
-                <EmptyBlock message="No busy meeting periods found." />
+                <EmptyBlock message={t("pages.productivity.noBusyPeriods")} />
               )}
             </CardContent>
           </Card>
@@ -419,20 +429,20 @@ export default function ProductivityPage() {
         <TabsContent value="prs" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Repo and PR comparison</CardTitle>
+              <CardTitle>{t("pages.productivity.repoPrComparison")}</CardTitle>
             </CardHeader>
             <CardContent>
               {data.prCorrelation.length ? (
                 <PrImpactChart data={data.prCorrelation} />
               ) : (
-                <EmptyBlock message="No PR correlation data. Sync GitHub PRs to populate this view." />
+                <EmptyBlock message={t("pages.productivity.noPrCorrelation")} />
               )}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>PR impact rows</CardTitle>
+              <CardTitle>{t("pages.productivity.prImpactRows")}</CardTitle>
             </CardHeader>
             <CardContent>
               {data.prCorrelation.length ? (
@@ -440,11 +450,11 @@ export default function ProductivityPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Repo</TableHead>
-                      <TableHead className="text-right">PRs</TableHead>
+                      <TableHead className="text-right">{t("pages.productivity.pullRequests")}</TableHead>
                       <TableHead className="text-right">Merged</TableHead>
                       <TableHead className="text-right">Lead</TableHead>
-                      <TableHead className="text-right">Review wait</TableHead>
-                      <TableHead className="text-right">Churn</TableHead>
+                      <TableHead className="text-right">{t("pages.productivity.reviewWait")}</TableHead>
+                      <TableHead className="text-right">{t("pages.productivity.churn")}</TableHead>
                       <TableHead className="text-right">AI overlap</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -473,7 +483,7 @@ export default function ProductivityPage() {
                   </TableBody>
                 </Table>
               ) : (
-                <EmptyBlock message="No PR rows in range." />
+                <EmptyBlock message={t("pages.productivity.noSyncedPrs")} />
               )}
             </CardContent>
           </Card>
@@ -481,7 +491,7 @@ export default function ProductivityPage() {
           {prs.data && prs.data.length > 0 ? (
             <Card>
               <CardHeader>
-                <CardTitle>Pull requests</CardTitle>
+                <CardTitle>{t("pages.productivity.pullRequests")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -489,8 +499,8 @@ export default function ProductivityPage() {
                     <TableRow>
                       <TableHead>#</TableHead>
                       <TableHead>Title</TableHead>
-                      <TableHead>State</TableHead>
-                      <TableHead className="text-right">Lines</TableHead>
+                      <TableHead>{t("pages.productivity.status")}</TableHead>
+                      <TableHead className="text-right">{t("pages.productivity.lines")}</TableHead>
                       <TableHead className="text-right">AI</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -526,21 +536,21 @@ export default function ProductivityPage() {
               </CardContent>
             </Card>
           ) : (
-            <EmptyBlock message="No synced pull requests in range." />
+            <EmptyBlock message={t("pages.productivity.noSyncedPrs")} />
           )}
 
           {deployments.data && deployments.data.length > 0 ? (
             <Card>
               <CardHeader>
-                <CardTitle>Deployments</CardTitle>
+                <CardTitle>{t("pages.productivity.deployments")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Kind</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>{t("pages.productivity.name")}</TableHead>
+                      <TableHead>{t("pages.productivity.kind")}</TableHead>
+                      <TableHead>{t("pages.productivity.status")}</TableHead>
                       <TableHead>When</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -568,14 +578,13 @@ export default function ProductivityPage() {
               </CardContent>
             </Card>
           ) : (
-            <EmptyBlock message="No synced deployments in range." />
+            <EmptyBlock message={t("pages.productivity.noSyncedDeployments")} />
           )}
         </TabsContent>
       </Tabs>
 
       <p className="text-xs text-muted-foreground">
-        Focus, flow, meeting impact, and warm-up are estimated from local timestamps. DORA and PR
-        metrics use source-backed fields when available.
+        {t("pages.productivity.focusNote")}
       </p>
     </>
   );

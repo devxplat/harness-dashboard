@@ -10,13 +10,14 @@ import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { WorkspaceRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
+import type { TFunction } from "i18next";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-const makeColumns = (short: boolean): ColumnDef<WorkspaceRow>[] => [
+const makeColumns = (short: boolean, t: TFunction): ColumnDef<WorkspaceRow>[] => [
   {
     accessorKey: "workspace",
-    header: "Workspace",
+    header: t("pages.workspaces.workspace"),
     cell: ({ row }) => (
       <ProjectCell
         cwd={row.original.sample_cwd}
@@ -28,13 +29,13 @@ const makeColumns = (short: boolean): ColumnDef<WorkspaceRow>[] => [
   },
   {
     accessorKey: "calls",
-    header: "File-edit calls",
+    header: t("pages.workspaces.fileEditCalls"),
     cell: ({ row }) => formatInt(row.original.calls),
     meta: { align: "right" },
   },
   {
     accessorKey: "files",
-    header: "Files touched",
+    header: t("pages.workspaces.filesTouched"),
     cell: ({ row }) => formatInt(row.original.files),
     meta: { align: "right" },
   },
@@ -43,7 +44,7 @@ const makeColumns = (short: boolean): ColumnDef<WorkspaceRow>[] => [
 export default function WorkspacesPage() {
   const { t } = useTranslation();
   const [shortNames, setShortNames] = useState(true);
-  const columns = useMemo(() => makeColumns(shortNames), [shortNames]);
+  const columns = useMemo(() => makeColumns(shortNames, t), [shortNames, t]);
   const { since, until } = useRange();
   const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<WorkspaceRow[]>(
@@ -54,7 +55,7 @@ export default function WorkspacesPage() {
 
   if (error) return <ErrorBlock error={error} />;
   if (settingsLoaded && !hasAvailableProviders) {
-    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+    return <EmptyBlock message={t("common.noProviders")} />;
   }
   if (loading || !data) return <LoadingBlock />;
 
@@ -62,7 +63,7 @@ export default function WorkspacesPage() {
     <>
       <PageTitle title={t("pages.workspaces.title")} description={t("pages.workspaces.description")} />
       {data.length === 0 ? (
-        <EmptyBlock message="No file-editing activity in range." />
+        <EmptyBlock message={t("pages.workspaces.noActivity")} />
       ) : (
         <DataTable
           columns={columns}
@@ -74,7 +75,7 @@ export default function WorkspacesPage() {
           }}
           actions={<PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />}
           pageSize={25}
-          emptyMessage="No workspaces match."
+          emptyMessage={t("pages.workspaces.noMatch")}
         />
       )}
     </>

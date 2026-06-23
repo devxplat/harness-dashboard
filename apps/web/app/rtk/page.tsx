@@ -17,9 +17,9 @@ export default function RtkPage() {
     <>
       <PageTitle title={t("pages.rtk.title")} description={t("pages.rtk.description")} />
       {data.available ? (
-        <EmptyBlock message="RTK detected — detailed savings views arrive in a follow-up." />
+        <EmptyBlock message={t("pages.rtk.installed")} />
       ) : (
-        <EmptyBlock message="RTK is not installed on this machine, so there are no savings to show." />
+        <EmptyBlock message={t("pages.rtk.notInstalled")} />
       )}
     </>
   );

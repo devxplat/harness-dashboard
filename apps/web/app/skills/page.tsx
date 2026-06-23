@@ -9,43 +9,48 @@ import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { SkillRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
+import { useMemo } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
-const columns: ColumnDef<SkillRow>[] = [
-  {
-    accessorKey: "skill",
-    header: "Skill",
-    cell: ({ row }) => <span className="font-medium">{row.original.skill}</span>,
-  },
-  {
-    accessorKey: "manual_sessions",
-    header: "You ran",
-    cell: ({ row }) => formatInt(row.original.manual_sessions),
-    meta: { align: "right" },
-  },
-  {
-    accessorKey: "tool_invocations",
-    header: "Claude invoked",
-    cell: ({ row }) => formatInt(row.original.tool_invocations),
-    meta: { align: "right" },
-  },
-  {
-    accessorKey: "sessions",
-    header: "Sessions",
-    cell: ({ row }) => formatInt(row.original.sessions),
-    meta: { align: "right" },
-  },
-  {
-    accessorKey: "last_used",
-    header: "Last used",
-    cell: ({ row }) => (
-      <span className="text-xs text-muted-foreground">{formatDate(row.original.last_used)}</span>
-    ),
-  },
-];
+function makeColumns(t: TFunction): ColumnDef<SkillRow>[] {
+  return [
+    {
+      accessorKey: "skill",
+      header: t("pages.skills.skill"),
+      cell: ({ row }) => <span className="font-medium">{row.original.skill}</span>,
+    },
+    {
+      accessorKey: "manual_sessions",
+      header: t("pages.skills.youRan"),
+      cell: ({ row }) => formatInt(row.original.manual_sessions),
+      meta: { align: "right" },
+    },
+    {
+      accessorKey: "tool_invocations",
+      header: t("pages.skills.claudeInvoked"),
+      cell: ({ row }) => formatInt(row.original.tool_invocations),
+      meta: { align: "right" },
+    },
+    {
+      accessorKey: "sessions",
+      header: t("pages.skills.sessions"),
+      cell: ({ row }) => formatInt(row.original.sessions),
+      meta: { align: "right" },
+    },
+    {
+      accessorKey: "last_used",
+      header: t("pages.skills.lastUsed"),
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">{formatDate(row.original.last_used)}</span>
+      ),
+    },
+  ];
+}
 
 export default function SkillsPage() {
   const { t } = useTranslation();
+  const columns = useMemo(() => makeColumns(t), [t]);
   const { since, until } = useRange();
   const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<SkillRow[]>(
@@ -56,7 +61,7 @@ export default function SkillsPage() {
 
   if (error) return <ErrorBlock error={error} />;
   if (settingsLoaded && !hasAvailableProviders) {
-    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+    return <EmptyBlock message={t("common.noProviders")} />;
   }
   if (loading || !data) return <LoadingBlock />;
 
@@ -67,18 +72,18 @@ export default function SkillsPage() {
         description={t("pages.skills.description")}
       />
       {data.length === 0 ? (
-        <EmptyBlock message="No skill or slash-command activity in range." />
+        <EmptyBlock message={t("pages.skills.noActivity")} />
       ) : (
         <DataTable
           columns={columns}
           data={data}
           search={{
             fields: ["skill"],
-            placeholder: "Filter skills…",
+            placeholder: t("common.search"),
             ariaLabel: "Filter skills",
           }}
           pageSize={25}
-          emptyMessage="No skills match."
+          emptyMessage={t("pages.skills.noMatch")}
         />
       )}
     </>

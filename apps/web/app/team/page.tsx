@@ -52,24 +52,24 @@ export default function TeamPage() {
         <EmptyBlock message="No authored commits in range." />
       ) : authors.length === 1 ? (
         <p className="text-xs text-muted-foreground">
-          Only one commit author in range — per-author views are most useful on shared repos.
+          {t("pages.team.singleAuthorNote")}
         </p>
       ) : null}
 
       {authors.length > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle>Contributors</CardTitle>
+            <CardTitle>{t("pages.team.contributors")}</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Author</TableHead>
+                  <TableHead>{t("pages.team.author")}</TableHead>
                   <TableHead className="text-right">Commits</TableHead>
-                  <TableHead className="text-right">AI share</TableHead>
-                  <TableHead className="text-right">Active days</TableHead>
-                  <TableHead className="text-right">+/− lines</TableHead>
+                  <TableHead className="text-right">{t("pages.team.aiShare")}</TableHead>
+                  <TableHead className="text-right">{t("pages.team.activeDays")}</TableHead>
+                  <TableHead className="text-right">{t("pages.team.lines")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -107,15 +107,15 @@ export default function TeamPage() {
       {dora.length > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle>Per-author DORA-lite</CardTitle>
+            <CardTitle>{t("pages.team.perAuthorDora")}</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Author</TableHead>
-                  <TableHead className="text-right">Throughput / wk</TableHead>
-                  <TableHead className="text-right">Change-failure proxy</TableHead>
+                  <TableHead>{t("pages.team.author")}</TableHead>
+                  <TableHead className="text-right">{t("pages.team.throughput")}</TableHead>
+                  <TableHead className="text-right">{t("pages.team.changeFailureProxy")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -135,8 +135,7 @@ export default function TeamPage() {
               </TableBody>
             </Table>
             <p className="pt-2 text-xs text-muted-foreground">
-              Change-failure is a revert/hotfix proxy from commit subjects; lead time and deploy
-              frequency per author need PR-author data (not yet wired).
+              {t("pages.team.changeFailureNote")}
             </p>
           </CardContent>
         </Card>

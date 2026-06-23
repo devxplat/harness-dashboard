@@ -27,7 +27,7 @@ export default function TipsPage() {
     <>
       <PageTitle title={tr("pages.tips.title")} description={tr("pages.tips.description")} />
       {data.length === 0 ? (
-        <EmptyBlock message="No tips right now — nothing to flag in this range." />
+        <EmptyBlock message={tr("pages.tips.noTips")} />
       ) : (
         <div className="space-y-3">
           {data.map((t) => (

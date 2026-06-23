@@ -13,13 +13,14 @@ import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { Paged, PromptRow } from "@/lib/types";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
+import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
+const makeColumns = (t: TFunction, short: boolean): ColumnDef<PromptRow>[] => [
   {
     accessorKey: "timestamp",
-    header: "When",
+    header: t("pages.prompts.when"),
     cell: ({ row }) => (
       <span className="whitespace-nowrap text-xs text-muted-foreground">
         {formatDate(row.original.timestamp)}
@@ -28,7 +29,7 @@ const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
   },
   {
     accessorKey: "project_slug",
-    header: "Project",
+    header: t("pages.prompts.project"),
     enableSorting: false,
     cell: ({ row }) => (
       <ProjectCell
@@ -41,20 +42,20 @@ const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
   },
   {
     accessorKey: "provider",
-    header: "Provider",
+    header: t("pages.prompts.provider"),
     enableSorting: false,
     cell: ({ row }) => <ProviderBadge provider={row.original.provider} compact />,
   },
   {
     accessorKey: "prompt_text",
-    header: "Prompt",
+    header: t("pages.prompts.prompt"),
     enableSorting: false,
     cell: ({ row }) => (
       <span className="block max-w-[360px] truncate">
         {row.original.prompt_text ?? "—"}
         {row.original.cost_estimated ? (
           <Badge variant="outline" className="ml-2 text-[10px]">
-            est.
+            {t("pages.prompts.est")}
           </Badge>
         ) : null}
       </span>
@@ -62,13 +63,13 @@ const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
   },
   {
     accessorKey: "billable_tokens",
-    header: "Billable",
+    header: t("pages.prompts.billable"),
     cell: ({ row }) => formatTokens(row.original.billable_tokens),
     meta: { align: "right" },
   },
   {
     accessorKey: "estimated_cost_usd",
-    header: "Cost",
+    header: t("pages.prompts.cost"),
     enableSorting: false,
     cell: ({ row }) => formatUSD(row.original.estimated_cost_usd),
     meta: { align: "right" },
@@ -81,7 +82,7 @@ export default function PromptsPage() {
   const [shortNames, setShortNames] = useState(true);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
-  const columns = useMemo(() => makePromptColumns(shortNames), [shortNames]);
+  const columns = useMemo(() => makeColumns(t, shortNames), [t, shortNames]);
   // The server sorts the whole dataset by tokens or recency; reflect that on the
   // matching column header so clicking it re-ranks everything (not just the page).
   const sorting: SortingState = [
@@ -108,10 +109,10 @@ export default function PromptsPage() {
         <PageTitle title={t("pages.prompts.title")} description={t("pages.prompts.description")} />
         <div className="flex gap-1">
           <Button size="sm" variant={sort === "tokens" ? "default" : "outline"} onClick={() => setSort("tokens")}>
-            By tokens
+            {t("pages.prompts.byTokens")}
           </Button>
           <Button size="sm" variant={sort === "recent" ? "default" : "outline"} onClick={() => setSort("recent")}>
-            Recent
+            {t("pages.prompts.recent")}
           </Button>
         </div>
       </div>
@@ -119,11 +120,11 @@ export default function PromptsPage() {
       {error ? (
         <ErrorBlock error={error} />
       ) : settingsLoaded && !hasAvailableProviders ? (
-        <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />
+        <EmptyBlock message={t("common.noProviders")} />
       ) : loading || !data ? (
         <LoadingBlock />
       ) : data.total === 0 ? (
-        <EmptyBlock message="No prompts yet." />
+        <EmptyBlock message={t("pages.prompts.noPrompts")} />
       ) : (
         <DataTable
           columns={columns}
@@ -134,7 +135,7 @@ export default function PromptsPage() {
             ariaLabel: "Filter prompts",
           }}
           actions={<PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />}
-          emptyMessage="No prompts match."
+          emptyMessage={t("pages.prompts.noMatch")}
           server={{
             total: data.total,
             pageIndex: page,

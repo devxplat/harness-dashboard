@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
 import { formatDateShort } from "@/lib/format";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export function GoogleConnect({
@@ -18,6 +19,7 @@ export function GoogleConnect({
   lastSync: string | null;
   onChange: () => void;
 }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
 
   async function start() {
@@ -25,9 +27,9 @@ export function GoogleConnect({
     try {
       const r = await apiGet<{ auth_url: string }>("/api/integrations/google/start");
       window.open(r.auth_url, "_blank", "noopener,noreferrer");
-      toast.info("Finish sign-in in the opened tab, then click Sync.");
+      toast.info(t("components.googleConnect.finishSignIn"));
     } catch {
-      toast.error("Could not start sign-in — set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET");
+      toast.error(t("components.googleConnect.couldNotStart"));
     } finally {
       setBusy(false);
     }
@@ -37,9 +39,9 @@ export function GoogleConnect({
     setBusy(true);
     const p = apiPost<{ events: number }>("/api/integrations/google/sync", {});
     toast.promise(p, {
-      loading: "Syncing calendar…",
-      success: (r) => `Synced ${r.events} calendar events`,
-      error: "Calendar sync failed",
+      loading: t("components.googleConnect.syncingCalendar"),
+      success: (r) => t("components.googleConnect.syncedEvents", { count: r.events }),
+      error: t("components.googleConnect.syncFailed"),
     });
     try {
       await p;
@@ -55,9 +57,9 @@ export function GoogleConnect({
     setBusy(true);
     const p = apiDelete("/api/integrations/google");
     toast.promise(p, {
-      loading: "Disconnecting…",
-      success: "Google disconnected",
-      error: "Could not disconnect",
+      loading: t("components.googleConnect.disconnect"),
+      success: t("components.googleConnect.disconnect"),
+      error: t("components.googleConnect.syncFailed"),
     });
     try {
       await p;
@@ -74,25 +76,24 @@ export function GoogleConnect({
       {connected ? (
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={sync} disabled={busy}>
-            Sync now
+            {t("components.googleConnect.syncNow")}
           </Button>
           <Button size="sm" variant="outline" onClick={disconnect} disabled={busy}>
-            Disconnect
+            {t("components.googleConnect.disconnect")}
           </Button>
           {lastSync ? (
             <span className="text-xs text-muted-foreground">
-              Last synced {formatDateShort(lastSync)}
+              {t("components.googleConnect.lastSynced", { date: formatDateShort(lastSync) })}
             </span>
           ) : null}
         </div>
       ) : (
         <Button size="sm" onClick={start} disabled={busy}>
-          Connect Google Calendar
+          {t("components.googleConnect.connectCalendar")}
         </Button>
       )}
       <p className="text-xs text-muted-foreground">
-        OAuth via a loopback redirect; requires GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET on the
-        server. Tokens are stored encrypted at rest and used only to read event times.
+        {t("components.googleConnect.oauthNote")}
       </p>
     </div>
   );
