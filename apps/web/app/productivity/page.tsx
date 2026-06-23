@@ -1,9 +1,17 @@
 "use client";
 
 import { AiSplitChart } from "@/components/charts/ai-split-chart";
+import {
+  FocusTrendChart,
+  PrImpactChart,
+  ProductivityPeriodChart,
+  WarmupBucketChart,
+} from "@/components/charts/insight-charts";
 import { ProductiveHoursHeatmap } from "@/components/charts/productive-hours-heatmap";
 import { CommitsTable } from "@/components/commits-table";
-import { EmptyBlock, ErrorBlock, PageTitle } from "@/components/states";
+import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -14,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery, withRange } from "@/lib/api";
 import { formatDateShort, formatInt } from "@/lib/format";
@@ -22,217 +31,550 @@ import { useRange } from "@/lib/range";
 import type {
   CommitRow,
   DeploymentRow,
+  FocusBlockRow,
   MeetingImpact,
   ProductivityBundle,
+  ProductivityInsightsBundle,
+  ProductivitySummary,
   PullRequestRow,
 } from "@/lib/types";
+import { useState } from "react";
+
+type Grain = "day" | "week" | "month";
+
+function formatMinutes(value: number | null | undefined): string {
+  if (value == null) return "-";
+  if (value < 60) return `${Math.round(value)}m`;
+  const hours = value / 60;
+  return `${hours.toFixed(hours >= 10 ? 0 : 1)}h`;
+}
+
+function formatHours(value: number | null | undefined): string {
+  if (value == null) return "-";
+  return `${value.toFixed(value >= 10 ? 0 : 1)}h`;
+}
+
+function StatCard({
+  label,
+  value,
+  detail,
+  estimated,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  estimated?: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+        {estimated ? (
+          <Badge variant="outline" className="text-[10px]">
+            estimated
+          </Badge>
+        ) : null}
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-semibold tabular-nums">{value}</div>
+        {detail ? <p className="pt-1 text-xs text-muted-foreground">{detail}</p> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SummaryGrid({ summary }: { summary: ProductivitySummary }) {
+  const aiPct =
+    summary.commits > 0 ? Math.round((summary.ai_commits / summary.commits) * 100) : 0;
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <StatCard
+        label="Commits"
+        value={formatInt(summary.commits)}
+        detail={`${formatInt(summary.ai_commits)} AI-assisted (${aiPct}%)`}
+      />
+      <StatCard
+        label="Assistant messages"
+        value={formatInt(summary.messages)}
+        detail={`${formatInt(summary.pr_count)} PRs, ${formatInt(summary.merged_pr_count)} merged`}
+      />
+      <StatCard
+        label="Focus and flow"
+        value={formatMinutes(summary.focus_minutes)}
+        detail={`${formatMinutes(summary.flow_minutes)} estimated flow time`}
+        estimated
+      />
+      <StatCard
+        label="Post-meeting warm-up"
+        value={formatMinutes(summary.avg_warmup_minutes)}
+        detail={`${formatMinutes(summary.meeting_minutes)} in busy meetings`}
+        estimated
+      />
+    </div>
+  );
+}
+
+function FocusBlocksTable({ blocks }: { blocks: FocusBlockRow[] }) {
+  const rows = [...blocks].sort((a, b) => b.duration_minutes - a.duration_minutes).slice(0, 10);
+  if (!rows.length) return <EmptyBlock message="No focus blocks found in this range." />;
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Started</TableHead>
+          <TableHead>Ended</TableHead>
+          <TableHead className="text-right">Active span</TableHead>
+          <TableHead className="text-right">Events</TableHead>
+          <TableHead>Mode</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((b) => (
+          <TableRow key={`${b.started_at}:${b.ended_at}`}>
+            <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+              {formatDateShort(b.started_at)}
+            </TableCell>
+            <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+              {formatDateShort(b.ended_at)}
+            </TableCell>
+            <TableCell className="text-right tabular-nums">{formatMinutes(b.duration_minutes)}</TableCell>
+            <TableCell className="text-right tabular-nums">
+              {formatInt(b.events)}{" "}
+              <span className="text-xs text-muted-foreground">
+                ({formatInt(b.commits)} commits, {formatInt(b.messages)} messages)
+              </span>
+            </TableCell>
+            <TableCell>
+              <Badge variant={b.flow ? "default" : "outline"}>{b.flow ? "flow" : "focus"}</Badge>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function MeetingImpactCards({ impact }: { impact: MeetingImpact | null }) {
+  if (!impact) {
+    return (
+      <EmptyBlock message="No calendar overlap was found. Connect Google Calendar to compare meetings and productive output." />
+    );
+  }
+  const pct = (during: number, free: number) =>
+    Math.round((during / Math.max(1, during + free)) * 100);
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <StatCard
+        label="Assistant messages during meetings"
+        value={`${pct(impact.during_messages, impact.free_messages)}%`}
+        detail={`${formatInt(impact.during_messages)} of ${formatInt(
+          impact.during_messages + impact.free_messages,
+        )} messages`}
+        estimated
+      />
+      <StatCard
+        label="Commits during meetings"
+        value={`${pct(impact.during_commits, impact.free_commits)}%`}
+        detail={`${formatInt(impact.during_commits)} of ${formatInt(
+          impact.during_commits + impact.free_commits,
+        )} commits`}
+        estimated
+      />
+    </div>
+  );
+}
 
 export default function ProductivityPage() {
   const { since, until } = useRange();
-
-  // Bucket UTC message timestamps into the viewer's local hours; commits carry
-  // their own offset and ignore this. getTimezoneOffset() is minutes *behind* UTC,
-  // so negate it to get minutes east of UTC.
+  const [grain, setGrain] = useState<Grain>("day");
   const tz = -new Date().getTimezoneOffset();
+
+  const insights = useApi<ProductivityInsightsBundle>(
+    withRange(`/api/productivity/insights?tz_offset_min=${tz}&grain=${grain}`, since, until),
+  );
   const prod = useApi<ProductivityBundle>(
     withRange(`/api/productivity?tz_offset_min=${tz}`, since, until),
   );
   const commits = useApi<CommitRow[]>(`/api/commits${rangeQuery(since, until)}`);
-  // Opt-in GitHub enrichment — these sections render only when data is present.
   const prs = useApi<PullRequestRow[]>(`/api/pull-requests${rangeQuery(since, until)}`);
   const deployments = useApi<DeploymentRow[]>(`/api/deployments${rangeQuery(since, until)}`);
   const meetings = useApi<MeetingImpact>(`/api/meetings/impact${rangeQuery(since, until)}`);
 
+  if (insights.error) return <ErrorBlock error={insights.error} />;
   if (prod.error) return <ErrorBlock error={prod.error} />;
   if (commits.error) return <ErrorBlock error={commits.error} />;
+  const data = insights.data && !Array.isArray(insights.data) ? insights.data : null;
+  if (insights.loading || !data) return <LoadingBlock />;
 
-  const p = prod.data;
-  const ai = p ? aiTotals(p.aiByDay) : null;
-  // Only show meeting impact once a calendar is synced (some activity falls in meetings).
-  const mi =
-    meetings.data && meetings.data.during_commits + meetings.data.during_messages > 0
-      ? meetings.data
-      : null;
-  const pct = (during: number, free: number) =>
-    Math.round((during / Math.max(1, during + free)) * 100);
+  const legacyProd = prod.data && !Array.isArray(prod.data) ? prod.data : null;
+  const ai = legacyProd ? aiTotals(legacyProd.aiByDay) : null;
+  const meetingImpact =
+    meetings.data && !Array.isArray(meetings.data) ? (meetings.data as MeetingImpact) : null;
+  const hasActivity =
+    data.summary.commits + data.summary.messages + data.summary.pr_count + data.summary.meeting_minutes > 0;
+  const meetingHeavy = data.periods
+    .filter((p) => p.meeting_minutes > 0)
+    .sort((a, b) => b.meeting_minutes - a.meeting_minutes)
+    .slice(0, 8);
 
   return (
     <>
-      <PageTitle
-        title="Productivity"
-        description="Git throughput, when you build, and how much is AI-assisted vs by hand."
-      />
-
-      <div className="grid items-stretch gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>AI-assisted vs by hand</CardTitle>
-            {ai && ai.total > 0 ? (
-              <span className="text-sm text-muted-foreground">
-                <span className="font-semibold text-foreground">{Math.round(ai.pct * 100)}%</span> AI-assisted
-                · {formatInt(ai.ai)}/{formatInt(ai.total)} commits
-              </span>
-            ) : null}
-          </CardHeader>
-          <CardContent>
-            {!p ? (
-              <Skeleton className="h-64 w-full" />
-            ) : p.aiByDay.length ? (
-              <AiSplitChart data={p.aiByDay} />
-            ) : (
-              <EmptyBlock message="No commits in range." />
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-1">
-          <CardContent className="pt-6">
-            {!p ? <Skeleton className="h-64 w-full" /> : <ProductiveHoursHeatmap data={p.hours} />}
-          </CardContent>
-        </Card>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <PageTitle
+          title="Productivity"
+          description="Estimated focus, flow, warm-up, commits, assistant activity, and PR impact from local sources."
+        />
+        <div className="flex gap-1" role="group" aria-label="Productivity grain">
+          {(["day", "week", "month"] as Grain[]).map((g) => (
+            <Button
+              key={g}
+              size="sm"
+              variant={grain === g ? "default" : "outline"}
+              aria-pressed={grain === g}
+              onClick={() => setGrain(g)}
+              className="capitalize"
+            >
+              {g}
+            </Button>
+          ))}
+        </div>
       </div>
 
-      {mi ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Meeting impact</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-6 sm:grid-cols-2">
-            <div>
-              <p className="text-sm text-muted-foreground">Claude messages during meetings</p>
-              <p className="text-2xl font-semibold tabular-nums">
-                {pct(mi.during_messages, mi.free_messages)}%
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {formatInt(mi.during_messages)} of {formatInt(mi.during_messages + mi.free_messages)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Commits during meetings</p>
-              <p className="text-2xl font-semibold tabular-nums">
-                {pct(mi.during_commits, mi.free_commits)}%
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {formatInt(mi.during_commits)} of {formatInt(mi.during_commits + mi.free_commits)}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      {!hasActivity ? (
+        <EmptyBlock message="No productivity data in range. Sync commits, PRs, calendar events, or assistant activity first." />
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Commits</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!commits.data ? (
-            <div className="space-y-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
-              ))}
-            </div>
-          ) : commits.data.length === 0 ? (
-            <EmptyBlock message="No commits in range. Local git history is read for every project you've used Claude Code in." />
+      <SummaryGrid summary={data.summary} />
+
+      <Tabs defaultValue="overview">
+        <TabsList className="w-full justify-start overflow-x-auto" variant="line">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="focus">Focus</TabsTrigger>
+          <TabsTrigger value="calendar">Calendar Impact</TabsTrigger>
+          <TabsTrigger value="prs">PR Impact</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid items-stretch gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-2">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>AI-assisted vs by hand</CardTitle>
+                {ai && ai.total > 0 ? (
+                  <span className="text-sm text-muted-foreground">
+                    <span className="font-semibold text-foreground">{Math.round(ai.pct * 100)}%</span>{" "}
+                    AI-assisted - {formatInt(ai.ai)}/{formatInt(ai.total)} commits
+                  </span>
+                ) : null}
+              </CardHeader>
+              <CardContent>
+                {!legacyProd ? (
+                  <Skeleton className="h-64 w-full" />
+                ) : legacyProd.aiByDay.length ? (
+                  <AiSplitChart data={legacyProd.aiByDay} />
+                ) : (
+                  <EmptyBlock message="No commits in range." />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                {!legacyProd ? (
+                  <Skeleton className="h-64 w-full" />
+                ) : (
+                  <ProductiveHoursHeatmap data={legacyProd.hours} />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Productivity trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {data.periods.length ? (
+                <ProductivityPeriodChart data={data.periods} />
+              ) : (
+                <EmptyBlock message="No trend data in range." />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Commits</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!commits.data ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="h-8 w-full" />
+                  ))}
+                </div>
+              ) : commits.data.length === 0 ? (
+                <EmptyBlock message="No commits in range. Local git history is read from discovered workspaces." />
+              ) : (
+                <CommitsTable commits={commits.data} />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="focus" className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-2">
+              <CardHeader>
+              <CardTitle>Estimated focus active span and flow trend</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {data.periods.length ? (
+                  <FocusTrendChart data={data.periods} />
+                ) : (
+                  <EmptyBlock message="No focus trend in range." />
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Warm-up buckets</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {data.warmup.some((b) => b.count > 0) ? (
+                  <WarmupBucketChart data={data.warmup} />
+                ) : (
+                  <EmptyBlock message="No post-meeting warm-up samples in range." />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Longest estimated focus blocks</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FocusBlocksTable blocks={data.focusBlocks} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="calendar" className="space-y-4">
+          <MeetingImpactCards impact={meetingImpact} />
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Meeting load vs productive time</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {data.periods.length ? (
+                <FocusTrendChart data={data.periods} />
+              ) : (
+                <EmptyBlock message="No calendar trend in range." />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Meeting-heavy periods</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {meetingHeavy.length ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Period</TableHead>
+                      <TableHead className="text-right">Meetings</TableHead>
+                      <TableHead className="text-right">Focus</TableHead>
+                      <TableHead className="text-right">Flow</TableHead>
+                      <TableHead className="text-right">Avg warm-up</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {meetingHeavy.map((p) => (
+                      <TableRow key={p.period}>
+                        <TableCell className="font-mono text-xs">{p.period}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatMinutes(p.meeting_minutes)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{formatMinutes(p.focus_minutes)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatMinutes(p.flow_minutes)}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatMinutes(p.avg_warmup_minutes)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <EmptyBlock message="No busy meeting periods found." />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="prs" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Repo and PR comparison</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {data.prCorrelation.length ? (
+                <PrImpactChart data={data.prCorrelation} />
+              ) : (
+                <EmptyBlock message="No PR correlation data. Sync GitHub PRs to populate this view." />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>PR impact rows</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {data.prCorrelation.length ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Repo</TableHead>
+                      <TableHead className="text-right">PRs</TableHead>
+                      <TableHead className="text-right">Merged</TableHead>
+                      <TableHead className="text-right">Lead</TableHead>
+                      <TableHead className="text-right">Review wait</TableHead>
+                      <TableHead className="text-right">Churn</TableHead>
+                      <TableHead className="text-right">AI overlap</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.prCorrelation.slice(0, 50).map((p) => (
+                      <TableRow key={p.repo_key}>
+                        <TableCell className="max-w-[320px] truncate" title={p.repo_key}>
+                          {p.repo_key}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{formatInt(p.pr_count)}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatInt(p.merged_pr_count)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatHours(p.avg_lead_hours)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatHours(p.avg_review_wait_hours)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{formatInt(p.churn)}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {p.ai_overlap_prs ? <Badge>{formatInt(p.ai_overlap_prs)}</Badge> : "0"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <EmptyBlock message="No PR rows in range." />
+              )}
+            </CardContent>
+          </Card>
+
+          {prs.data && prs.data.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Pull requests</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead>State</TableHead>
+                      <TableHead className="text-right">Lines</TableHead>
+                      <TableHead className="text-right">AI</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {prs.data.slice(0, 25).map((p) => (
+                      <TableRow key={`${p.repo_key}#${p.number}`}>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {p.html_url ? (
+                            <a className="hover:underline" href={p.html_url} target="_blank" rel="noreferrer">
+                              #{p.number}
+                            </a>
+                          ) : (
+                            `#${p.number}`
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-[360px] truncate" title={p.title ?? undefined}>
+                          {p.title ?? "-"}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs capitalize text-muted-foreground">{p.state ?? "-"}</span>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums whitespace-nowrap">
+                          <span className="text-emerald-600 dark:text-emerald-400">+{formatInt(p.additions)}</span>{" "}
+                          <span className="text-rose-600 dark:text-rose-400">-{formatInt(p.deletions)}</span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {p.ai_session_overlap ? <Badge>AI</Badge> : <span className="text-xs text-muted-foreground">-</span>}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           ) : (
-            <CommitsTable commits={commits.data} />
+            <EmptyBlock message="No synced pull requests in range." />
           )}
-        </CardContent>
-      </Card>
 
-      {prs.data && prs.data.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Pull requests</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead className="text-right">Lines</TableHead>
-                  <TableHead className="text-right">AI</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {prs.data.slice(0, 50).map((p) => (
-                  <TableRow key={`${p.repo_key}#${p.number}`}>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {p.html_url ? (
-                        <a className="hover:underline" href={p.html_url} target="_blank" rel="noreferrer">
-                          #{p.number}
-                        </a>
-                      ) : (
-                        `#${p.number}`
-                      )}
-                    </TableCell>
-                    <TableCell className="max-w-[360px] truncate" title={p.title ?? undefined}>
-                      {p.title ?? "—"}
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs capitalize text-muted-foreground">{p.state ?? "—"}</span>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums whitespace-nowrap">
-                      <span className="text-emerald-600 dark:text-emerald-400">+{formatInt(p.additions)}</span>{" "}
-                      <span className="text-rose-600 dark:text-rose-400">−{formatInt(p.deletions)}</span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {p.ai_session_overlap ? (
-                        <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
-                          AI
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      ) : null}
+          {deployments.data && deployments.data.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Deployments</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Kind</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>When</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {deployments.data.slice(0, 25).map((d) => (
+                      <TableRow key={`${d.repo_key}:${d.kind}:${d.ext_id}`}>
+                        <TableCell className="max-w-[320px] truncate">
+                          {d.html_url ? (
+                            <a className="hover:underline" href={d.html_url} target="_blank" rel="noreferrer">
+                              {d.name ?? d.ext_id}
+                            </a>
+                          ) : (
+                            (d.name ?? d.ext_id)
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs capitalize text-muted-foreground">{d.kind}</TableCell>
+                        <TableCell className="text-xs capitalize text-muted-foreground">{d.status ?? "-"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          {formatDateShort(d.created_at_utc)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          ) : (
+            <EmptyBlock message="No synced deployments in range." />
+          )}
+        </TabsContent>
+      </Tabs>
 
-      {deployments.data && deployments.data.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Deployments</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Kind</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>When</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {deployments.data.slice(0, 50).map((d) => (
-                  <TableRow key={`${d.repo_key}:${d.kind}:${d.ext_id}`}>
-                    <TableCell className="max-w-[280px] truncate">
-                      {d.html_url ? (
-                        <a className="hover:underline" href={d.html_url} target="_blank" rel="noreferrer">
-                          {d.name ?? d.ext_id}
-                        </a>
-                      ) : (
-                        (d.name ?? d.ext_id)
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs capitalize text-muted-foreground">{d.kind}</TableCell>
-                    <TableCell className="text-xs capitalize text-muted-foreground">{d.status ?? "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                      {formatDateShort(d.created_at_utc)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      ) : null}
+      <p className="text-xs text-muted-foreground">
+        Focus, flow, meeting impact, and warm-up are estimated from local timestamps. DORA and PR
+        metrics use source-backed fields when available.
+      </p>
     </>
   );
 }
