@@ -4,7 +4,7 @@
 //! schema varies across Claude Code versions; we read the fields we know and
 //! ignore the rest.
 
-use crate::model::{MessageRow, ToolCall, Usage};
+use crate::model::{CostSource, MessageRow, ProviderId, ToolCall, Usage, UsageSource};
 use serde_json::Value;
 use std::sync::OnceLock;
 
@@ -159,6 +159,7 @@ pub fn parse_line(line: &str, project_slug: &str) -> Option<MessageRow> {
 
     Some(MessageRow {
         uuid,
+        provider: ProviderId::Claude,
         parent_uuid: str_field("parentUuid"),
         session_id,
         project_slug: project_slug.to_string(),
@@ -187,6 +188,12 @@ pub fn parse_line(line: &str, project_slug: &str) -> Option<MessageRow> {
             .and_then(Value::as_str)
             .map(str::to_string),
         usage: usage_from(&message),
+        usage_source: UsageSource::Exact,
+        reported_cost_usd: None,
+        cost_source: CostSource::ApiEstimate,
+        source_path: None,
+        source_key: None,
+        source_fingerprint: None,
         prompt_text,
         attribution_skill: str_field("attributionSkill"),
         tool_calls,

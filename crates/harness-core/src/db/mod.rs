@@ -3,12 +3,22 @@
 //! v0.1 uses a single connection behind a `Mutex` (one writer, serialized
 //! readers). A reader pool is a future optimization, not a v0.1 need.
 
+mod calendar;
+mod dora;
+mod git;
 mod queries;
 mod schema;
 
+pub use calendar::{MeetingDay, MeetingImpact};
+pub use dora::DoraMetric;
+pub use git::{
+    AiSplitGroup, AiSplitRow, CommitDailyRow, CommitRowDto, DeploymentDto, GithubRepo,
+    GithubRepoMeta, ProductiveHourRow, PullRequestDto, SyncState,
+};
 pub use queries::{
-    AgentGroupRow, DailyRow, MessageDetail, ModelRow, ProjectRow, PromptRow, SessionRow, SkillRow,
-    Tip, ToolRow, Totals, WorkspaceRow,
+    AgentGroupRow, DailyRow, MessageDetail, ModelRow, OverviewUsageBundle, ProjectRow, PromptRow,
+    ProviderObservedStats, ProviderSummary, SessionRow, SkillRow, Tip, ToolRow, Totals,
+    WorkspaceRow,
 };
 
 use crate::error::Result;
@@ -18,6 +28,14 @@ use std::sync::Mutex;
 
 pub struct Db {
     pub(crate) conn: Mutex<Connection>,
+}
+
+/// Apply idempotent `ADD COLUMN` migrations; a duplicate-column error means the
+/// column is already present, which is fine.
+fn run_migrations(conn: &Connection) {
+    for stmt in schema::MIGRATIONS {
+        let _ = conn.execute(stmt, []);
+    }
 }
 
 impl Db {
@@ -37,6 +55,7 @@ impl Db {
              PRAGMA temp_store=MEMORY;",
         )?;
         conn.execute_batch(schema::SCHEMA_SQL)?;
+        run_migrations(&conn);
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -46,6 +65,7 @@ impl Db {
     pub fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(schema::SCHEMA_SQL)?;
+        run_migrations(&conn);
         Ok(Self {
             conn: Mutex::new(conn),
         })

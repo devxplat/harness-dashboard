@@ -27,6 +27,113 @@ pub fn projects_dir() -> PathBuf {
     env_path("CLAUDE_PROJECTS_DIR").unwrap_or_else(|| claude_dir().join("projects"))
 }
 
+pub fn codex_sessions_dir() -> PathBuf {
+    env_path("CODEX_SESSIONS_DIR").unwrap_or_else(|| {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".codex")
+            .join("sessions")
+    })
+}
+
+pub fn gemini_chats_dir() -> PathBuf {
+    env_path("GEMINI_CHATS_DIR").unwrap_or_else(|| {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".gemini")
+            .join("tmp")
+    })
+}
+
+pub fn cursor_state_db() -> PathBuf {
+    env_path("CURSOR_STATE_DB").unwrap_or_else(|| {
+        std::env::var("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                dirs::home_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join("AppData")
+                    .join("Roaming")
+            })
+            .join("Cursor")
+            .join("User")
+            .join("globalStorage")
+            .join("state.vscdb")
+    })
+}
+
+pub fn antigravity_transcripts_dir() -> PathBuf {
+    env_path("ANTIGRAVITY_TRANSCRIPTS_DIR").unwrap_or_else(|| {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".gemini")
+            .join("antigravity")
+            .join("brain")
+    })
+}
+
+pub fn copilot_home_dir() -> PathBuf {
+    env_path("COPILOT_HOME").unwrap_or_else(|| {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".copilot")
+    })
+}
+
+pub fn copilot_otel_db() -> Option<PathBuf> {
+    env_path("COPILOT_OTEL_DB").or_else(|| {
+        copilot_otel_candidates()
+            .into_iter()
+            .find(|path| path.exists())
+    })
+}
+
+pub fn copilot_otel_candidates() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let appdata = PathBuf::from(appdata);
+        roots.push(
+            appdata
+                .join("Code")
+                .join("User")
+                .join("globalStorage")
+                .join("github.copilot-chat")
+                .join("agent-traces.db"),
+        );
+        roots.push(
+            appdata
+                .join("Code - Insiders")
+                .join("User")
+                .join("globalStorage")
+                .join("github.copilot-chat")
+                .join("agent-traces.db"),
+        );
+        roots.push(
+            appdata
+                .join("Cursor")
+                .join("User")
+                .join("globalStorage")
+                .join("github.copilot-chat")
+                .join("agent-traces.db"),
+        );
+    }
+    roots
+}
+
+pub fn opencode_data_dir() -> PathBuf {
+    env_path("OPENCODE_DATA_DIR").unwrap_or_else(|| {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".local")
+            .join("share")
+            .join("opencode")
+    })
+}
+
+pub fn opencode_run_logs_dir() -> Option<PathBuf> {
+    env_path("OPENCODE_RUN_LOGS_DIR")
+}
+
 /// SQLite database path (override with `HARNESS_DB`, or legacy `TOKEN_DASHBOARD_DB`).
 pub fn db_path() -> PathBuf {
     env_path("HARNESS_DB")

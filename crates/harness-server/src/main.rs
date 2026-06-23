@@ -4,6 +4,8 @@
 //! stream, a periodic background scan, and (in release) the embedded frontend.
 
 mod api;
+mod calendar;
+mod github;
 #[cfg(feature = "release-embed")]
 mod static_assets;
 
@@ -14,7 +16,7 @@ use harness_core::pricing::Pricing;
 use notify::{RecursiveMode, Watcher};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::broadcast;
 
@@ -30,6 +32,12 @@ pub struct AppState {
     pub tx: broadcast::Sender<api::ScanEvent>,
     pub scanning: Arc<AtomicBool>,
     pub dev: bool,
+    /// Bound port — used to build the Google OAuth loopback redirect URI.
+    pub port: u16,
+    /// Guards against overlapping GitHub syncs (on-demand + periodic).
+    pub github_syncing: Arc<AtomicBool>,
+    /// Latest GitHub-sync progress snapshot (for the `/status` poll).
+    pub github_progress: Arc<Mutex<Option<github::GithubProgress>>>,
 }
 
 #[derive(Parser, Debug)]
@@ -95,18 +103,25 @@ async fn main() -> anyhow::Result<()> {
         tx,
         scanning: Arc::new(AtomicBool::new(false)),
         dev: cli.dev,
+        port,
+        github_syncing: Arc::new(AtomicBool::new(false)),
+        github_progress: Arc::new(Mutex::new(None)),
     };
 
     tracing::info!("database: {}", db_path.display());
     tracing::info!("projects: {}", projects_dir.display());
 
-    // Run the initial scan in the background so the server binds the port
-    // immediately. The UI loads at once and refreshes over SSE (see `scan_now`,
-    // which broadcasts a scan event) once the scan completes — important when
-    // scanning a large ~/.claude/projects, which can take a while.
+    // Onboarding is the sole entry point: until it's completed, nothing scans on its
+    // own — the user starts (and configures) the initial seed + backfill from the
+    // onboarding wizard. Every loop below re-reads this each tick, so finishing
+    // onboarding starts background scanning without a restart.
     if !cli.no_scan {
         let state = state.clone();
         tokio::spawn(async move {
+            if !onboarding_done(&state.db) {
+                tracing::info!("onboarding not complete — initial scan deferred to the wizard");
+                return;
+            }
             tracing::info!("initial scan…");
             let n = api::scan_now(&state).await;
             tracing::info!(
@@ -126,7 +141,26 @@ async fn main() -> anyhow::Result<()> {
             ticker.tick().await; // consume the immediate first tick
             loop {
                 ticker.tick().await;
-                api::scan_now(&state).await;
+                if onboarding_done(&state.db) {
+                    api::scan_now(&state).await;
+                }
+            }
+        });
+    }
+
+    // Periodic GitHub auto-sync — opt-in + interval are live-read from settings each
+    // tick, so toggling them takes effect without a restart. Cheap thanks to ETag +
+    // incremental high-water marks.
+    {
+        let state = state.clone();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(Duration::from_secs(60));
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                if onboarding_done(&state.db) {
+                    api::maybe_autosync_github(&state).await;
+                }
             }
         });
     }
@@ -158,6 +192,9 @@ async fn main() -> anyhow::Result<()> {
             // before triggering a single scan.
             while rx.recv().is_ok() {
                 while rx.recv_timeout(Duration::from_millis(800)).is_ok() {}
+                if !onboarding_done(&state.db) {
+                    continue; // dormant until onboarding completes
+                }
                 let state = state.clone();
                 handle.spawn(async move {
                     api::scan_now(&state).await;
@@ -181,6 +218,15 @@ async fn main() -> anyhow::Result<()> {
 
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+/// Whether the first-run onboarding wizard has been completed. Background scanning
+/// stays dormant until then (onboarding is the sole entry point).
+fn onboarding_done(db: &Db) -> bool {
+    matches!(
+        db.get_setting("onboarding_done").ok().flatten().as_deref(),
+        Some("true")
+    )
 }
 
 fn open_browser(url: &str) {

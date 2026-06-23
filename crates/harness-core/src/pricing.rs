@@ -4,7 +4,7 @@
 //! the release binary needs no external file. A caller may load an override path.
 
 use crate::error::Result;
-use crate::model::Usage;
+use crate::model::{ProviderId, Usage};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -64,9 +64,13 @@ impl Pricing {
         TIERS.into_iter().find(|t| model.contains(t))
     }
 
-    /// Cost for a usage tally under `model`. Unknown model → tier fallback (estimated);
-    /// no tier match or no model → `usd: None`.
-    pub fn cost_for(&self, model: Option<&str>, u: &Usage) -> Cost {
+    fn cost_for_model_key(
+        &self,
+        model: Option<&str>,
+        u: &Usage,
+        allow_tier: bool,
+        cached_input_is_subset: bool,
+    ) -> Cost {
         let Some(model) = model else {
             return Cost {
                 usd: None,
@@ -75,7 +79,13 @@ impl Pricing {
         };
         let (rate, estimated) = if let Some(mr) = self.models.get(model) {
             (&mr.rate, false)
-        } else if let Some(t) = Self::tier_of(model) {
+        } else if allow_tier {
+            let Some(t) = Self::tier_of(model) else {
+                return Cost {
+                    usd: None,
+                    estimated: false,
+                };
+            };
             match self.tier_fallback.get(t) {
                 Some(r) => (r, true),
                 None => {
@@ -92,7 +102,12 @@ impl Pricing {
             };
         };
 
-        let usd = (u.input_tokens as f64 * rate.input
+        let full_price_input = if cached_input_is_subset {
+            (u.input_tokens - u.cache_read_tokens).max(0)
+        } else {
+            u.input_tokens
+        };
+        let usd = (full_price_input as f64 * rate.input
             + u.output_tokens as f64 * rate.output
             + u.cache_read_tokens as f64 * rate.cache_read
             + u.cache_create_5m_tokens as f64 * rate.cache_create_5m
@@ -101,6 +116,34 @@ impl Pricing {
         Cost {
             usd: Some(usd),
             estimated,
+        }
+    }
+
+    /// Cost for a usage tally under `model`. Unknown model → tier fallback (estimated);
+    /// no tier match or no model → `usd: None`.
+    pub fn cost_for(&self, model: Option<&str>, u: &Usage) -> Cost {
+        self.cost_for_provider(ProviderId::Claude, model, u)
+    }
+
+    /// Provider-aware lookup. Qualified model keys (`codex:gpt-5.5`) are exact;
+    /// Claude keeps the historical unqualified lookup and tier fallback.
+    pub fn cost_for_provider(&self, provider: ProviderId, model: Option<&str>, u: &Usage) -> Cost {
+        let Some(model) = model else {
+            return Cost {
+                usd: None,
+                estimated: false,
+            };
+        };
+        let qualified = format!("{}:{model}", provider.as_str());
+        let cached_input_is_subset = provider == ProviderId::Codex;
+        let exact = self.cost_for_model_key(Some(&qualified), u, false, cached_input_is_subset);
+        if exact.usd.is_some() {
+            return exact;
+        }
+        if provider == ProviderId::Claude {
+            self.cost_for_model_key(Some(model), u, true, false)
+        } else {
+            self.cost_for_model_key(Some(model), u, false, cached_input_is_subset)
         }
     }
 }
@@ -145,5 +188,18 @@ mod tests {
         let p = Pricing::load_default();
         let c = p.cost_for(Some("some-other-llm"), &Usage::default());
         assert!(c.usd.is_none());
+    }
+
+    #[test]
+    fn codex_cached_input_is_priced_as_input_subset() {
+        let p = Pricing::load_default();
+        let u = Usage {
+            input_tokens: 1_000_000,
+            cache_read_tokens: 900_000,
+            ..Default::default()
+        };
+        let c = p.cost_for_provider(ProviderId::Codex, Some("gpt-5.5"), &u);
+        assert!(!c.estimated);
+        assert!((c.usd.unwrap() - 0.95).abs() < 1e-9);
     }
 }
