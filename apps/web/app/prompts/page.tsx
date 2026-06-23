@@ -11,9 +11,9 @@ import { withRange } from "@/lib/api";
 import { formatDate, formatTokens, formatUSD } from "@/lib/format";
 import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
-import type { PromptRow } from "@/lib/types";
+import type { Paged, PromptRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
   {
@@ -74,12 +74,21 @@ const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
 export default function PromptsPage() {
   const [sort, setSort] = useState<"tokens" | "recent">("tokens");
   const [shortNames, setShortNames] = useState(true);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
   const columns = useMemo(() => makePromptColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
   const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
-  const { data, error, loading } = useApi<PromptRow[]>(
+  // Reset to the first page whenever the result set changes underneath us.
+  useEffect(() => setPage(0), [sort, since, until, queryProviders]);
+  const { data, error, loading } = useApi<Paged<PromptRow>>(
     settingsLoaded && hasAvailableProviders
-      ? withRange(`/api/prompts?limit=50&sort=${sort}`, since, until, queryProviders)
+      ? withRange(
+          `/api/prompts?sort=${sort}&page=${page}&page_size=${pageSize}`,
+          since,
+          until,
+          queryProviders,
+        )
       : null,
   );
 
@@ -103,20 +112,29 @@ export default function PromptsPage() {
         <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />
       ) : loading || !data ? (
         <LoadingBlock />
-      ) : data.length === 0 ? (
+      ) : data.total === 0 ? (
         <EmptyBlock message="No prompts yet." />
       ) : (
         <DataTable
           columns={columns}
-          data={data}
+          data={data.rows}
           search={{
             fields: ["provider", "project_slug", "sample_cwd", "prompt_text"],
-            placeholder: "Filter prompts…",
+            placeholder: "Filter this page…",
             ariaLabel: "Filter prompts",
           }}
           actions={<PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />}
-          pageSize={25}
           emptyMessage="No prompts match."
+          server={{
+            total: data.total,
+            pageIndex: page,
+            pageSize,
+            onPageChange: setPage,
+            onPageSizeChange: (s) => {
+              setPageSize(s);
+              setPage(0);
+            },
+          }}
         />
       )}
     </>

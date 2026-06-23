@@ -1883,6 +1883,42 @@ impl Db {
         self.recent_sessions_for_providers(pricing, limit, since, until, &[])
     }
 
+    /// Total distinct sessions in range — the `total` for server-side pagination of
+    /// the sessions list. Distinct on (provider, session_id), matching the list.
+    pub fn count_sessions_for_providers(
+        &self,
+        since: Option<&str>,
+        until: Option<&str>,
+        providers: &[ProviderId],
+    ) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let (provider_sql, provider_params) = provider_clause("provider", providers);
+        let sql = format!(
+            "SELECT COUNT(DISTINCT provider || ':' || session_id) \
+             FROM messages WHERE {TIME_BOUND} {provider_sql}"
+        );
+        let params = time_provider_params(&since, &until, &provider_params);
+        Ok(conn.query_row(&sql, params.as_slice(), |r| r.get(0))?)
+    }
+
+    /// Total prompts (user turns with text) in range — the `total` for server-side
+    /// pagination of the expensive-prompts list.
+    pub fn count_expensive_prompts_for_providers(
+        &self,
+        since: Option<&str>,
+        until: Option<&str>,
+        providers: &[ProviderId],
+    ) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let (provider_sql, provider_params) = provider_clause("provider", providers);
+        let sql = format!(
+            "SELECT COUNT(*) FROM messages \
+             WHERE type='user' AND prompt_text IS NOT NULL AND {TIME_BOUND} {provider_sql}"
+        );
+        let params = time_provider_params(&since, &until, &provider_params);
+        Ok(conn.query_row(&sql, params.as_slice(), |r| r.get(0))?)
+    }
+
     pub fn recent_sessions_for_providers(
         &self,
         pricing: &Pricing,
