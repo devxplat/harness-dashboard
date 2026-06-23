@@ -32,3 +32,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rust-embed = { version = "8", optional = true }
 mime_guess = { version = "2", optional = true }
 notify = "8.2.0"
+# Opt-in remote integrations (GitHub REST, Google OAuth/Calendar). rustls (not
+# OpenSSL) keeps the single static binary; only the server crate is allowed network.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+urlencoding = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# Google OAuth (loopback + PKCE).
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = "0.2"
