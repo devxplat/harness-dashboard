@@ -2,15 +2,19 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   Boxes,
+  BrainCircuit,
   Coins,
   FolderGit2,
   Gauge,
+  HeartPulse,
   LayoutDashboard,
   Lightbulb,
   MessagesSquare,
   Network,
+  PieChart,
   Settings,
   Sparkles,
+  Users,
   Wrench,
 } from "lucide-react";
 
@@ -48,7 +52,11 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Performance",
     items: [
       { title: "Productivity", href: "/productivity", icon: Gauge },
+      { title: "AI Impact", href: "/ai-impact", icon: BrainCircuit },
       { title: "DORA", href: "/dora", icon: Activity },
+      { title: "Allocation", href: "/allocation", icon: PieChart },
+      { title: "DevEx", href: "/devex", icon: HeartPulse },
+      { title: "Team", href: "/team", icon: Users },
     ],
   },
   {
