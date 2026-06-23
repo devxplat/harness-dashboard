@@ -12,7 +12,7 @@ import { formatDate, formatTokens, formatUSD } from "@/lib/format";
 import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { Paged, PromptRow } from "@/lib/types";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { useEffect, useMemo, useState } from "react";
 
 const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
@@ -28,6 +28,7 @@ const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
   {
     accessorKey: "project_slug",
     header: "Project",
+    enableSorting: false,
     cell: ({ row }) => (
       <ProjectCell
         cwd={row.original.sample_cwd}
@@ -40,6 +41,7 @@ const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
   {
     accessorKey: "provider",
     header: "Provider",
+    enableSorting: false,
     cell: ({ row }) => <ProviderBadge provider={row.original.provider} compact />,
   },
   {
@@ -66,6 +68,7 @@ const makePromptColumns = (short: boolean): ColumnDef<PromptRow>[] => [
   {
     accessorKey: "estimated_cost_usd",
     header: "Cost",
+    enableSorting: false,
     cell: ({ row }) => formatUSD(row.original.estimated_cost_usd),
     meta: { align: "right" },
   },
@@ -77,6 +80,11 @@ export default function PromptsPage() {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   const columns = useMemo(() => makePromptColumns(shortNames), [shortNames]);
+  // The server sorts the whole dataset by tokens or recency; reflect that on the
+  // matching column header so clicking it re-ranks everything (not just the page).
+  const sorting: SortingState = [
+    { id: sort === "recent" ? "timestamp" : "billable_tokens", desc: true },
+  ];
   const { since, until } = useRange();
   const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   // Reset to the first page whenever the result set changes underneath us.
@@ -133,6 +141,14 @@ export default function PromptsPage() {
             onPageSizeChange: (s) => {
               setPageSize(s);
               setPage(0);
+            },
+            sort: {
+              state: sorting,
+              onChange: (next) => {
+                const col = next[0]?.id;
+                if (col === "timestamp") setSort("recent");
+                else if (col === "billable_tokens") setSort("tokens");
+              },
             },
           }}
         />
