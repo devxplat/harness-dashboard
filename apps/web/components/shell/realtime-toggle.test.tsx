@@ -1,4 +1,5 @@
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { IngestContext, type IngestState } from "@/hooks/ingest";
 import { ScanSyncContext, type ScanSync } from "@/hooks/scan-sync";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -40,5 +41,39 @@ describe("RealtimeToggle", () => {
     expect(screen.getByText("Paused")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button"));
     expect(setLive).toHaveBeenCalledWith(true);
+  });
+
+  it("swaps the live dot for a spinner while ingesting, keeping the Live label", () => {
+    const scanSync: ScanSync = {
+      version: 0,
+      live: true,
+      setLive,
+      last: null,
+      githubProgress: null,
+      githubSyncVersion: 0,
+    };
+    const ingest: IngestState = {
+      seeded: true,
+      onboardingDone: true,
+      scanning: true,
+      backfilling: false,
+      ingesting: true,
+      messages: 0,
+      githubConfigured: false,
+      loading: false,
+    };
+    render(
+      <TooltipProvider>
+        <ScanSyncContext.Provider value={scanSync}>
+          <IngestContext.Provider value={ingest}>
+            <RealtimeToggle />
+          </IngestContext.Provider>
+        </ScanSyncContext.Provider>
+      </TooltipProvider>,
+    );
+    // Label is unchanged; the dot is replaced by a spinning icon.
+    expect(screen.getByText("Live")).toBeInTheDocument();
+    expect(screen.queryByText("Indexing…")).not.toBeInTheDocument();
+    expect(screen.getByRole("button").querySelector(".animate-spin")).not.toBeNull();
   });
 });
