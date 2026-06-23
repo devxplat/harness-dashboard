@@ -1,7 +1,6 @@
 "use client";
 
 import { IngestGate } from "@/components/ingest/ingest-gate";
-import { IngestPill } from "@/components/ingest/ingest-pill";
 import { OnboardingGate } from "@/components/onboarding/onboarding-gate";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import Image from "next/image";
@@ -40,7 +39,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-xs text-muted-foreground">Your local AI coding usage</span>
           </div>
           <div className="ml-auto flex items-center gap-2 [&_button]:shadow-sm">
-            <IngestPill />
             <ProviderSelector />
             <RangeSelector />
             <DateRangePicker />
