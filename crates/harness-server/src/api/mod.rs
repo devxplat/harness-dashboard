@@ -7,7 +7,7 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use harness_core::db::Db;
+use harness_core::db::{Db, Grain};
 use harness_core::model::ProviderId;
 use harness_core::pricing::Pricing;
 use harness_core::scan::{self, ScanStats};
@@ -60,6 +60,7 @@ pub struct RangeParams {
     pub limit: Option<i64>,
     pub sort: Option<String>,
     pub providers: Option<String>,
+    pub grain: Option<String>,
     /// 0-based page index for server-side pagination (sessions/projects/prompts).
     pub page: Option<i64>,
     /// Rows per page for server-side pagination.
@@ -119,6 +120,69 @@ fn empty_totals() -> Value {
         "cost_estimated": false,
         "reported_cost_usd": null,
     })
+}
+
+/// Empty AI-ROI shape returned when every provider is deselected.
+fn empty_ai_roi() -> Value {
+    json!({
+        "cost_usd": null, "cost_estimated": false, "reported_cost_usd": null,
+        "active_days": 0, "merged_prs": 0, "commits": 0, "lines_shipped": 0,
+        "cost_per_active_day": null, "cost_per_merged_pr": null,
+        "cost_per_commit": null, "cost_per_1k_lines": null,
+        "by_provider": [], "by_project": [],
+    })
+}
+
+/// Empty AI-impact bundle (all four quadrants zeroed) for the all-deselected case.
+fn empty_ai_impact() -> Value {
+    json!({
+        "lines": {
+            "summary": {
+                "ai_lines": 0, "human_lines": 0, "total_lines": 0,
+                "ai_line_pct": null, "ai_commit_pct": null,
+                "pr_ai_lines": 0, "pr_human_lines": 0, "pr_ai_line_pct": null,
+            },
+            "daily": [],
+        },
+        "roi": empty_ai_roi(),
+        "correlation": {
+            "series": [],
+            "coeffs": {
+                "usage_vs_commits": null, "usage_vs_merged_prs": null, "tokens_vs_lead_hours": null,
+            },
+            "previous_period": null,
+        },
+        "adoption": {
+            "active_days": 0, "span_days": 0, "sessions": 0, "messages": 0, "agent_tasks": 0,
+            "pct_active_days": null, "avg_sessions_per_active_day": null, "daily": [],
+        },
+    })
+}
+
+/// The prior equal-length window immediately before `[since, until)`, for the
+/// correlation period-over-period comparison. `None` when either bound is missing /
+/// unparseable or the window is non-positive.
+fn prev_window(since: Option<&str>, until: Option<&str>) -> Option<(String, String)> {
+    let s = parse_dt(since?)?;
+    let u = parse_dt(until?)?;
+    if u <= s {
+        return None;
+    }
+    let span = u - s;
+    Some((fmt_dt(s - span), fmt_dt(s)))
+}
+
+fn parse_dt(s: &str) -> Option<chrono::NaiveDateTime> {
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        return Some(dt.naive_utc());
+    }
+    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.and_hms_opt(0, 0, 0))
+}
+
+fn fmt_dt(dt: chrono::NaiveDateTime) -> String {
+    dt.format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
 /// Event broadcast to SSE subscribers after each scan.
@@ -216,6 +280,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/commits", get(commits))
         .route("/api/commits/daily", get(commits_daily))
         .route("/api/productivity", get(productivity))
+        .route("/api/productivity/insights", get(productivity_insights))
         .route("/api/integrations", get(integrations))
         .route(
             "/api/integrations/github",
@@ -244,6 +309,17 @@ pub fn router(state: AppState) -> Router {
         .route("/api/meetings/impact", get(meeting_impact))
         .route("/api/meetings/daily", get(meetings_daily))
         .route("/api/dora", get(dora))
+        .route("/api/dora/bundle", get(dora_bundle))
+        .route("/api/ai/lines", get(ai_lines))
+        .route("/api/ai/adoption", get(ai_adoption))
+        .route("/api/ai/roi", get(ai_roi))
+        .route("/api/ai/correlation", get(ai_correlation))
+        .route("/api/ai/impact-bundle", get(ai_impact_bundle))
+        .route("/api/allocation", get(allocation))
+        .route("/api/incidents", get(incidents))
+        .route("/api/authors", get(authors))
+        .route("/api/authors/dora", get(authors_dora))
+        .route("/api/survey", get(survey_get).post(survey_post))
         .route("/api/by-model", get(by_model))
         .route("/api/skills", get(skills))
         .route("/api/subagents", get(subagents))
@@ -1147,6 +1223,154 @@ async fn dora(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiRes
     read_json(&s, move |db, _| db.dora(since.as_deref(), until.as_deref())).await
 }
 
+async fn dora_bundle(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    let grain = Grain::parse(q.grain.as_deref());
+    read_json(&s, move |db, _| {
+        db.dora_bundle(grain, since.as_deref(), until.as_deref())
+    })
+    .await
+}
+
+async fn ai_lines(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, _| {
+        db.ai_lines(since.as_deref(), until.as_deref())
+    })
+    .await
+}
+
+async fn ai_adoption(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, _| {
+        db.ai_adoption(since.as_deref(), until.as_deref())
+    })
+    .await
+}
+
+async fn ai_roi(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    if q.providers_none() {
+        return Ok(Json(empty_ai_roi()));
+    }
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    let providers = q.providers();
+    read_json(&s, move |db, pr| {
+        db.ai_roi(pr, since.as_deref(), until.as_deref(), &providers)
+    })
+    .await
+}
+
+async fn ai_correlation(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    let prev = prev_window(since.as_deref(), until.as_deref());
+    read_json(&s, move |db, _| {
+        let mut bundle = db.ai_correlation(since.as_deref(), until.as_deref())?;
+        if let Some((ps, pu)) = &prev {
+            bundle.previous_period = Some(db.ai_correlation(Some(ps), Some(pu))?.coeffs);
+        }
+        Ok(bundle)
+    })
+    .await
+}
+
+async fn ai_impact_bundle(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    if q.providers_none() {
+        return Ok(Json(empty_ai_impact()));
+    }
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    let providers = q.providers();
+    let prev = prev_window(since.as_deref(), until.as_deref());
+    read_json(&s, move |db, pr| {
+        let mut bundle = db.ai_impact_bundle(pr, since.as_deref(), until.as_deref(), &providers)?;
+        if let Some((ps, pu)) = &prev {
+            bundle.correlation.previous_period =
+                Some(db.ai_correlation(Some(ps), Some(pu))?.coeffs);
+        }
+        Ok(bundle)
+    })
+    .await
+}
+
+async fn allocation(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    let grain = Grain::parse(q.grain.as_deref());
+    read_json(&s, move |db, _| {
+        db.allocation(grain, since.as_deref(), until.as_deref())
+    })
+    .await
+}
+
+async fn incidents(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    let limit = q.limit(100);
+    read_json(&s, move |db, _| {
+        db.incidents(limit, since.as_deref(), until.as_deref())
+    })
+    .await
+}
+
+async fn authors(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, _| {
+        db.authors(since.as_deref(), until.as_deref())
+    })
+    .await
+}
+
+async fn authors_dora(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, _| {
+        db.authors_dora(since.as_deref(), until.as_deref())
+    })
+    .await
+}
+
+async fn survey_get(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    read_json(&s, move |db, _| {
+        db.survey_correlation(since.as_deref(), until.as_deref())
+    })
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct SurveyBody {
+    flow: Option<i64>,
+    productivity: Option<i64>,
+    ai_helpful: Option<i64>,
+    satisfaction: Option<i64>,
+    note: Option<String>,
+}
+
+async fn survey_post(State(s): State<AppState>, Json(b): Json<SurveyBody>) -> ApiResult {
+    let db = s.db.clone();
+    let clamp = |v: Option<i64>| v.map(|x| x.clamp(1, 5));
+    let (flow, prod, ai_help, sat) = (
+        clamp(b.flow),
+        clamp(b.productivity),
+        clamp(b.ai_helpful),
+        clamp(b.satisfaction),
+    );
+    let note = b.note;
+    let id = tokio::task::spawn_blocking(move || -> anyhow::Result<i64> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        Ok(db.insert_survey_response(&now, flow, prod, ai_help, sat, note.as_deref())?)
+    })
+    .await??;
+    Ok(Json(json!({ "ok": true, "id": id })))
+}
+
 async fn commits(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
     let since = q.since().map(str::to_owned);
     let until = q.until().map(str::to_owned);
@@ -1187,6 +1411,20 @@ async fn productivity(State(s): State<AppState>, Query(q): Query<RangeParams>) -
             "aiByDay": by_day,
             "aiByProject": by_project,
         }))
+    })
+    .await
+}
+
+async fn productivity_insights(
+    State(s): State<AppState>,
+    Query(q): Query<RangeParams>,
+) -> ApiResult {
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    let tz = q.tz_offset_min();
+    let grain = Grain::parse(q.grain.as_deref());
+    read_json(&s, move |db, _| {
+        db.productivity_insights(grain, tz, since.as_deref(), until.as_deref())
     })
     .await
 }

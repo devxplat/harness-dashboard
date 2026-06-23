@@ -30,6 +30,7 @@ pub struct GithubSyncStats {
     pub repos: usize,
     pub pull_requests: usize,
     pub deployments: usize,
+    pub incidents: usize,
 }
 
 /// Live progress snapshot, pushed over SSE and pollable via `/status`.
@@ -41,6 +42,7 @@ pub struct GithubProgress {
     pub current_repo: Option<String>,
     pub pull_requests: usize,
     pub deployments: usize,
+    pub incidents: usize,
     pub rate_remaining: Option<i64>,
     pub rate_limit: Option<i64>,
     pub rate_reset_utc: Option<String>,
@@ -322,7 +324,7 @@ async fn sync_one(
     since: Option<&str>,
     pr_scope: PrScope,
     login: Option<&str>,
-) -> anyhow::Result<(usize, usize, RateLimit)> {
+) -> anyhow::Result<(usize, usize, usize, RateLimit)> {
     let (o, r) = (repo.owner.as_str(), repo.repo.as_str());
     let key = repo.repo_key.as_str();
 
@@ -446,11 +448,76 @@ async fn sync_one(
     }
     let dep_n = db.insert_deployments(key, &deps)?;
 
+    // --- incidents: GitHub issues labeled `incident` (opt-in) ---
+    let mut inc_n = 0;
+    let incidents_enabled = db
+        .get_setting("github_incidents_enabled")
+        .ok()
+        .flatten()
+        .map(|v| v != "0")
+        .unwrap_or(true);
+    if incidents_enabled {
+        let label = db
+            .get_setting("github_incident_label")
+            .ok()
+            .flatten()
+            .filter(|l| !l.trim().is_empty())
+            .unwrap_or_else(|| "incident".to_string());
+        let st = db.get_sync_state(key, "issues")?;
+        let prev_etag = st.as_ref().and_then(|s| s.etag.clone());
+        let prev_hw = st.as_ref().and_then(|s| s.high_water_utc.clone());
+        let backfilling = prev_hw.is_none() || backfill_forced;
+        match fetch_resource(
+            client,
+            &format!(
+                "{API}/repos/{o}/{r}/issues?labels={label}&state=all&per_page=100&sort=updated&direction=desc"
+            ),
+            token,
+            prev_etag.as_deref(),
+            backfilling,
+            since.filter(|_| backfilling),
+            &["updated_at", "created_at"],
+            None,
+        )
+        .await
+        {
+            Ok(res) => {
+                last_rate = res.rate.clone();
+                if !res.not_modified {
+                    let kept: Vec<_> = res
+                        .items
+                        .iter()
+                        .filter_map(|it| github::parse_incident_issue(it, key))
+                        .collect();
+                    inc_n = db.insert_incidents(&kept)?;
+                    let hw = res
+                        .items
+                        .iter()
+                        .filter_map(|it| item_time(it, &["updated_at", "created_at"]))
+                        .max()
+                        .or(prev_hw.clone());
+                    db.set_sync_state(key, "issues", res.etag.as_deref(), hw.as_deref(), "ok", &now_utc())?;
+                } else {
+                    db.set_sync_state(
+                        key,
+                        "issues",
+                        prev_etag.as_deref(),
+                        prev_hw.as_deref(),
+                        "not_modified",
+                        &now_utc(),
+                    )?;
+                }
+            }
+            Err(e) => tracing::warn!("github issues sync failed for {o}/{r}: {e}"),
+        }
+    }
+
     let slugs = slugs_of(repo);
     let slug_refs: Vec<&str> = slugs.iter().map(String::as_str).collect();
     db.correlate_pr_overlap(key, &slug_refs, GRACE_MINUTES)?;
+    db.correlate_incident_deploys()?;
 
-    Ok((pr_n, dep_n, last_rate))
+    Ok((pr_n, dep_n, inc_n, last_rate))
 }
 
 /// Read the user's backfill setting + whether it deepened since the last sync.
@@ -549,12 +616,14 @@ pub async fn sync_github(
         )
         .await
         {
-            Ok((prs, deps, rate)) => {
+            Ok((prs, deps, incs, rate)) => {
                 stats.repos += 1;
                 stats.pull_requests += prs;
                 stats.deployments += deps;
+                stats.incidents += incs;
                 snap.pull_requests = stats.pull_requests;
                 snap.deployments = stats.deployments;
+                snap.incidents = stats.incidents;
                 snap.rate_remaining = rate.remaining;
                 snap.rate_limit = rate.limit;
                 snap.rate_reset_utc = rate.reset_utc.clone();
