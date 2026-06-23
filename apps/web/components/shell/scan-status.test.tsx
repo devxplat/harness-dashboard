@@ -1,4 +1,5 @@
 import { ScanStatus } from "@/components/shell/scan-status";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -24,7 +25,11 @@ describe("ScanStatus", () => {
     const fetchMock = vi.fn((_url: string) => Promise.resolve({ ok: true, json: async () => ({ ok: true }) }));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<ScanStatus />);
+    render(
+      <TooltipProvider>
+        <ScanStatus />
+      </TooltipProvider>,
+    );
     await userEvent.click(screen.getByRole("button", { name: "Rescan transcripts" }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([u]) => String(u).includes("/api/refresh"))).toBe(true),
@@ -43,7 +48,11 @@ describe("ScanStatus", () => {
       "fetch",
       vi.fn(() => Promise.resolve({ ok: false, status: 500, statusText: "err" })),
     );
-    render(<ScanStatus />);
+    render(
+      <TooltipProvider>
+        <ScanStatus />
+      </TooltipProvider>,
+    );
     await userEvent.click(screen.getByRole("button", { name: "Rescan transcripts" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Rescan transcripts" })).toBeEnabled());
   });

@@ -2,16 +2,93 @@
 
 import { DataTable } from "@/components/data-table";
 import { PathToggle, ProjectCell } from "@/components/path-display";
+import { ProviderBlips } from "@/components/provider-badge";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
-import { formatInt, formatTokens } from "@/lib/format";
+import { formatInt, formatTokens, tidyPath } from "@/lib/format";
+import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { ProjectRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
 
-const makeColumns = (short: boolean): ColumnDef<ProjectRow>[] => [
+type ProjectAggregateRow = Omit<ProjectRow, "provider" | "providers"> & {
+  providers: string[];
+  provider_search: string;
+  project_search: string;
+};
+
+function normalizePath(path: string): string {
+  return tidyPath(path).replaceAll("\\", "/").replace(/\/+$/, "").toLocaleLowerCase();
+}
+
+function projectGroupKey(row: ProjectRow): string {
+  if (row.repo_root) return `root:${normalizePath(row.repo_root)}`;
+  if (row.sample_cwd) return `cwd:${normalizePath(row.sample_cwd)}`;
+  if (row.repo_key) return `repo:${normalizePath(row.repo_key)}`;
+  return `slug:${row.project_slug.toLocaleLowerCase()}`;
+}
+
+function aggregateProjects(rows: ProjectRow[]): ProjectAggregateRow[] {
+  const grouped = new Map<string, ProjectAggregateRow>();
+
+  for (const row of rows) {
+    const key = projectGroupKey(row);
+    const displayPath = row.repo_root ?? row.sample_cwd;
+    const current =
+      grouped.get(key) ??
+      ({
+        project_slug: row.project_slug,
+        repo_key: row.repo_key,
+        repo_root: row.repo_root,
+        sample_cwd: displayPath,
+        providers: [],
+        provider_search: "",
+        project_search: "",
+        sessions: 0,
+        turns: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        billable_tokens: 0,
+        cache_read_tokens: 0,
+      } satisfies ProjectAggregateRow);
+
+    if (!current.repo_key && row.repo_key) current.repo_key = row.repo_key;
+    if (!current.repo_root && row.repo_root) current.repo_root = row.repo_root;
+    if (row.repo_root && current.sample_cwd !== row.repo_root) current.sample_cwd = row.repo_root;
+    if (!current.sample_cwd && displayPath) current.sample_cwd = displayPath;
+    const rowProviders = row.providers?.length ? row.providers : [row.provider ?? "claude"];
+    for (const provider of rowProviders) {
+      if (!current.providers.includes(provider)) {
+        current.providers.push(provider);
+        current.provider_search = current.providers.join(" ");
+      }
+    }
+    current.project_search = [
+      current.project_search,
+      row.project_slug,
+      row.sample_cwd,
+      row.repo_root,
+      row.repo_key,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    current.sessions += row.sessions;
+    current.turns += row.turns;
+    current.input_tokens += row.input_tokens;
+    current.output_tokens += row.output_tokens;
+    current.billable_tokens += row.billable_tokens;
+    current.cache_read_tokens += row.cache_read_tokens;
+    grouped.set(key, current);
+  }
+
+  return [...grouped.values()].sort(
+    (a, b) => b.billable_tokens - a.billable_tokens || b.sessions - a.sessions,
+  );
+}
+
+const makeColumns = (short: boolean): ColumnDef<ProjectAggregateRow>[] => [
   {
     accessorKey: "project_slug",
     header: "Project",
@@ -23,6 +100,11 @@ const makeColumns = (short: boolean): ColumnDef<ProjectRow>[] => [
         className="max-w-[280px] font-medium"
       />
     ),
+  },
+  {
+    accessorKey: "providers",
+    header: "Provider",
+    cell: ({ row }) => <ProviderBlips providers={row.original.providers} />,
   },
   {
     accessorKey: "sessions",
@@ -66,22 +148,31 @@ export default function ProjectsPage() {
   const [shortNames, setShortNames] = useState(true);
   const columns = useMemo(() => makeColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
-  const { data, error, loading } = useApi<ProjectRow[]>(`/api/projects${rangeQuery(since, until)}`);
+  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { data, error, loading } = useApi<ProjectRow[]>(
+    settingsLoaded && hasAvailableProviders
+      ? `/api/projects${rangeQuery(since, until, queryProviders)}`
+      : null,
+  );
+  const projects = useMemo(() => aggregateProjects(data ?? []), [data]);
 
   if (error) return <ErrorBlock error={error} />;
+  if (settingsLoaded && !hasAvailableProviders) {
+    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+  }
   if (loading || !data) return <LoadingBlock />;
 
   return (
     <>
       <PageTitle title="Projects" description="Token usage grouped by project." />
-      {data.length === 0 ? (
+      {projects.length === 0 ? (
         <EmptyBlock message="No projects in range." />
       ) : (
         <DataTable
           columns={columns}
-          data={data}
+          data={projects}
           search={{
-            fields: ["project_slug", "sample_cwd"],
+            fields: ["provider_search", "project_search", "project_slug", "sample_cwd"],
             placeholder: "Filter projects…",
             ariaLabel: "Filter projects",
           }}

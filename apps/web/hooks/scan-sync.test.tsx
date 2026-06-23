@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
+import { useContext } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ScanSyncProvider } from "./scan-sync";
+import { ScanSyncContext, ScanSyncProvider } from "./scan-sync";
 import { useApi } from "./use-api";
 
 interface FakeES {
@@ -47,6 +48,42 @@ describe("ScanSyncProvider + useApi live refresh", () => {
     act(() => es.current?.onmessage?.({ data: JSON.stringify({ type: "scan" }) }));
     await waitFor(() => expect(screen.getByText("n=2")).toBeInTheDocument());
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces github progress and bumps the sync version on finish", async () => {
+    const es = installFakeEventSource();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve({ ok: true, json: async () => ({}) })),
+    );
+    function GithubProbe() {
+      const { githubProgress, githubSyncVersion } = useContext(ScanSyncContext);
+      return (
+        <span>
+          gh={githubProgress?.repo_index ?? "-"}:{githubSyncVersion}
+        </span>
+      );
+    }
+    render(
+      <ScanSyncProvider>
+        <GithubProbe />
+      </ScanSyncProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("gh=-:0")).toBeInTheDocument());
+
+    act(() =>
+      es.current?.onmessage?.({
+        data: JSON.stringify({ type: "github-progress", progress: { repo_index: 3, repo_total: 12, running: true } }),
+      }),
+    );
+    await waitFor(() => expect(screen.getByText("gh=3:0")).toBeInTheDocument());
+
+    act(() =>
+      es.current?.onmessage?.({
+        data: JSON.stringify({ type: "github-sync", progress: { repo_index: 12, repo_total: 12, running: false } }),
+      }),
+    );
+    await waitFor(() => expect(screen.getByText("gh=12:1")).toBeInTheDocument());
   });
 
   it("ignores malformed and non-scan frames", async () => {

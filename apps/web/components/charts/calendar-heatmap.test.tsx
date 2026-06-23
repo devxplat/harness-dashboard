@@ -1,11 +1,12 @@
 import { CalendarHeatmap } from "@/components/charts/calendar-heatmap";
-import type { DailyRow } from "@/lib/types";
+import type { CommitDailyRow, DailyRow, MeetingDay } from "@/lib/types";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 function row(day: string, sessions: number, tokens: number): DailyRow {
   return {
+    provider: "claude",
     day,
     sessions,
     input_tokens: tokens,
@@ -13,6 +14,14 @@ function row(day: string, sessions: number, tokens: number): DailyRow {
     cache_read_tokens: 0,
     cache_create_tokens: 0,
   };
+}
+
+function commit(day: string, commits: number): CommitDailyRow {
+  return { day, commits, ai_commits: commits, human_commits: 0, insertions: 0, deletions: 0 };
+}
+
+function meeting(day: string, minutes: number): MeetingDay {
+  return { day, count: 1, minutes };
 }
 
 const data = [row("2026-06-10", 5, 1000), row("2026-06-15", 20, 8000)];
@@ -53,5 +62,24 @@ describe("CalendarHeatmap", () => {
   it("falls back to the current month with no data", () => {
     render(<CalendarHeatmap data={[]} />);
     expect(screen.getByText("Sun")).toBeInTheDocument();
+  });
+
+  it("offers a commits metric when commit data is supplied", async () => {
+    // 42 can't be a calendar day number, so the footer count is unambiguous.
+    render(<CalendarHeatmap data={data} commits={[commit("2026-06-15", 42)]} />);
+    const commitsBtn = screen.getByRole("button", { name: "commits" });
+    await userEvent.click(commitsBtn);
+    expect(commitsBtn).toHaveAttribute("aria-pressed", "true");
+    // Selected day (Jun 15) commit count shows in the footer summary.
+    expect(screen.getByText("42")).toBeInTheDocument();
+  });
+
+  it("offers a meetings metric when meeting data is supplied", async () => {
+    render(<CalendarHeatmap data={data} meetings={[meeting("2026-06-15", 90)]} />);
+    const meetingsBtn = screen.getByRole("button", { name: "meetings" });
+    await userEvent.click(meetingsBtn);
+    expect(meetingsBtn).toHaveAttribute("aria-pressed", "true");
+    // Selected day's meeting minutes appear in the footer ("90m").
+    expect(screen.getByText("90m")).toBeInTheDocument();
   });
 });

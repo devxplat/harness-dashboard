@@ -1,10 +1,12 @@
 "use client";
 
 import { DataTable } from "@/components/data-table";
+import { ProviderBadge } from "@/components/provider-badge";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
 import { formatInt, formatTokens } from "@/lib/format";
+import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { ToolRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -14,6 +16,11 @@ const columns: ColumnDef<ToolRow>[] = [
     accessorKey: "tool_name",
     header: "Tool",
     cell: ({ row }) => <span className="font-medium">{row.original.tool_name}</span>,
+  },
+  {
+    accessorKey: "provider",
+    header: "Provider",
+    cell: ({ row }) => <ProviderBadge provider={row.original.provider} compact />,
   },
   {
     accessorKey: "calls",
@@ -31,9 +38,17 @@ const columns: ColumnDef<ToolRow>[] = [
 
 export default function ToolsPage() {
   const { since, until } = useRange();
-  const { data, error, loading } = useApi<ToolRow[]>(`/api/tools${rangeQuery(since, until)}`);
+  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { data, error, loading } = useApi<ToolRow[]>(
+    settingsLoaded && hasAvailableProviders
+      ? `/api/tools${rangeQuery(since, until, queryProviders)}`
+      : null,
+  );
 
   if (error) return <ErrorBlock error={error} />;
+  if (settingsLoaded && !hasAvailableProviders) {
+    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+  }
   if (loading || !data) return <LoadingBlock />;
 
   return (
@@ -46,7 +61,7 @@ export default function ToolsPage() {
           columns={columns}
           data={data}
           search={{
-            fields: ["tool_name"],
+            fields: ["provider", "tool_name"],
             placeholder: "Filter tools…",
             ariaLabel: "Filter tools",
           }}

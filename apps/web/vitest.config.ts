@@ -24,6 +24,7 @@ export default defineConfig({
         // unit-tested in lib/activity-grid.ts; these render as smoke tests only.
         "components/charts/activity-heatmap.tsx",
         "components/charts/daily-chart.tsx",
+        "components/charts/ai-split-chart.tsx",
         "lib/utils.ts",
         "lib/test-utils.tsx",
         "app/layout.tsx",

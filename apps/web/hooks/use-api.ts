@@ -12,12 +12,24 @@ export interface ApiState<T> {
 }
 
 /** Fetch `path` from the Rust API. Pass `null` to skip. Re-fetches when `path`
- * changes, and silently re-fetches (no loading flash) on each server scan. */
+ * changes and (silently) when the data `version` bumps after a scan.
+ *
+ * Keys the live refetch on the numeric `version` only — NOT the whole ScanSync
+ * context object, which the provider recreates on every render (scanning /
+ * github progress ticks would otherwise trigger a refetch storm). And keeps at
+ * most one request in flight per hook: a refetch that arrives mid-flight is
+ * coalesced into a single trailing fetch, and responses for a superseded path are
+ * ignored — so a slow endpoint can never pile up. */
 export function useApi<T>(path: string | null): ApiState<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const version = useContext(ScanSyncContext);
+  const { version } = useContext(ScanSyncContext);
+
+  const reqId = useRef(0);
+  const inFlight = useRef(false);
+  const pending = useRef(false);
+  const hasData = useRef(false);
 
   const load = useCallback(
     (silent = false) => {
@@ -25,22 +37,40 @@ export function useApi<T>(path: string | null): ApiState<T> {
         setLoading(false);
         return;
       }
-      if (!silent) setLoading(true);
+      if (inFlight.current) {
+        pending.current = true; // coalesce concurrent triggers into one trailing fetch
+        return;
+      }
+      inFlight.current = true;
+      const id = ++reqId.current;
+      if (!silent && !hasData.current) setLoading(true);
       apiGet<T>(path)
         .then((d) => {
+          if (id !== reqId.current) return; // superseded by a newer request
+          hasData.current = true;
           setData(d);
           setError(null);
         })
-        .catch((e) => setError(String(e)))
-        .finally(() => setLoading(false));
+        .catch((e) => {
+          if (id !== reqId.current) return;
+          setError(String(e));
+        })
+        .finally(() => {
+          if (id !== reqId.current) return;
+          inFlight.current = false;
+          setLoading(false);
+          if (pending.current) {
+            pending.current = false;
+            load(true);
+          }
+        });
     },
     [path],
   );
 
   useEffect(() => load(), [load]);
 
-  // Live refresh: when a scan completes, re-fetch in the background (keep the
-  // current data on screen instead of flashing the loading state).
+  // Live refresh: only when the (throttled, numeric) data version actually changes.
   const lastVersion = useRef(version);
   useEffect(() => {
     if (version === lastVersion.current) return;

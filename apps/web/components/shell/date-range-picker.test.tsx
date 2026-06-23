@@ -1,4 +1,5 @@
 import { DateRangePicker } from "@/components/shell/date-range-picker";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { RangeProvider, useRange } from "@/lib/range";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -29,9 +30,11 @@ const dayButtons = () =>
 describe("DateRangePicker", () => {
   it("shows a prompt label and outline style with no custom window", () => {
     render(
-      <RangeProvider>
-        <DateRangePicker />
-      </RangeProvider>,
+      <TooltipProvider>
+        <RangeProvider>
+          <DateRangePicker />
+        </RangeProvider>
+      </TooltipProvider>,
     );
     const trigger = screen.getByRole("button", { name: "Pick a custom date range" });
     expect(trigger).toHaveTextContent("Custom range");
@@ -40,9 +43,11 @@ describe("DateRangePicker", () => {
 
   it("renders the inclusive custom window in the trigger", async () => {
     render(
-      <RangeProvider>
-        <CustomHarness />
-      </RangeProvider>,
+      <TooltipProvider>
+        <RangeProvider>
+          <CustomHarness />
+        </RangeProvider>
+      </TooltipProvider>,
     );
     await userEvent.click(screen.getByRole("button", { name: "seed" }));
     const trigger = screen.getByRole("button", { name: "Pick a custom date range" });
@@ -54,9 +59,11 @@ describe("DateRangePicker", () => {
   it("highlights the active preset window when opened", async () => {
     // Default provider range is 30d, so opening should mark those days as the preset.
     render(
-      <RangeProvider>
-        <DateRangePicker />
-      </RangeProvider>,
+      <TooltipProvider>
+        <RangeProvider>
+          <DateRangePicker />
+        </RangeProvider>
+      </TooltipProvider>,
     );
     await userEvent.click(screen.getByRole("button", { name: "Pick a custom date range" }));
     expect(document.querySelector(".rdp-preset")).not.toBeNull();
@@ -65,9 +72,11 @@ describe("DateRangePicker", () => {
   it("keeps the popover open after the first click and commits on the second", async () => {
     const user = userEvent.setup();
     render(
-      <RangeProvider>
-        <DateRangePicker />
-      </RangeProvider>,
+      <TooltipProvider>
+        <RangeProvider>
+          <DateRangePicker />
+        </RangeProvider>
+      </TooltipProvider>,
     );
     await user.click(screen.getByRole("button", { name: "Pick a custom date range" }));
 

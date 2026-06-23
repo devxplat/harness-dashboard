@@ -5,6 +5,7 @@ import { CalendarHeatmap } from "@/components/charts/calendar-heatmap";
 import { DailyChart } from "@/components/charts/daily-chart";
 import { OverviewStats } from "@/components/overview-stats";
 import { PathToggle, ProjectCell } from "@/components/path-display";
+import { ProviderBadge } from "@/components/provider-badge";
 import { EmptyBlock, ErrorBlock } from "@/components/states";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,6 +20,7 @@ import {
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
 import { formatDateShort, formatInt, formatTokens, formatUSD } from "@/lib/format";
+import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { OverviewBundle, Totals } from "@/lib/types";
 import { useState } from "react";
@@ -30,6 +32,56 @@ const RANGE_LABEL: Record<string, string> = {
   all: "All time",
   custom: "Custom range",
 };
+
+function aggregateDaily(rows: OverviewBundle["daily"]): OverviewBundle["daily"] {
+  return Array.from(
+    rows.reduce((map, row) => {
+      const current =
+        map.get(row.day) ??
+        ({
+          ...row,
+          provider: "all",
+          sessions: 0,
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_tokens: 0,
+          cache_create_tokens: 0,
+        } satisfies OverviewBundle["daily"][number]);
+      current.sessions += row.sessions;
+      current.input_tokens += row.input_tokens;
+      current.output_tokens += row.output_tokens;
+      current.cache_read_tokens += row.cache_read_tokens;
+      current.cache_create_tokens += row.cache_create_tokens;
+      map.set(row.day, current);
+      return map;
+    }, new Map<string, OverviewBundle["daily"][number]>()),
+  ).map(([, row]) => row);
+}
+
+function aggregateActivity(rows: OverviewBundle["activity"]): OverviewBundle["activity"] {
+  return Array.from(
+    rows.reduce((map, row) => {
+      const key = `${row.day}:${row.half}`;
+      const current =
+        map.get(key) ??
+        ({
+          ...row,
+          key,
+          provider: "all",
+          sessions: 0,
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_create_tokens: 0,
+        } satisfies OverviewBundle["activity"][number]);
+      current.sessions += row.sessions;
+      current.input_tokens += row.input_tokens;
+      current.output_tokens += row.output_tokens;
+      current.cache_create_tokens += row.cache_create_tokens;
+      map.set(key, current);
+      return map;
+    }, new Map<string, OverviewBundle["activity"][number]>()),
+  ).map(([, row]) => row);
+}
 
 function RowsSkeleton() {
   return (
@@ -43,20 +95,33 @@ function RowsSkeleton() {
 
 export default function OverviewPage() {
   const { range, since, until, previous } = useRange();
+  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const [shortNames, setShortNames] = useState(true);
+  const canFetchProviderData = settingsLoaded && hasAvailableProviders;
   // Fast path: the stat panel renders from the lightweight totals query (~0.6s)
   // while the heavier bundle (heatmaps, by-model, recent sessions) streams in.
-  const totals = useApi<Totals>(`/api/overview${rangeQuery(since, until)}`);
+  const totals = useApi<Totals>(
+    canFetchProviderData ? `/api/overview${rangeQuery(since, until, queryProviders)}` : null,
+  );
   const prevUrl = previous
-    ? `/api/overview?since=${encodeURIComponent(previous.since)}&until=${encodeURIComponent(previous.until)}`
+    ? `/api/overview${rangeQuery(previous.since, previous.until, queryProviders)}`
     : null;
-  const prev = useApi<Totals>(prevUrl);
-  const bundle = useApi<OverviewBundle>(`/api/overview-bundle${rangeQuery(since, until)}`);
+  const prev = useApi<Totals>(canFetchProviderData ? prevUrl : null);
+  const bundle = useApi<OverviewBundle>(
+    canFetchProviderData
+      ? `/api/overview-bundle${rangeQuery(since, until, queryProviders)}`
+      : null,
+  );
 
   if (totals.error) return <ErrorBlock error={totals.error} />;
+  if (settingsLoaded && !hasAvailableProviders) {
+    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+  }
 
   const t = totals.data;
   const b = bundle.data;
+  const dailyTotals = b ? aggregateDaily(b.daily) : [];
+  const activityTotals = b ? aggregateActivity(b.activity) : [];
 
   return (
     <>
@@ -71,8 +136,8 @@ export default function OverviewPage() {
           <CardContent>
             {!b ? (
               <Skeleton className="h-44 w-full" />
-            ) : b.daily.length ? (
-              <ActivityHeatmap data={b.daily} granular={b.activity} />
+            ) : dailyTotals.length ? (
+              <ActivityHeatmap data={dailyTotals} granular={activityTotals} />
             ) : (
               <EmptyBlock message="No activity in range." />
             )}
@@ -83,8 +148,12 @@ export default function OverviewPage() {
           <CardContent className="flex flex-1 flex-col">
             {!b ? (
               <Skeleton className="h-44 w-full" />
-            ) : b.daily.length ? (
-              <CalendarHeatmap data={b.daily} />
+            ) : dailyTotals.length ? (
+              <CalendarHeatmap
+                data={dailyTotals}
+                commits={b.commitsDaily}
+                meetings={b.meetingsDaily?.length ? b.meetingsDaily : undefined}
+              />
             ) : (
               <EmptyBlock message="No activity in range." />
             )}
@@ -120,6 +189,7 @@ export default function OverviewPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Model</TableHead>
+                    <TableHead>Provider</TableHead>
                     <TableHead className="text-right">Input</TableHead>
                     <TableHead className="text-right">Output</TableHead>
                     <TableHead className="text-right">Cost</TableHead>
@@ -127,8 +197,11 @@ export default function OverviewPage() {
                 </TableHeader>
                 <TableBody>
                   {b.byModel.map((m) => (
-                    <TableRow key={m.model ?? "unknown"}>
+                    <TableRow key={`${m.provider}:${m.model ?? "unknown"}`}>
                       <TableCell className="font-mono text-xs">{m.model ?? "—"}</TableCell>
+                      <TableCell>
+                        <ProviderBadge provider={m.provider} compact />
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{formatTokens(m.input_tokens)}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatTokens(m.output_tokens)}</TableCell>
                       <TableCell className="text-right tabular-nums">{formatUSD(m.cost_usd)}</TableCell>
@@ -153,6 +226,7 @@ export default function OverviewPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Project</TableHead>
+                    <TableHead>Provider</TableHead>
                     <TableHead>Started</TableHead>
                     <TableHead className="text-right">Turns</TableHead>
                     <TableHead className="text-right">Tokens</TableHead>
@@ -161,15 +235,18 @@ export default function OverviewPage() {
                 </TableHeader>
                 <TableBody>
                   {b.sessions.map((s) => (
-                    <TableRow key={s.session_id}>
+                    <TableRow key={`${s.provider}:${s.session_id}`}>
                       <TableCell>
                         <ProjectCell
                           cwd={s.sample_cwd}
                           slug={s.project_slug}
                           short={shortNames}
-                          href={`/sessions/?id=${s.session_id}`}
+                          href={`/sessions/?id=${s.session_id}&provider=${s.provider}`}
                           className="max-w-[200px]"
                         />
+                      </TableCell>
+                      <TableCell>
+                        <ProviderBadge provider={s.provider} compact />
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                         {formatDateShort(s.started)}
