@@ -60,6 +60,10 @@ pub struct RangeParams {
     pub limit: Option<i64>,
     pub sort: Option<String>,
     pub providers: Option<String>,
+    /// 0-based page index for server-side pagination (sessions/projects/prompts).
+    pub page: Option<i64>,
+    /// Rows per page for server-side pagination.
+    pub page_size: Option<i64>,
     /// Minutes east of UTC for bucketing UTC message timestamps into local
     /// hours (productivity matrix). Commits carry their own offset and ignore it.
     pub tz_offset_min: Option<i64>,
@@ -87,6 +91,14 @@ impl RangeParams {
     }
     fn limit(&self, default: i64) -> i64 {
         self.limit.unwrap_or(default).clamp(1, 1000)
+    }
+    /// 0-based page index (clamped ≥ 0) for server-side pagination.
+    fn page(&self) -> i64 {
+        self.page.unwrap_or(0).max(0)
+    }
+    /// Rows per page (clamped to a sane range) for server-side pagination.
+    fn page_size(&self, default: i64) -> i64 {
+        self.page_size.unwrap_or(default).clamp(1, 200)
     }
     /// Clamped to a sane ±14h window; defaults to UTC.
     fn tz_offset_min(&self) -> i64 {
@@ -478,22 +490,32 @@ async fn overview_bundle(State(s): State<AppState>, Query(q): Query<RangeParams>
 
 async fn prompts(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
     if q.providers_none() {
-        return Ok(Json(json!([])));
+        return Ok(Json(json!({ "rows": [], "total": 0 })));
     }
     let sort = q.sort.clone().unwrap_or_else(|| "tokens".to_string());
-    let limit = q.limit(50);
+    let page_size = q.page_size(25);
+    let offset = (q.page() * page_size) as usize;
+    let take = page_size as usize;
     let since = q.since().map(str::to_owned);
     let until = q.until().map(str::to_owned);
     let providers = q.providers();
     read_json(&s, move |db, pr| {
-        db.expensive_prompts_for_providers(
+        let total = db.count_expensive_prompts_for_providers(
+            since.as_deref(),
+            until.as_deref(),
+            &providers,
+        )?;
+        // Rank the top `offset+take` by the chosen order, then slice the page.
+        let ranked = db.expensive_prompts_for_providers(
             pr,
-            limit,
+            (offset + take) as i64,
             &sort,
             since.as_deref(),
             until.as_deref(),
             &providers,
-        )
+        )?;
+        let rows: Vec<_> = ranked.into_iter().skip(offset).take(take).collect();
+        Ok(json!({ "rows": rows, "total": total }))
     })
     .await
 }
@@ -502,6 +524,8 @@ async fn projects(State(s): State<AppState>, Query(q): Query<RangeParams>) -> Ap
     if q.providers_none() {
         return Ok(Json(json!([])));
     }
+    // Projects are already repo-aggregated server-side (bounded by repo count), so the
+    // page renders the full set with client-side pagination.
     let since = q.since().map(str::to_owned);
     let until = q.until().map(str::to_owned);
     let providers = q.providers();
@@ -526,14 +550,27 @@ async fn tools(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiRe
 
 async fn sessions(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiResult {
     if q.providers_none() {
-        return Ok(Json(json!([])));
+        return Ok(Json(json!({ "rows": [], "total": 0 })));
     }
+    let page_size = q.page_size(25);
+    let offset = (q.page() * page_size) as usize;
+    let take = page_size as usize;
     let since = q.since().map(str::to_owned);
     let until = q.until().map(str::to_owned);
-    let limit = q.limit(20);
     let providers = q.providers();
     read_json(&s, move |db, pr| {
-        db.recent_sessions_for_providers(pr, limit, since.as_deref(), until.as_deref(), &providers)
+        let total =
+            db.count_sessions_for_providers(since.as_deref(), until.as_deref(), &providers)?;
+        // Recent-first; fetch through the requested page, then slice it.
+        let recent = db.recent_sessions_for_providers(
+            pr,
+            (offset + take) as i64,
+            since.as_deref(),
+            until.as_deref(),
+            &providers,
+        )?;
+        let rows: Vec<_> = recent.into_iter().skip(offset).take(take).collect();
+        Ok(json!({ "rows": rows, "total": total }))
     })
     .await
 }

@@ -11,11 +11,11 @@ import { withRange } from "@/lib/api";
 import { formatDate, formatInt, formatTokens, formatUSD } from "@/lib/format";
 import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
-import type { MessageDetail, SessionRow } from "@/lib/types";
+import type { MessageDetail, Paged, SessionRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 const makeSessionColumns = (short: boolean): ColumnDef<SessionRow>[] => [
   {
@@ -67,12 +67,20 @@ const makeSessionColumns = (short: boolean): ColumnDef<SessionRow>[] => [
 
 function SessionsList() {
   const [shortNames, setShortNames] = useState(true);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
   const columns = useMemo(() => makeSessionColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
   const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
-  const { data, error, loading } = useApi<SessionRow[]>(
+  useEffect(() => setPage(0), [since, until, queryProviders]);
+  const { data, error, loading } = useApi<Paged<SessionRow>>(
     settingsLoaded && hasAvailableProviders
-      ? withRange("/api/sessions?limit=500", since, until, queryProviders)
+      ? withRange(
+          `/api/sessions?page=${page}&page_size=${pageSize}`,
+          since,
+          until,
+          queryProviders,
+        )
       : null,
   );
   if (error) return <ErrorBlock error={error} />;
@@ -80,19 +88,29 @@ function SessionsList() {
     return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
   }
   if (loading || !data) return <LoadingBlock />;
+  if (data.total === 0) return <EmptyBlock message="No sessions yet." />;
 
   return (
     <DataTable
       columns={columns}
-      data={data}
+      data={data.rows}
       search={{
         fields: ["provider", "project_slug", "sample_cwd", "session_id"],
-        placeholder: "Filter by project or session id…",
+        placeholder: "Filter this page…",
         ariaLabel: "Filter sessions",
       }}
       actions={<PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />}
-      pageSize={25}
       emptyMessage="No sessions match."
+      server={{
+        total: data.total,
+        pageIndex: page,
+        pageSize,
+        onPageChange: setPage,
+        onPageSizeChange: (s) => {
+          setPageSize(s);
+          setPage(0);
+        },
+      }}
       footer={(rows) => {
         const turns = rows.reduce((a, s) => a + s.turns, 0);
         const tokens = rows.reduce((a, s) => a + s.tokens, 0);

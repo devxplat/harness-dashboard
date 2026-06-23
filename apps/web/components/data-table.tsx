@@ -62,6 +62,15 @@ interface DataTableProps<TData, TValue> {
   emptyMessage?: string;
   /** Rendered below the table, receives the filtered rows (e.g. for a totals line). */
   footer?: (rows: TData[]) => ReactNode;
+  /** Server-side pagination: `data` is one page; total/page come from the server, and
+   *  the prev/next/page-size controls call back instead of paginating client-side. */
+  server?: {
+    total: number;
+    pageIndex: number;
+    pageSize: number;
+    onPageChange: (pageIndex: number) => void;
+    onPageSizeChange: (pageSize: number) => void;
+  };
 }
 
 export function DataTable<TData, TValue>({
@@ -73,6 +82,7 @@ export function DataTable<TData, TValue>({
   pageSizeOptions = [10, 25, 50, 100],
   emptyMessage = "No results.",
   footer,
+  server,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -104,10 +114,29 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter, columnVisibility },
+    state: {
+      sorting,
+      globalFilter,
+      columnVisibility,
+      ...(server
+        ? { pagination: { pageIndex: server.pageIndex, pageSize: server.pageSize } }
+        : {}),
+    },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onColumnVisibilityChange: setColumnVisibility,
+    ...(server
+      ? {
+          manualPagination: true,
+          pageCount: Math.max(1, Math.ceil(server.total / server.pageSize)),
+          onPaginationChange: (updater) => {
+            const prev = { pageIndex: server.pageIndex, pageSize: server.pageSize };
+            const next = typeof updater === "function" ? updater(prev) : updater;
+            if (next.pageSize !== prev.pageSize) server.onPageSizeChange(next.pageSize);
+            else if (next.pageIndex !== prev.pageIndex) server.onPageChange(next.pageIndex);
+          },
+        }
+      : {}),
     globalFilterFn: (row, _columnId, value) => {
       if (!search) return true;
       const needle = String(value).toLowerCase();
@@ -118,8 +147,8 @@ export function DataTable<TData, TValue>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize } },
+    ...(server ? {} : { getPaginationRowModel: getPaginationRowModel() }),
+    ...(server ? {} : { initialState: { pagination: { pageSize } } }),
   });
 
   const rows = table.getRowModel().rows;
@@ -262,7 +291,7 @@ export function DataTable<TData, TValue>({
           <div className="flex items-center gap-3">
             <span>
               Page {table.getState().pagination.pageIndex + 1} of {Math.max(1, table.getPageCount())} ·{" "}
-              {filtered.length} rows
+              {server ? server.total : filtered.length} rows
             </span>
             <div className="flex gap-2">
               <Button

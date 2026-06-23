@@ -229,6 +229,12 @@ export interface RtkInfo {
   monthly: unknown[];
 }
 
+/** One page of a server-paginated list endpoint. */
+export interface Paged<T> {
+  rows: T[];
+  total: number;
+}
+
 export interface SettingsInfo {
   claude_dir: string;
   projects_dir: string;
