@@ -16,18 +16,45 @@ import { formatInt, formatTokens, formatUSD } from "@/lib/format";
 import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { AgentGroupRow, SubagentsResponse } from "@/lib/types";
+import type { TFunction } from "i18next";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
-function AgentTable({ rows, label }: { rows: AgentGroupRow[]; label: string }) {
+function makeColumns(t: TFunction) {
+  return {
+    kind: t("pages.subagents.kind"),
+    model: t("pages.subagents.model"),
+    msgs: t("pages.subagents.msgs"),
+    ioTokens: t("pages.subagents.ioTokens"),
+    cost: t("pages.subagents.cost"),
+    entrypoint: t("pages.subagents.entrypoint"),
+  };
+}
+
+function AgentTable({
+  rows,
+  label,
+  modelLabel,
+  msgsLabel,
+  ioTokensLabel,
+  costLabel,
+}: {
+  rows: AgentGroupRow[];
+  label: string;
+  modelLabel: string;
+  msgsLabel: string;
+  ioTokensLabel: string;
+  costLabel: string;
+}) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>{label}</TableHead>
-          <TableHead>Model</TableHead>
-          <TableHead className="text-right">Msgs</TableHead>
-          <TableHead className="text-right">I/O tokens</TableHead>
-          <TableHead className="text-right">Cost</TableHead>
+          <TableHead>{modelLabel}</TableHead>
+          <TableHead className="text-right">{msgsLabel}</TableHead>
+          <TableHead className="text-right">{ioTokensLabel}</TableHead>
+          <TableHead className="text-right">{costLabel}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -57,9 +84,11 @@ export default function SubagentsPage() {
       : null,
   );
 
+  const cols = useMemo(() => makeColumns(t), [t]);
+
   if (error) return <ErrorBlock error={error} />;
   if (settingsLoaded && !hasAvailableProviders) {
-    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+    return <EmptyBlock message={t("common.noProviders")} />;
   }
   if (loading || !data) return <LoadingBlock />;
 
@@ -72,23 +101,37 @@ export default function SubagentsPage() {
         description={t("pages.subagents.description")}
       />
       {empty ? (
-        <EmptyBlock message="No assistant activity in range." />
+        <EmptyBlock message={t("pages.subagents.noActivity")} />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>By kind</CardTitle>
+              <CardTitle>{t("pages.subagents.byKind")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <AgentTable rows={data.by_kind} label="Kind" />
+              <AgentTable
+                rows={data.by_kind}
+                label={cols.kind}
+                modelLabel={cols.model}
+                msgsLabel={cols.msgs}
+                ioTokensLabel={cols.ioTokens}
+                costLabel={cols.cost}
+              />
             </CardContent>
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>By entrypoint</CardTitle>
+              <CardTitle>{t("pages.subagents.byEntrypoint")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <AgentTable rows={data.by_entrypoint} label="Entrypoint" />
+              <AgentTable
+                rows={data.by_entrypoint}
+                label={cols.entrypoint}
+                modelLabel={cols.model}
+                msgsLabel={cols.msgs}
+                ioTokensLabel={cols.ioTokens}
+                costLabel={cols.cost}
+              />
             </CardContent>
           </Card>
         </div>

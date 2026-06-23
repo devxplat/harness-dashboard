@@ -8,18 +8,23 @@ import { ScanSyncContext } from "@/hooks/scan-sync";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 import { useContext } from "react";
+import { useTranslation } from "react-i18next";
 
 export function IngestPill({ className }: { className?: string }) {
+  const { t } = useTranslation();
   const { ingesting, scanning, backfilling } = useIngest();
   const { githubProgress } = useContext(ScanSyncContext);
   if (!ingesting) return null;
 
   const label =
     backfilling && githubProgress?.running
-      ? `Backfilling ${githubProgress.repo_index}/${githubProgress.repo_total}`
+      ? t("components.ingestPill.backfilling", {
+          index: githubProgress.repo_index,
+          total: githubProgress.repo_total,
+        })
       : scanning
-        ? "Indexing…"
-        : "Syncing…";
+        ? t("components.ingestPill.indexing")
+        : t("components.ingestPill.syncing");
 
   return (
     <span

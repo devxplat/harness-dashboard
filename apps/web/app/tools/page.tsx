@@ -10,28 +10,30 @@ import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { ToolRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
+import { useMemo } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
-const columns: ColumnDef<ToolRow>[] = [
+const makeColumns = (t: TFunction): ColumnDef<ToolRow>[] => [
   {
     accessorKey: "tool_name",
-    header: "Tool",
+    header: t("pages.tools.tool"),
     cell: ({ row }) => <span className="font-medium">{row.original.tool_name}</span>,
   },
   {
     accessorKey: "provider",
-    header: "Provider",
+    header: t("pages.tools.provider"),
     cell: ({ row }) => <ProviderBadge provider={row.original.provider} compact />,
   },
   {
     accessorKey: "calls",
-    header: "Calls",
+    header: t("pages.tools.calls"),
     cell: ({ row }) => formatInt(row.original.calls),
     meta: { align: "right" },
   },
   {
     accessorKey: "result_tokens",
-    header: "Result tokens",
+    header: t("pages.tools.resultTokens"),
     cell: ({ row }) => formatTokens(row.original.result_tokens),
     meta: { align: "right" },
   },
@@ -39,6 +41,7 @@ const columns: ColumnDef<ToolRow>[] = [
 
 export default function ToolsPage() {
   const { t } = useTranslation();
+  const columns = useMemo(() => makeColumns(t), [t]);
   const { since, until } = useRange();
   const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<ToolRow[]>(
@@ -49,7 +52,7 @@ export default function ToolsPage() {
 
   if (error) return <ErrorBlock error={error} />;
   if (settingsLoaded && !hasAvailableProviders) {
-    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+    return <EmptyBlock message={t("common.noProviders")} />;
   }
   if (loading || !data) return <LoadingBlock />;
 
@@ -57,18 +60,18 @@ export default function ToolsPage() {
     <>
       <PageTitle title={t("pages.tools.title")} description={t("pages.tools.description")} />
       {data.length === 0 ? (
-        <EmptyBlock message="No tool calls in range." />
+        <EmptyBlock message={t("pages.tools.noToolCalls")} />
       ) : (
         <DataTable
           columns={columns}
           data={data}
           search={{
             fields: ["provider", "tool_name"],
-            placeholder: "Filter tools…",
-            ariaLabel: "Filter tools",
+            placeholder: t("common.search"),
+            ariaLabel: t("pages.tools.title"),
           }}
           pageSize={25}
-          emptyMessage="No tools match."
+          emptyMessage={t("pages.tools.noMatch")}
         />
       )}
     </>

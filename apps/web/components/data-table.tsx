@@ -40,6 +40,7 @@ import {
 } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ChevronsUpDown, SlidersHorizontal } from "lucide-react";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // Per-column right-alignment for numeric columns.
 declare module "@tanstack/react-table" {
@@ -97,6 +98,7 @@ export function DataTable<TData, TValue>({
   const [rawFilter, setRawFilter] = useState("");
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const listId = useId();
+  const { t } = useTranslation();
 
   // Debounce so large datasets don't re-filter on every keystroke; the input stays
   // responsive (rawFilter) while the table filters on the settled value.
@@ -193,11 +195,11 @@ export function DataTable<TData, TValue>({
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
                 <SlidersHorizontal />
-                <span className="hidden sm:inline">Columns</span>
+                <span className="hidden sm:inline">{t("components.dataTable.columns")}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("components.dataTable.toggleColumns")}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {table
                 .getAllColumns()
@@ -284,7 +286,7 @@ export function DataTable<TData, TValue>({
       {rows.length > 0 ? (
         <div className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <span>Rows per page</span>
+            <span>{t("components.dataTable.rowsPerPage")}</span>
             <Select
               value={String(table.getState().pagination.pageSize)}
               onValueChange={(v) => table.setPageSize(Number(v))}
@@ -303,8 +305,8 @@ export function DataTable<TData, TValue>({
           </div>
           <div className="flex items-center gap-3">
             <span>
-              Page {table.getState().pagination.pageIndex + 1} of {Math.max(1, table.getPageCount())} ·{" "}
-              {server ? server.total : filtered.length} rows
+              {t("common.page")} {table.getState().pagination.pageIndex + 1} {t("common.of")} {Math.max(1, table.getPageCount())} ·{" "}
+              {server ? server.total : filtered.length} {t("common.rows")}
             </span>
             <div className="flex gap-2">
               <Button
@@ -313,7 +315,7 @@ export function DataTable<TData, TValue>({
                 onClick={() => table.previousPage()}
                 disabled={!table.getCanPreviousPage()}
               >
-                Previous
+                {t("components.dataTable.previous")}
               </Button>
               <Button
                 size="sm"
@@ -321,7 +323,7 @@ export function DataTable<TData, TValue>({
                 onClick={() => table.nextPage()}
                 disabled={!table.getCanNextPage()}
               >
-                Next
+                {t("components.dataTable.next")}
               </Button>
             </div>
           </div>

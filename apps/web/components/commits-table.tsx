@@ -16,7 +16,9 @@ import {
 import { formatDateShort, formatInt, projectLabel, shortId } from "@/lib/format";
 import type { CommitRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
+import type { TFunction } from "i18next";
 import { useId, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type AiFilter = "all" | "ai" | "human";
 
@@ -65,10 +67,10 @@ function AuthorCell({ row }: { row: CommitRow }) {
   );
 }
 
-const makeColumns = (short: boolean): ColumnDef<CommitRow>[] => [
+const makeColumns = (short: boolean, t: TFunction): ColumnDef<CommitRow>[] => [
   {
     accessorKey: "authored_at_utc",
-    header: "When",
+    header: t("components.commitsTable.when"),
     cell: ({ row }) => (
       <span className="whitespace-nowrap text-xs text-muted-foreground">
         {formatDateShort(row.original.authored_at_utc)}
@@ -77,7 +79,7 @@ const makeColumns = (short: boolean): ColumnDef<CommitRow>[] => [
   },
   {
     accessorKey: "project_slug",
-    header: "Project",
+    header: t("components.commitsTable.project"),
     cell: ({ row }) => (
       <ProjectCell
         cwd={row.original.sample_cwd}
@@ -89,7 +91,7 @@ const makeColumns = (short: boolean): ColumnDef<CommitRow>[] => [
   },
   {
     accessorKey: "subject",
-    header: "Commit",
+    header: t("components.commitsTable.commit"),
     cell: ({ row }) => (
       <span className="flex items-center gap-2">
         <span className="block max-w-[320px] truncate" title={row.original.subject ?? undefined}>
@@ -101,12 +103,12 @@ const makeColumns = (short: boolean): ColumnDef<CommitRow>[] => [
   },
   {
     accessorKey: "author_name",
-    header: "Author",
+    header: t("components.commitsTable.author"),
     cell: ({ row }) => <AuthorCell row={row.original} />,
   },
   {
     accessorKey: "insertions",
-    header: "Lines",
+    header: t("components.commitsTable.lines"),
     cell: ({ row }) => (
       <span className="whitespace-nowrap tabular-nums">
         <span className="text-emerald-600 dark:text-emerald-400">+{formatInt(row.original.insertions)}</span>{" "}
@@ -117,18 +119,19 @@ const makeColumns = (short: boolean): ColumnDef<CommitRow>[] => [
   },
   {
     id: "ai",
-    header: "AI",
+    header: t("components.commitsTable.ai"),
     cell: ({ row }) => <AiBadge row={row.original} />,
     meta: { align: "right" },
   },
 ];
 
 export function CommitsTable({ commits }: { commits: CommitRow[] }) {
+  const { t } = useTranslation();
   const [short, setShort] = useState(true);
   const [projectFilter, setProjectFilter] = useState("");
   const [authorFilter, setAuthorFilter] = useState("");
   const [aiFilter, setAiFilter] = useState<AiFilter>("all");
-  const columns = useMemo(() => makeColumns(short), [short]);
+  const columns = useMemo(() => makeColumns(short, t), [short, t]);
   const projectListId = useId();
   const authorListId = useId();
 
@@ -160,7 +163,7 @@ export function CommitsTable({ commits }: { commits: CommitRow[] }) {
       <div className="flex flex-wrap items-center gap-2">
         <Input
           list={projectListId}
-          placeholder="Project…"
+          placeholder={t("components.commitsTable.projectPlaceholder")}
           aria-label="Filter by project"
           value={projectFilter}
           onChange={(e) => setProjectFilter(e.target.value)}
@@ -173,7 +176,7 @@ export function CommitsTable({ commits }: { commits: CommitRow[] }) {
         </datalist>
         <Input
           list={authorListId}
-          placeholder="Author or co-author…"
+          placeholder={t("components.commitsTable.authorPlaceholder")}
           aria-label="Filter by author"
           value={authorFilter}
           onChange={(e) => setAuthorFilter(e.target.value)}
@@ -189,9 +192,9 @@ export function CommitsTable({ commits }: { commits: CommitRow[] }) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All commits</SelectItem>
-            <SelectItem value="ai">AI-assisted</SelectItem>
-            <SelectItem value="human">By hand</SelectItem>
+            <SelectItem value="all">{t("components.commitsTable.allCommits")}</SelectItem>
+            <SelectItem value="ai">{t("components.commitsTable.aiAssisted")}</SelectItem>
+            <SelectItem value="human">{t("components.commitsTable.byHand")}</SelectItem>
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">
@@ -204,12 +207,12 @@ export function CommitsTable({ commits }: { commits: CommitRow[] }) {
         data={filtered}
         search={{
           fields: ["subject", "sha"],
-          placeholder: "Search message or sha…",
+          placeholder: t("components.commitsTable.searchPlaceholder"),
           ariaLabel: "Search commits",
         }}
         actions={<PathToggle short={short} onToggle={() => setShort((v) => !v)} />}
         pageSize={25}
-        emptyMessage="No commits match."
+        emptyMessage={t("components.commitsTable.noMatch")}
       />
     </div>
   );

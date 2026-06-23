@@ -11,9 +11,11 @@ import { useIngest } from "@/hooks/ingest";
 import { DatabaseZap } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 export function IngestGate({ children }: { children: ReactNode }) {
   const { seeded, ingesting, loading } = useIngest();
+  const { t } = useTranslation();
   // Never flash the blur before we know the status, and step aside once seeded.
   if (loading || seeded) return <>{children}</>;
 
@@ -32,10 +34,9 @@ export function IngestGate({ children }: { children: ReactNode }) {
           </div>
           {ingesting ? (
             <>
-              <h2 className="text-base font-semibold">Indexing your history…</h2>
+              <h2 className="text-base font-semibold">{t("components.ingestGate.indexingTitle")}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Building your dashboard from your local sessions. This page fills in as soon as the
-                first data lands.
+                {t("components.ingestGate.indexingBody")}
               </p>
               <div className="mt-3 flex justify-center">
                 <IngestPill />
@@ -43,14 +44,14 @@ export function IngestGate({ children }: { children: ReactNode }) {
             </>
           ) : (
             <>
-              <h2 className="text-base font-semibold">No data yet</h2>
+              <h2 className="text-base font-semibold">{t("components.ingestGate.noDataTitle")}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Run the initial scan and connect your sources to populate your dashboard.
+                {t("components.ingestGate.noDataBody")}
               </p>
             </>
           )}
           <Button asChild size="sm" className="mt-4">
-            <Link href="/settings">Go to integrations</Link>
+            <Link href="/settings">{t("components.ingestGate.goToIntegrations")}</Link>
           </Button>
         </div>
       </div>

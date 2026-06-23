@@ -11,6 +11,7 @@ import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { ProjectRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
+import type { TFunction } from "i18next";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -89,10 +90,10 @@ function aggregateProjects(rows: ProjectRow[]): ProjectAggregateRow[] {
   );
 }
 
-const makeColumns = (short: boolean): ColumnDef<ProjectAggregateRow>[] => [
+const makeColumns = (short: boolean, t: TFunction): ColumnDef<ProjectAggregateRow>[] => [
   {
     accessorKey: "project_slug",
-    header: "Project",
+    header: t("pages.projects.project"),
     cell: ({ row }) => (
       <ProjectCell
         cwd={row.original.sample_cwd}
@@ -104,42 +105,42 @@ const makeColumns = (short: boolean): ColumnDef<ProjectAggregateRow>[] => [
   },
   {
     accessorKey: "providers",
-    header: "Provider",
+    header: t("pages.projects.provider"),
     cell: ({ row }) => <ProviderBlips providers={row.original.providers} />,
   },
   {
     accessorKey: "sessions",
-    header: "Sessions",
+    header: t("pages.projects.sessions"),
     cell: ({ row }) => formatInt(row.original.sessions),
     meta: { align: "right" },
   },
   {
     accessorKey: "turns",
-    header: "Turns",
+    header: t("pages.projects.turns"),
     cell: ({ row }) => formatInt(row.original.turns),
     meta: { align: "right" },
   },
   {
     accessorKey: "input_tokens",
-    header: "Input",
+    header: t("pages.projects.input"),
     cell: ({ row }) => formatTokens(row.original.input_tokens),
     meta: { align: "right" },
   },
   {
     accessorKey: "output_tokens",
-    header: "Output",
+    header: t("pages.projects.output"),
     cell: ({ row }) => formatTokens(row.original.output_tokens),
     meta: { align: "right" },
   },
   {
     accessorKey: "billable_tokens",
-    header: "Billable",
+    header: t("pages.projects.billable"),
     cell: ({ row }) => formatTokens(row.original.billable_tokens),
     meta: { align: "right" },
   },
   {
     accessorKey: "cache_read_tokens",
-    header: "Cache read",
+    header: t("pages.projects.cacheRead"),
     cell: ({ row }) => formatTokens(row.original.cache_read_tokens),
     meta: { align: "right" },
   },
@@ -148,7 +149,7 @@ const makeColumns = (short: boolean): ColumnDef<ProjectAggregateRow>[] => [
 export default function ProjectsPage() {
   const { t } = useTranslation();
   const [shortNames, setShortNames] = useState(true);
-  const columns = useMemo(() => makeColumns(shortNames), [shortNames]);
+  const columns = useMemo(() => makeColumns(shortNames, t), [shortNames, t]);
   const { since, until } = useRange();
   const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<ProjectRow[]>(
@@ -160,7 +161,7 @@ export default function ProjectsPage() {
 
   if (error) return <ErrorBlock error={error} />;
   if (settingsLoaded && !hasAvailableProviders) {
-    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+    return <EmptyBlock message={t("common.noProviders")} />;
   }
   if (loading || !data) return <LoadingBlock />;
 
@@ -168,7 +169,7 @@ export default function ProjectsPage() {
     <>
       <PageTitle title={t("pages.projects.title")} description={t("pages.projects.description")} />
       {projects.length === 0 ? (
-        <EmptyBlock message="No projects in range." />
+        <EmptyBlock message={t("pages.projects.noProjects")} />
       ) : (
         <DataTable
           columns={columns}
@@ -180,7 +181,7 @@ export default function ProjectsPage() {
           }}
           actions={<PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />}
           pageSize={25}
-          emptyMessage="No projects match."
+          emptyMessage={t("pages.projects.noMatch")}
         />
       )}
     </>

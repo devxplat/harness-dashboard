@@ -63,31 +63,31 @@ export default function AllocationPage() {
         </div>
       </div>
 
-      {empty ? <EmptyBlock message="No commits in range." /> : null}
+      {empty ? <EmptyBlock message={t("pages.allocation.noCommits")} /> : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>By category</CardTitle>
+            <CardTitle>{t("pages.allocation.byCategory")}</CardTitle>
           </CardHeader>
           <CardContent>
             {b.totals.length ? (
               <AllocationDonutChart data={b.totals} />
             ) : (
-              <EmptyBlock message="No commits in range." />
+              <EmptyBlock message={t("pages.allocation.noCommits")} />
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Mix over time</CardTitle>
+            <CardTitle>{t("pages.allocation.mixOverTime")}</CardTitle>
           </CardHeader>
           <CardContent>
             {b.periods.length ? (
               <AllocationTrendChart data={b.periods} />
             ) : (
-              <EmptyBlock message="No commits in range." />
+              <EmptyBlock message={t("pages.allocation.noCommits")} />
             )}
           </CardContent>
         </Card>
@@ -95,17 +95,17 @@ export default function AllocationPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Totals</CardTitle>
+          <CardTitle>{t("pages.allocation.totals")}</CardTitle>
         </CardHeader>
         <CardContent>
           {b.totals.length ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Commits</TableHead>
-                  <TableHead className="text-right">Share</TableHead>
-                  <TableHead className="text-right">AI</TableHead>
+                  <TableHead>{t("pages.allocation.category")}</TableHead>
+                  <TableHead className="text-right">{t("pages.allocation.commits")}</TableHead>
+                  <TableHead className="text-right">{t("pages.allocation.share")}</TableHead>
+                  <TableHead className="text-right">{t("pages.allocation.ai")}</TableHead>
                   <TableHead className="text-right">+/− lines</TableHead>
                 </TableRow>
               </TableHeader>
@@ -132,14 +132,13 @@ export default function AllocationPage() {
               </TableBody>
             </Table>
           ) : (
-            <EmptyBlock message="No commits in range." />
+            <EmptyBlock message={t("pages.allocation.noCommits")} />
           )}
         </CardContent>
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Categories come from conventional-commit prefixes; commits without a recognized type fall
-        into “Other”.
+        {t("pages.allocation.categoryNote")}
       </p>
     </>
   );

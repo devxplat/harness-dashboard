@@ -26,6 +26,7 @@ import { rateBudgetLabel, rateBudgetTone } from "@/lib/github";
 import type { GithubIntegration, GithubProgress, IntegrationsInfo } from "@/lib/types";
 import { ArrowLeft, Plus } from "lucide-react";
 import { useContext, useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 interface ConnectResult {
@@ -40,19 +41,6 @@ interface SyncStarted {
 
 type IntegrationId = "github" | "google";
 type View = "list" | "browse" | "connect-github" | "connect-google";
-
-const META: Record<IntegrationId, { name: string; description: string; icon: ReactNode }> = {
-  github: {
-    name: "GitHub",
-    description: "Pull requests, releases, and CI runs for your repos.",
-    icon: <IntegrationLogo id="github" className="size-5" />,
-  },
-  google: {
-    name: "Google Calendar",
-    description: "Overlay meetings on your activity and measure their impact.",
-    icon: <IntegrationLogo id="google-calendar" className="size-6" />,
-  },
-};
 
 const TONE: Record<string, string> = {
   ok: "text-emerald-600 dark:text-emerald-400",
@@ -73,6 +61,7 @@ function RateChip({ gh }: { gh: GithubIntegration }) {
 
 /** GitHub connect flow: validate + store a PAT. On success the parent returns to the list. */
 function GithubConnectForm({ onConnected }: { onConnected: () => void }) {
+  const { t } = useTranslation();
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -81,12 +70,18 @@ function GithubConnectForm({ onConnected }: { onConnected: () => void }) {
     setBusy(true);
     const p = apiPost<ConnectResult>("/api/integrations/github", { token: token.trim() });
     toast.promise(p, {
-      loading: "Validating token…",
+      loading: t("components.integrations.validating"),
       success: (r) =>
         r.login
-          ? `Connected as ${r.login}${r.has_repo_scope === false ? " (no repo scope — private repos won't sync)" : ""}`
-          : "GitHub connected",
-      error: (e) => `Could not connect: ${String(e).replace(/^Error:\s*/, "")}`,
+          ? t("components.integrations.connectedAs", { login: r.login }) +
+            (r.has_repo_scope === false
+              ? ` (${t("components.integrations.noRepoScope")})`
+              : "")
+          : t("components.integrations.githubConnected"),
+      error: (e) =>
+        t("components.integrations.couldNotConnect", {
+          error: String(e).replace(/^Error:\s*/, ""),
+        }),
     });
     try {
       await p;
@@ -104,19 +99,18 @@ function GithubConnectForm({ onConnected }: { onConnected: () => void }) {
       <div className="flex flex-wrap items-center gap-2">
         <Input
           type="password"
-          placeholder="ghp_… (repo read scope)"
-          aria-label="GitHub token"
+          placeholder={t("components.integrations.tokenPlaceholder")}
+          aria-label={t("components.integrations.tokenLabel")}
           value={token}
           onChange={(e) => setToken(e.target.value)}
           className="max-w-xs"
         />
         <Button size="sm" onClick={connect} disabled={busy || !token.trim()}>
-          Connect
+          {t("components.integrations.connect")}
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        A fine-grained or classic PAT with read access to your repos. Stored encrypted at rest;
-        used only to fetch pull requests, releases, and Actions runs.
+        {t("components.integrations.tokenNote")}
       </p>
     </div>
   );
@@ -132,15 +126,19 @@ function GithubConnectedPanel({
   githubProgress: GithubProgress | null;
   onChange: () => void;
 }) {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
 
   async function sync() {
     setBusy(true);
     const p = apiPost<SyncStarted>("/api/integrations/github/sync", {});
     toast.promise(p, {
-      loading: "Starting sync…",
-      success: (r) => (r.started ? "Sync started — progress below" : "Sync already running"),
-      error: "Could not start sync",
+      loading: t("components.integrations.startingSync"),
+      success: (r) =>
+        r.started
+          ? t("components.integrations.syncStarted")
+          : t("components.integrations.syncRunning"),
+      error: t("components.integrations.couldNotSync"),
     });
     try {
       await p;
@@ -156,9 +154,9 @@ function GithubConnectedPanel({
     setBusy(true);
     const p = apiDelete("/api/integrations/github");
     toast.promise(p, {
-      loading: "Disconnecting…",
-      success: "GitHub disconnected",
-      error: "Could not disconnect",
+      loading: t("components.integrations.disconnect") + "ing…",
+      success: t("components.integrations.githubDisconnected"),
+      error: t("components.integrations.couldNotDisconnect"),
     });
     try {
       await p;
@@ -174,14 +172,18 @@ function GithubConnectedPanel({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={sync} disabled={busy || gh.syncing}>
-          {gh.syncing ? "Syncing…" : "Sync now"}
+          {gh.syncing
+            ? t("components.integrations.syncing")
+            : t("components.integrations.syncNow")}
         </Button>
         <Button size="sm" variant="outline" onClick={disconnect} disabled={busy}>
-          Disconnect
+          {t("components.integrations.disconnect")}
         </Button>
         {gh.last_sync ? (
           <span className="text-xs text-muted-foreground">
-            Last synced {formatDateShort(gh.last_sync)}
+            {t("components.integrations.lastSynced", {
+              date: formatDateShort(gh.last_sync),
+            })}
           </span>
         ) : null}
         <RateChip gh={gh} />
@@ -195,10 +197,11 @@ function GithubConnectedPanel({
 
 /** A connect-flow view: a back link above the chosen integration's card. */
 function ConnectShell({ onBack, children }: { onBack: () => void; children: ReactNode }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <Button variant="ghost" size="sm" onClick={onBack} className="-ml-2 text-muted-foreground">
-        <ArrowLeft className="size-4" /> Back
+        <ArrowLeft className="size-4" /> {t("components.integrations.back")}
       </Button>
       {children}
     </div>
@@ -206,6 +209,7 @@ function ConnectShell({ onBack, children }: { onBack: () => void; children: Reac
 }
 
 export function IntegrationsSettings() {
+  const { t } = useTranslation();
   const { data, refetch } = useApi<IntegrationsInfo>("/api/integrations");
   const { githubProgress, githubSyncVersion } = useContext(ScanSyncContext);
   const [view, setView] = useState<View>("list");
@@ -222,6 +226,19 @@ export function IntegrationsSettings() {
   // With nothing connected yet, open straight onto the gallery instead of an empty list.
   const effectiveView: View = view === "list" && !anyConnected ? "browse" : view;
   const backFromConnect = () => setView(anyConnected ? "list" : "browse");
+
+  const META: Record<IntegrationId, { name: string; description: string; icon: ReactNode }> = {
+    github: {
+      name: t("components.integrations.github"),
+      description: t("components.integrations.githubDesc"),
+      icon: <IntegrationLogo id="github" className="size-5" />,
+    },
+    google: {
+      name: t("components.integrations.googleCalendar"),
+      description: t("components.integrations.calendarDesc"),
+      icon: <IntegrationLogo id="google-calendar" className="size-6" />,
+    },
+  };
 
   if (effectiveView === "connect-github") {
     return (
@@ -273,11 +290,11 @@ export function IntegrationsSettings() {
             onClick={() => setView("list")}
             className="-ml-2 text-muted-foreground"
           >
-            <ArrowLeft className="size-4" /> Back to integrations
+            <ArrowLeft className="size-4" /> {t("components.integrations.backToIntegrations")}
           </Button>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Connect an integration to enrich your dashboard.
+            {t("components.integrations.connectPrompt")}
           </p>
         )}
         <IntegrationGallery items={items} />
@@ -290,7 +307,7 @@ export function IntegrationsSettings() {
     <div className="space-y-4">
       <div className="flex justify-end">
         <Button variant="outline" size="sm" onClick={() => setView("browse")}>
-          <Plus className="size-4" /> Add new integration
+          <Plus className="size-4" /> {t("components.integrations.addNew")}
         </Button>
       </div>
       {githubConnected && gh ? (
@@ -299,7 +316,11 @@ export function IntegrationsSettings() {
           name={META.github.name}
           description={META.github.description}
           connected
-          statusText={gh.login ? `Connected as ${gh.login}` : null}
+          statusText={
+            gh.login
+              ? t("components.integrations.connectedAs", { login: gh.login })
+              : null
+          }
         >
           <GithubConnectedPanel gh={gh} githubProgress={githubProgress} onChange={refetch} />
         </IntegrationCard>

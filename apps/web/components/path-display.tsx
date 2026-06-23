@@ -8,18 +8,20 @@ import { Button } from "@/components/ui/button";
 import { projectLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { useTranslation } from "react-i18next";
 
 /** Button that flips a path column between short folder names and full paths. */
 export function PathToggle({ short, onToggle }: { short: boolean; onToggle: () => void }) {
+  const { t } = useTranslation();
   return (
     <Button
       size="sm"
       variant="outline"
       aria-pressed={short}
       onClick={onToggle}
-      title={short ? "Showing folder names" : "Showing full paths"}
+      title={short ? t("components.pathDisplay.showingShort") : t("components.pathDisplay.showingFull")}
     >
-      {short ? "Short names" : "Full paths"}
+      {short ? t("components.pathDisplay.shortNames") : t("components.pathDisplay.fullPaths")}
     </Button>
   );
 }

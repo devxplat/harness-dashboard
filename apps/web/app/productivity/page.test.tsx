@@ -205,7 +205,7 @@ describe("ProductivityPage", () => {
     await user.click(screen.getByRole("tab", { name: "PR Impact" }));
     expect(screen.getByText("Repo and PR comparison")).toBeInTheDocument();
     expect(screen.getByText("PR impact rows")).toBeInTheDocument();
-    expect(screen.getByText("Pull requests")).toBeInTheDocument();
+    expect(screen.getAllByText("Pull requests").length).toBeGreaterThan(0);
     expect(screen.getByText("Deployments")).toBeInTheDocument();
     expect(screen.getByText("My PR")).toBeInTheDocument();
     expect(screen.getByText("v1.0.0")).toBeInTheDocument();
@@ -245,7 +245,7 @@ describe("ProductivityPage", () => {
     });
     renderWithRange(<ProductivityPage />);
     await waitFor(() => expect(screen.getByText(/No productivity data/)).toBeInTheDocument());
-    expect(screen.getByText(/Local git history is read/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Local git history is read/).length).toBeGreaterThan(0);
   });
 
   it("renders the error state when productivity insights fail", async () => {

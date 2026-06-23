@@ -22,6 +22,8 @@ import { formatInt, formatUSD } from "@/lib/format";
 import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { AiImpactBundle, AiRoiByGroupRow } from "@/lib/types";
+import type { TFunction } from "i18next";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 function pctText(v: number | null | undefined): string {
@@ -50,17 +52,30 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
   );
 }
 
-function RoiTable({ rows }: { rows: AiRoiByGroupRow[] }) {
+function makeRoiColumns(t: TFunction) {
+  return {
+    project: t("pages.aiImpact.roi.project"),
+    provider: t("pages.aiImpact.roi.provider"),
+    cost: t("pages.aiImpact.roi.cost"),
+    commits: t("pages.aiImpact.roi.commits"),
+    lines: t("pages.aiImpact.roi.lines"),
+    costPerCommit: t("pages.aiImpact.roi.costPerCommit"),
+    costPer1kLines: t("pages.aiImpact.roi.costPer1kLines"),
+  };
+}
+
+function RoiTable({ rows, t }: { rows: AiRoiByGroupRow[]; t: TFunction }) {
+  const cols = useMemo(() => makeRoiColumns(t), [t]);
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>{rows[0]?.kind === "project" ? "Project" : "Provider"}</TableHead>
-          <TableHead className="text-right">Cost</TableHead>
-          <TableHead className="text-right">Commits</TableHead>
-          <TableHead className="text-right">Lines</TableHead>
-          <TableHead className="text-right">$ / commit</TableHead>
-          <TableHead className="text-right">$ / 1k lines</TableHead>
+          <TableHead>{rows[0]?.kind === "project" ? cols.project : cols.provider}</TableHead>
+          <TableHead className="text-right">{cols.cost}</TableHead>
+          <TableHead className="text-right">{cols.commits}</TableHead>
+          <TableHead className="text-right">{cols.lines}</TableHead>
+          <TableHead className="text-right">{cols.costPerCommit}</TableHead>
+          <TableHead className="text-right">{cols.costPer1kLines}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -99,7 +114,7 @@ export default function AiImpactPage() {
 
   if (error) return <ErrorBlock error={error} />;
   if (settingsLoaded && !hasAvailableProviders)
-    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+    return <EmptyBlock message={t("pages.aiImpact.noData")} />;
   const b = data && !Array.isArray(data) ? data : null;
   if (loading || !b) return <LoadingBlock />;
 
@@ -116,28 +131,28 @@ export default function AiImpactPage() {
       />
 
       {empty ? (
-        <EmptyBlock message="No AI-impact data yet. Scan AI sessions and commits (and optionally connect GitHub) first." />
+        <EmptyBlock message={t("pages.aiImpact.noData")} />
       ) : null}
 
       {/* DX-Core-4-style scorecard: Utilization / Impact / Cost / Net value */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
-          label="Utilization"
+          label={t("pages.aiImpact.tab.utilization")}
           value={pctText(b.adoption.pct_active_days)}
-          hint={`${formatInt(b.adoption.active_days)} active days · ${formatInt(b.adoption.sessions)} sessions`}
+          hint={`${formatInt(b.adoption.active_days)} ${t("pages.aiImpact.activeDays")} · ${formatInt(b.adoption.sessions)} ${t("pages.aiImpact.sessionsPerDay")}`}
         />
         <Stat
-          label="AI code"
+          label={t("pages.aiImpact.tab.aiCode")}
           value={pctText(b.lines.summary.ai_line_pct)}
           hint={`${formatInt(b.lines.summary.ai_lines)} of ${formatInt(b.lines.summary.total_lines)} lines`}
         />
         <Stat
-          label="Cost"
+          label={t("pages.aiImpact.tab.cost")}
           value={formatUSD(b.roi.cost_usd)}
-          hint={b.roi.cost_usd == null ? "no priced usage" : b.roi.cost_estimated ? "estimated" : "reported"}
+          hint={b.roi.cost_usd == null ? t("pages.aiImpact.noCost") : b.roi.cost_estimated ? "estimated" : "reported"}
         />
         <Stat
-          label="Net value"
+          label={t("pages.aiImpact.tab.netValue")}
           value={b.roi.cost_per_merged_pr == null ? "—" : `${formatUSD(b.roi.cost_per_merged_pr)} / PR`}
           hint={`${formatInt(b.roi.merged_prs)} merged PRs`}
         />
@@ -145,78 +160,76 @@ export default function AiImpactPage() {
 
       <Tabs defaultValue="overview">
         <TabsList className="w-full justify-start overflow-x-auto" variant="line">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="roi">ROI</TabsTrigger>
-          <TabsTrigger value="correlation">Correlation</TabsTrigger>
-          <TabsTrigger value="adoption">Adoption</TabsTrigger>
+          <TabsTrigger value="overview">{t("pages.aiImpact.tab.overview")}</TabsTrigger>
+          <TabsTrigger value="roi">{t("pages.aiImpact.tab.roi")}</TabsTrigger>
+          <TabsTrigger value="correlation">{t("pages.aiImpact.tab.correlation")}</TabsTrigger>
+          <TabsTrigger value="adoption">{t("pages.aiImpact.tab.adoption")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>AI vs by-hand lines</CardTitle>
+              <CardTitle>{t("pages.aiImpact.aiVsHandLines")}</CardTitle>
             </CardHeader>
             <CardContent>
               {b.lines.daily.length ? (
                 <AiLinesChart data={b.lines.daily} />
               ) : (
-                <EmptyBlock message="No commit churn in range." />
+                <EmptyBlock message={t("pages.aiImpact.noCommitChurn")} />
               )}
             </CardContent>
           </Card>
           <p className="text-xs text-muted-foreground">
-            AI lines = lines in AI-assisted commits (commit-level attribution, not per-line
-            provenance).
+            {t("pages.aiImpact.aiLinesNote")}
           </p>
         </TabsContent>
 
         <TabsContent value="roi" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Cost by provider</CardTitle>
+              <CardTitle>{t("pages.aiImpact.costByProvider")}</CardTitle>
             </CardHeader>
             <CardContent>
               {b.roi.by_provider.length ? (
-                <RoiTable rows={b.roi.by_provider} />
+                <RoiTable rows={b.roi.by_provider} t={t} />
               ) : (
-                <EmptyBlock message="No priced AI usage in range." />
+                <EmptyBlock message={t("pages.aiImpact.noCost")} />
               )}
             </CardContent>
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Delivery by project</CardTitle>
+              <CardTitle>{t("pages.aiImpact.deliveryByProject")}</CardTitle>
             </CardHeader>
             <CardContent>
               {b.roi.by_project.length ? (
-                <RoiTable rows={b.roi.by_project} />
+                <RoiTable rows={b.roi.by_project} t={t} />
               ) : (
-                <EmptyBlock message="No commits in range." />
+                <EmptyBlock message={t("pages.aiImpact.noCommits")} />
               )}
             </CardContent>
           </Card>
           <p className="text-xs text-muted-foreground">
-            Cost is per provider/model and not attributable per repo, so project rows show delivery
-            only.
+            {t("pages.aiImpact.costProjectNote")}
           </p>
         </TabsContent>
 
         <TabsContent value="correlation" className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-3">
             <Stat
-              label="Usage ↔ commits"
+              label={t("pages.aiImpact.usageCommits")}
               value={rText(b.correlation.coeffs.usage_vs_commits)}
               hint={prev?.usage_vs_commits == null ? undefined : `prev ${rText(prev.usage_vs_commits)}`}
             />
             <Stat
-              label="Usage ↔ merged PRs"
+              label={t("pages.aiImpact.usagePrs")}
               value={rText(b.correlation.coeffs.usage_vs_merged_prs)}
               hint={
                 prev?.usage_vs_merged_prs == null ? undefined : `prev ${rText(prev.usage_vs_merged_prs)}`
               }
             />
             <Stat
-              label="Tokens ↔ lead time"
+              label={t("pages.aiImpact.tokensLeadTime")}
               value={rText(b.correlation.coeffs.tokens_vs_lead_hours)}
               hint={
                 prev?.tokens_vs_lead_hours == null ? undefined : `prev ${rText(prev.tokens_vs_lead_hours)}`
@@ -225,45 +238,44 @@ export default function AiImpactPage() {
           </div>
           <Card>
             <CardHeader>
-              <CardTitle>Daily usage vs delivery</CardTitle>
+              <CardTitle>{t("pages.aiImpact.dailyUsageDelivery")}</CardTitle>
             </CardHeader>
             <CardContent>
               {b.correlation.series.length ? (
                 <AiCorrelationChart data={b.correlation.series} />
               ) : (
-                <EmptyBlock message="No daily series in range." />
+                <EmptyBlock message={t("pages.aiImpact.noDailySeries")} />
               )}
             </CardContent>
           </Card>
           <p className="text-xs text-muted-foreground">
-            Pearson r over the daily series (vs the prior equal-length window). Directional, not
-            causal.
+            {t("pages.aiImpact.correlationNote")}
           </p>
         </TabsContent>
 
         <TabsContent value="adoption" className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Stat
-              label="Active days"
+              label={t("pages.aiImpact.activeDays")}
               value={formatInt(b.adoption.active_days)}
-              hint={`of ${formatInt(b.adoption.span_days)} in span`}
+              hint={`of ${formatInt(b.adoption.span_days)} ${t("pages.aiImpact.inSpan")}`}
             />
             <Stat
-              label="Sessions / active day"
+              label={t("pages.aiImpact.sessionsPerDay")}
               value={num1(b.adoption.avg_sessions_per_active_day)}
             />
-            <Stat label="Agent tasks" value={formatInt(b.adoption.agent_tasks)} />
-            <Stat label="Assistant messages" value={formatInt(b.adoption.messages)} />
+            <Stat label={t("pages.aiImpact.agentTasks")} value={formatInt(b.adoption.agent_tasks)} />
+            <Stat label={t("pages.aiImpact.assistantMessages")} value={formatInt(b.adoption.messages)} />
           </div>
           <Card>
             <CardHeader>
-              <CardTitle>Daily sessions</CardTitle>
+              <CardTitle>{t("pages.aiImpact.dailySessions")}</CardTitle>
             </CardHeader>
             <CardContent>
               {b.adoption.daily.length ? (
                 <AiAdoptionChart data={b.adoption.daily} />
               ) : (
-                <EmptyBlock message="No activity in range." />
+                <EmptyBlock message={t("pages.aiImpact.noActivity")} />
               )}
             </CardContent>
           </Card>
