@@ -16,6 +16,7 @@ import { withRange } from "@/lib/api";
 import { formatInt } from "@/lib/format";
 import { useRange } from "@/lib/range";
 import type { AuthorDoraRow, AuthorRow } from "@/lib/types";
+import { useTranslation } from "react-i18next";
 
 function authorLabel(a: { author_name: string | null; author_email: string }): string {
   return a.author_name ?? a.author_email;
@@ -30,6 +31,7 @@ function num1(v: number | null): string {
 }
 
 export default function TeamPage() {
+  const { t } = useTranslation();
   const { since, until } = useRange();
   const { data, error, loading } = useApi<AuthorRow[]>(withRange("/api/authors", since, until));
   const { data: doraData } = useApi<AuthorDoraRow[]>(withRange("/api/authors/dora", since, until));
@@ -42,8 +44,8 @@ export default function TeamPage() {
   return (
     <>
       <PageTitle
-        title="Team"
-        description="Per-author contribution and DORA-lite, grouped by commit-author email (local git)."
+        title={t("pages.team.title")}
+        description={t("pages.team.description")}
       />
 
       {authors.length === 0 ? (

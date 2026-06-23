@@ -1,0 +1,171 @@
+{
+  "nav": {
+    "groups": {
+      "usage": "Uso",
+      "tools": "Ferramentas e agentes",
+      "performance": "Desempenho",
+      "more": "Mais"
+    },
+    "overview": "Visão geral",
+    "prompts": "Prompts",
+    "sessions": "Sessões",
+    "projects": "Projetos",
+    "tools": "Ferramentas",
+    "skills": "Skills",
+    "subagents": "Subagentes",
+    "workspaces": "Workspaces",
+    "productivity": "Produtividade",
+    "aiImpact": "Impacto da IA",
+    "dora": "DORA",
+    "allocation": "Alocação",
+    "devex": "DevEx",
+    "team": "Equipe",
+    "tips": "Dicas",
+    "settings": "Configurações"
+  },
+  "topbar": {
+    "welcome": "Bem-vindo de volta 👋",
+    "subtitle": "Seu uso local de IA para codar",
+    "live": "Ao vivo",
+    "paused": "Pausado",
+    "pauseLive": "Pausar atualizações ao vivo",
+    "resumeLive": "Retomar atualizações ao vivo",
+    "refresh": "Atualizar",
+    "customRange": "Período personalizado",
+    "language": "Idioma",
+    "theme": "Alternar tema"
+  },
+  "range": {
+    "all": "tudo",
+    "custom": "Período personalizado"
+  },
+  "rangeLabel": {
+    "7d": "Últimos 7 dias",
+    "30d": "Últimos 30 dias",
+    "90d": "Últimos 90 dias",
+    "all": "Todo o período",
+    "custom": "Período personalizado",
+    "selected": "Período selecionado"
+  },
+  "common": {
+    "loading": "Carregando…",
+    "error": "Algo deu errado.",
+    "noProviders": "Nenhum provedor de IA encontrado. Configure as fontes em Configurações.",
+    "vsPrev": "vs. ant.",
+    "search": "Filtrar esta página…",
+    "shortNames": "Nomes curtos",
+    "fullNames": "Nomes completos",
+    "columns": "Colunas",
+    "rowsPerPage": "Linhas por página",
+    "page": "Página",
+    "of": "de",
+    "rows": "linhas",
+    "previous": "Anterior",
+    "next": "Próxima",
+    "noResults": "Nenhum resultado."
+  },
+  "overview": {
+    "title": "Visão geral de uso",
+    "turns": "Turnos",
+    "cache": "Cache",
+    "cards": {
+      "sessions": "Sessões",
+      "input": "Tokens de entrada",
+      "output": "Tokens de saída",
+      "cost": "Custo est."
+    },
+    "dailyTokens": "Tokens diários",
+    "byModel": "Por modelo",
+    "recentSessions": "Sessões recentes",
+    "noActivity": "Nenhuma atividade no período.",
+    "th": {
+      "model": "Modelo",
+      "provider": "Provedor",
+      "input": "Entrada",
+      "output": "Saída",
+      "cost": "Custo",
+      "project": "Projeto",
+      "started": "Início",
+      "turns": "Turnos",
+      "tokens": "Tokens"
+    }
+  },
+  "pages": {
+    "prompts": {
+      "title": "Prompts",
+      "description": "Seus prompts mais caros por tokens atribuídos."
+    },
+    "sessions": {
+      "title": "Sessões",
+      "description": "Navegue e explore sessões individuais."
+    },
+    "sessionDetail": {
+      "title": "Sessão"
+    },
+    "projects": {
+      "title": "Projetos",
+      "description": "Uso de tokens agrupado por projeto."
+    },
+    "tools": {
+      "title": "Ferramentas",
+      "description": "Chamadas de ferramentas e os tokens de resultado que retornaram."
+    },
+    "skills": {
+      "title": "Skills e comandos",
+      "description": "Comandos de barra que você executou vs. Skills que o Claude invocou."
+    },
+    "subagents": {
+      "title": "Subagentes e orquestração",
+      "description": "Gasto dividido por tipo de agente (principal / auto-compactação / subagente) e ponto de entrada do cliente."
+    },
+    "workspaces": {
+      "title": "Workspaces",
+      "description": "Atividade de ferramentas de edição de arquivos por workspace."
+    },
+    "productivity": {
+      "title": "Produtividade",
+      "description": "Foco, fluxo, aquecimento, commits, atividade do assistente e impacto em PRs estimados a partir de fontes locais."
+    },
+    "aiImpact": {
+      "title": "Impacto da IA",
+      "description": "Utilização, participação no código, custo e ROI de ferramentas de IA para codar — medidos a partir de dados reais de tokens/sessões e correlacionados com a entrega."
+    },
+    "dora": {
+      "title": "DORA",
+      "description": "Visões DORA individuais e por repositório a partir do git local mais dados de PRs e deploys do GitHub sincronizados."
+    },
+    "allocation": {
+      "title": "Alocação",
+      "description": "Divisão de investimento (feature / fix / KTLO / chore) inferida a partir de prefixos de conventional commits."
+    },
+    "devex": {
+      "title": "DevEx",
+      "description": "Um autopulso local e voluntário, correlacionado com suas métricas concretas. Direcional, não causal — e nunca sai da sua máquina."
+    },
+    "team": {
+      "title": "Equipe",
+      "description": "Contribuição por autor e DORA-lite, agrupados por e-mail do autor do commit (git local)."
+    },
+    "tips": {
+      "title": "Dicas",
+      "description": "Sugestões baseadas em regras para reduzir o gasto de tokens."
+    },
+    "rtk": {
+      "title": "RTK",
+      "description": "Economia de tokens com a CLI do RTK."
+    },
+    "settings": {
+      "title": "Configurações",
+      "description": "Integrações, fontes de IA, plano e locais de varredura."
+    }
+  },
+  "language": {
+    "en": "English",
+    "pt": "Português",
+    "es": "Español",
+    "de": "Deutsch",
+    "nl": "Nederlands",
+    "zh": "中文",
+    "ja": "日本語"
+  }
+}

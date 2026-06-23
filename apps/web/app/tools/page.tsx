@@ -10,6 +10,7 @@ import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { ToolRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
+import { useTranslation } from "react-i18next";
 
 const columns: ColumnDef<ToolRow>[] = [
   {
@@ -37,6 +38,7 @@ const columns: ColumnDef<ToolRow>[] = [
 ];
 
 export default function ToolsPage() {
+  const { t } = useTranslation();
   const { since, until } = useRange();
   const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const { data, error, loading } = useApi<ToolRow[]>(
@@ -53,7 +55,7 @@ export default function ToolsPage() {
 
   return (
     <>
-      <PageTitle title="Tools" description="Tool calls and the result tokens they returned." />
+      <PageTitle title={t("pages.tools.title")} description={t("pages.tools.description")} />
       {data.length === 0 ? (
         <EmptyBlock message="No tool calls in range." />
       ) : (

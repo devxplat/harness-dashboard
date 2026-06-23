@@ -12,6 +12,7 @@ import { useRange } from "@/lib/range";
 import type { ProjectRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type ProjectAggregateRow = Omit<ProjectRow, "provider" | "providers"> & {
   providers: string[];
@@ -145,6 +146,7 @@ const makeColumns = (short: boolean): ColumnDef<ProjectAggregateRow>[] => [
 ];
 
 export default function ProjectsPage() {
+  const { t } = useTranslation();
   const [shortNames, setShortNames] = useState(true);
   const columns = useMemo(() => makeColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
@@ -164,7 +166,7 @@ export default function ProjectsPage() {
 
   return (
     <>
-      <PageTitle title="Projects" description="Token usage grouped by project." />
+      <PageTitle title={t("pages.projects.title")} description={t("pages.projects.description")} />
       {projects.length === 0 ? (
         <EmptyBlock message="No projects in range." />
       ) : (

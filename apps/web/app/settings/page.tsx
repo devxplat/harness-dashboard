@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { Boxes, Plug, Rocket, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 const PLANS = ["api", "pro", "max", "max-20x", "team", "team-premium"];
@@ -294,6 +295,7 @@ function OnboardingSettings() {
 }
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const { data, error, loading, refetch } = useApi<SettingsInfo>("/api/settings");
   const [section, setSection] = useState<SectionId>("integrations");
   const [saving, setSaving] = useState(false);
@@ -319,7 +321,7 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageTitle title="Settings" description="Integrations, AI sources, plan and scan locations." />
+      <PageTitle title={t("pages.settings.title")} description={t("pages.settings.description")} />
       <div className="flex flex-col gap-6 lg:flex-row">
         <nav className="w-full shrink-0 lg:w-56" aria-label="Settings sections">
           <div className="sticky top-4 space-y-1">

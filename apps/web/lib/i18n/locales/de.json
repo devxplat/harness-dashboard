@@ -1,0 +1,171 @@
+{
+  "nav": {
+    "groups": {
+      "usage": "Nutzung",
+      "tools": "Tools & Agenten",
+      "performance": "Leistung",
+      "more": "Mehr"
+    },
+    "overview": "Übersicht",
+    "prompts": "Prompts",
+    "sessions": "Sitzungen",
+    "projects": "Projekte",
+    "tools": "Tools",
+    "skills": "Skills",
+    "subagents": "Subagenten",
+    "workspaces": "Workspaces",
+    "productivity": "Produktivität",
+    "aiImpact": "KI-Wirkung",
+    "dora": "DORA",
+    "allocation": "Allokation",
+    "devex": "DevEx",
+    "team": "Team",
+    "tips": "Tipps",
+    "settings": "Einstellungen"
+  },
+  "topbar": {
+    "welcome": "Willkommen zurück 👋",
+    "subtitle": "Deine lokale KI-Coding-Nutzung",
+    "live": "Live",
+    "paused": "Pausiert",
+    "pauseLive": "Live-Updates pausieren",
+    "resumeLive": "Live-Updates fortsetzen",
+    "refresh": "Aktualisieren",
+    "customRange": "Eigener Zeitraum",
+    "language": "Sprache",
+    "theme": "Theme wechseln"
+  },
+  "range": {
+    "all": "Alle",
+    "custom": "Eigener Zeitraum"
+  },
+  "rangeLabel": {
+    "7d": "Letzte 7 Tage",
+    "30d": "Letzte 30 Tage",
+    "90d": "Letzte 90 Tage",
+    "all": "Gesamter Zeitraum",
+    "custom": "Eigener Zeitraum",
+    "selected": "Ausgewählter Zeitraum"
+  },
+  "common": {
+    "loading": "Lädt…",
+    "error": "Etwas ist schiefgelaufen.",
+    "noProviders": "Keine KI-Provider gefunden. Quellen in den Einstellungen konfigurieren.",
+    "vsPrev": "vs. vorher",
+    "search": "Diese Seite filtern…",
+    "shortNames": "Kurznamen",
+    "fullNames": "Vollständige Namen",
+    "columns": "Spalten",
+    "rowsPerPage": "Zeilen pro Seite",
+    "page": "Seite",
+    "of": "von",
+    "rows": "Zeilen",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "noResults": "Keine Ergebnisse."
+  },
+  "overview": {
+    "title": "Nutzungsübersicht",
+    "turns": "Turns",
+    "cache": "Cache",
+    "cards": {
+      "sessions": "Sitzungen",
+      "input": "Input-Tokens",
+      "output": "Output-Tokens",
+      "cost": "Gesch. Kosten"
+    },
+    "dailyTokens": "Tägliche Tokens",
+    "byModel": "Nach Modell",
+    "recentSessions": "Letzte Sitzungen",
+    "noActivity": "Keine Aktivität im Zeitraum.",
+    "th": {
+      "model": "Modell",
+      "provider": "Provider",
+      "input": "Input",
+      "output": "Output",
+      "cost": "Kosten",
+      "project": "Projekt",
+      "started": "Gestartet",
+      "turns": "Turns",
+      "tokens": "Tokens"
+    }
+  },
+  "pages": {
+    "prompts": {
+      "title": "Prompts",
+      "description": "Deine teuersten Prompts nach zugeordneten Tokens."
+    },
+    "sessions": {
+      "title": "Sitzungen",
+      "description": "Einzelne Sitzungen durchsuchen und im Detail betrachten."
+    },
+    "sessionDetail": {
+      "title": "Sitzung"
+    },
+    "projects": {
+      "title": "Projekte",
+      "description": "Token-Nutzung nach Projekt gruppiert."
+    },
+    "tools": {
+      "title": "Tools",
+      "description": "Tool-Aufrufe und die Ergebnis-Tokens, die sie zurückgaben."
+    },
+    "skills": {
+      "title": "Skills & Befehle",
+      "description": "Slash-Befehle, die du ausgeführt hast, vs. Skill-Tools, die Claude aufgerufen hat."
+    },
+    "subagents": {
+      "title": "Subagenten & Orchestrierung",
+      "description": "Ausgaben aufgeteilt nach Agententyp (Haupt / Auto-Komprimierung / Subagent) und Client-Einstiegspunkt."
+    },
+    "workspaces": {
+      "title": "Workspaces",
+      "description": "Aktivität der Datei-Bearbeitungstools pro Workspace."
+    },
+    "productivity": {
+      "title": "Produktivität",
+      "description": "Geschätzter Fokus, Flow, Aufwärmphase, Commits, Assistenten-Aktivität und PR-Wirkung aus lokalen Quellen."
+    },
+    "aiImpact": {
+      "title": "KI-Wirkung",
+      "description": "Auslastung, Code-Anteil, Kosten und ROI von KI-Coding-Tools — gemessen aus echten Token-/Sitzungsdaten und mit der Auslieferung korreliert."
+    },
+    "dora": {
+      "title": "DORA",
+      "description": "DORA-Ansichten auf Personen- und Repo-Ebene aus lokalem Git plus synchronisierten GitHub-PR- und Deployment-Daten."
+    },
+    "allocation": {
+      "title": "Allokation",
+      "description": "Investitionsaufteilung (Feature / Fix / KTLO / Chore), abgeleitet aus Conventional-Commit-Präfixen."
+    },
+    "devex": {
+      "title": "DevEx",
+      "description": "Ein freiwilliger lokaler Selbst-Puls, korreliert mit deinen harten Metriken. Richtungsweisend, nicht kausal — und verlässt nie deinen Rechner."
+    },
+    "team": {
+      "title": "Team",
+      "description": "Beitrag pro Autor und DORA-Lite, gruppiert nach Commit-Autoren-E-Mail (lokales Git)."
+    },
+    "tips": {
+      "title": "Tipps",
+      "description": "Regelbasierte Vorschläge zur Senkung des Token-Verbrauchs."
+    },
+    "rtk": {
+      "title": "RTK",
+      "description": "Token-Einsparungen durch das RTK CLI."
+    },
+    "settings": {
+      "title": "Einstellungen",
+      "description": "Integrationen, KI-Quellen, Plan und Scan-Speicherorte."
+    }
+  },
+  "language": {
+    "en": "English",
+    "pt": "Português",
+    "es": "Español",
+    "de": "Deutsch",
+    "nl": "Nederlands",
+    "zh": "中文",
+    "ja": "日本語"
+  }
+}

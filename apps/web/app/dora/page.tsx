@@ -28,6 +28,7 @@ import { useRange } from "@/lib/range";
 import type { DoraBundle, DoraMetric, IncidentDto } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type Grain = "day" | "week" | "month";
 
@@ -146,6 +147,7 @@ function MetricCard({ m }: { m: DoraMetric }) {
 }
 
 export default function DoraPage() {
+  const { t } = useTranslation();
   const { since, until } = useRange();
   const [grain, setGrain] = useState<Grain>("week");
   const { data, error, loading } = useApi<DoraBundle>(
@@ -168,8 +170,8 @@ export default function DoraPage() {
     <>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PageTitle
-          title="DORA"
-          description="Individual and repo-level DORA views from local git plus synced GitHub PR and deployment data."
+          title={t("pages.dora.title")}
+          description={t("pages.dora.description")}
         />
         <div className="flex gap-1" role="group" aria-label="DORA grain">
           {(["day", "week", "month"] as Grain[]).map((g) => (

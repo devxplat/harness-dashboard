@@ -20,6 +20,7 @@ import { useRange } from "@/lib/range";
 import type { SurveyCorrelationBundle } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const QUESTIONS = [
   { key: "flow", label: "I was in flow / few interruptions" },
@@ -113,6 +114,7 @@ function score(v: number | null): string {
 }
 
 export default function DevExPage() {
+  const { t } = useTranslation();
   const { since, until } = useRange();
   const { data, error, loading, refetch } = useApi<SurveyCorrelationBundle>(
     withRange("/api/survey", since, until),
@@ -128,8 +130,8 @@ export default function DevExPage() {
   return (
     <>
       <PageTitle
-        title="DevEx"
-        description="A voluntary local self-pulse, correlated with your hard metrics. Directional, not causal — and never leaves your machine."
+        title={t("pages.devex.title")}
+        description={t("pages.devex.description")}
       />
 
       <Card>

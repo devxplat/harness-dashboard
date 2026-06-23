@@ -24,14 +24,7 @@ import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { OverviewBundle, Totals } from "@/lib/types";
 import { useState } from "react";
-
-const RANGE_LABEL: Record<string, string> = {
-  "7d": "Last 7 days",
-  "30d": "Last 30 days",
-  "90d": "Last 90 days",
-  all: "All time",
-  custom: "Custom range",
-};
+import { useTranslation } from "react-i18next";
 
 function aggregateDaily(rows: OverviewBundle["daily"]): OverviewBundle["daily"] {
   return Array.from(
@@ -94,6 +87,7 @@ function RowsSkeleton() {
 }
 
 export default function OverviewPage() {
+  const { t: tr } = useTranslation();
   const { range, since, until, previous } = useRange();
   const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
   const [shortNames, setShortNames] = useState(true);
@@ -115,7 +109,7 @@ export default function OverviewPage() {
 
   if (totals.error) return <ErrorBlock error={totals.error} />;
   if (settingsLoaded && !hasAvailableProviders) {
-    return <EmptyBlock message="No discovered AI providers. Configure sources in Settings." />;
+    return <EmptyBlock message={tr("common.noProviders")} />;
   }
 
   const t = totals.data;
@@ -126,7 +120,12 @@ export default function OverviewPage() {
   return (
     <>
       {t ? (
-        <OverviewStats totals={t} prev={prev.data} rangeLabel={RANGE_LABEL[range] ?? "Selected range"} />
+        <OverviewStats
+          totals={t}
+          prev={prev.data}
+          rangeLabel={tr(`rangeLabel.${range}`, { defaultValue: tr("rangeLabel.selected") })}
+          daily={dailyTotals}
+        />
       ) : (
         <Skeleton className="h-[196px] w-full rounded-xl" />
       )}
@@ -139,7 +138,7 @@ export default function OverviewPage() {
             ) : dailyTotals.length ? (
               <ActivityHeatmap data={dailyTotals} granular={activityTotals} />
             ) : (
-              <EmptyBlock message="No activity in range." />
+              <EmptyBlock message={tr("overview.noActivity")} />
             )}
           </CardContent>
         </Card>
@@ -155,7 +154,7 @@ export default function OverviewPage() {
                 meetings={b.meetingsDaily?.length ? b.meetingsDaily : undefined}
               />
             ) : (
-              <EmptyBlock message="No activity in range." />
+              <EmptyBlock message={tr("overview.noActivity")} />
             )}
           </CardContent>
         </Card>
@@ -163,7 +162,7 @@ export default function OverviewPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Daily tokens</CardTitle>
+          <CardTitle>{tr("overview.dailyTokens")}</CardTitle>
         </CardHeader>
         <CardContent>
           {!b ? (
@@ -171,7 +170,7 @@ export default function OverviewPage() {
           ) : b.daily.length ? (
             <DailyChart data={b.daily} />
           ) : (
-            <EmptyBlock message="No activity in range." />
+            <EmptyBlock message={tr("overview.noActivity")} />
           )}
         </CardContent>
       </Card>
@@ -179,7 +178,7 @@ export default function OverviewPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>By model</CardTitle>
+            <CardTitle>{tr("overview.byModel")}</CardTitle>
           </CardHeader>
           <CardContent>
             {!b ? (
@@ -188,11 +187,11 @@ export default function OverviewPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Model</TableHead>
-                    <TableHead>Provider</TableHead>
-                    <TableHead className="text-right">Input</TableHead>
-                    <TableHead className="text-right">Output</TableHead>
-                    <TableHead className="text-right">Cost</TableHead>
+                    <TableHead>{tr("overview.th.model")}</TableHead>
+                    <TableHead>{tr("overview.th.provider")}</TableHead>
+                    <TableHead className="text-right">{tr("overview.th.input")}</TableHead>
+                    <TableHead className="text-right">{tr("overview.th.output")}</TableHead>
+                    <TableHead className="text-right">{tr("overview.th.cost")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -215,7 +214,7 @@ export default function OverviewPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle>Recent sessions</CardTitle>
+            <CardTitle>{tr("overview.recentSessions")}</CardTitle>
             <PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />
           </CardHeader>
           <CardContent>
@@ -225,12 +224,12 @@ export default function OverviewPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Project</TableHead>
-                    <TableHead>Provider</TableHead>
-                    <TableHead>Started</TableHead>
-                    <TableHead className="text-right">Turns</TableHead>
-                    <TableHead className="text-right">Tokens</TableHead>
-                    <TableHead className="text-right">Cost</TableHead>
+                    <TableHead>{tr("overview.th.project")}</TableHead>
+                    <TableHead>{tr("overview.th.provider")}</TableHead>
+                    <TableHead>{tr("overview.th.started")}</TableHead>
+                    <TableHead className="text-right">{tr("overview.th.turns")}</TableHead>
+                    <TableHead className="text-right">{tr("overview.th.tokens")}</TableHead>
+                    <TableHead className="text-right">{tr("overview.th.cost")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

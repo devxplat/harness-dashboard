@@ -6,10 +6,13 @@ import { useIngest } from "@/hooks/ingest";
 import { ScanSyncContext } from "@/hooks/scan-sync";
 import { RefreshCw } from "lucide-react";
 import { useContext } from "react";
+import { useTranslation } from "react-i18next";
 
 export function RealtimeToggle() {
+  const { t } = useTranslation();
   const { live, setLive } = useContext(ScanSyncContext);
   const { ingesting } = useIngest();
+  const tip = live ? t("topbar.pauseLive") : t("topbar.resumeLive");
 
   return (
     <Tooltip>
@@ -19,7 +22,7 @@ export function RealtimeToggle() {
           variant="ghost"
           onClick={() => setLive(!live)}
           aria-pressed={live}
-          aria-label={live ? "Pause live updates" : "Resume live updates"}
+          aria-label={tip}
         >
           {/* While indexing, the status dot becomes a subtle spinning update icon
               (same color as the dot it replaces); the label stays Live / Paused. */}
@@ -34,11 +37,11 @@ export function RealtimeToggle() {
               aria-hidden
             />
           )}
-          <span className="hidden sm:inline">{live ? "Live" : "Paused"}</span>
+          <span className="hidden sm:inline">{live ? t("topbar.live") : t("topbar.paused")}</span>
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom" sideOffset={8}>
-        {live ? "Pause live updates" : "Resume live updates"}
+        {tip}
       </TooltipContent>
     </Tooltip>
   );

@@ -11,6 +11,7 @@ import { useRange } from "@/lib/range";
 import type { WorkspaceRow } from "@/lib/types";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const makeColumns = (short: boolean): ColumnDef<WorkspaceRow>[] => [
   {
@@ -40,6 +41,7 @@ const makeColumns = (short: boolean): ColumnDef<WorkspaceRow>[] => [
 ];
 
 export default function WorkspacesPage() {
+  const { t } = useTranslation();
   const [shortNames, setShortNames] = useState(true);
   const columns = useMemo(() => makeColumns(shortNames), [shortNames]);
   const { since, until } = useRange();
@@ -58,7 +60,7 @@ export default function WorkspacesPage() {
 
   return (
     <>
-      <PageTitle title="Workspaces" description="File-editing tool activity per workspace." />
+      <PageTitle title={t("pages.workspaces.title")} description={t("pages.workspaces.description")} />
       {data.length === 0 ? (
         <EmptyBlock message="No file-editing activity in range." />
       ) : (

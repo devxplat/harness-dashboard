@@ -59,6 +59,26 @@ const bundle = {
       ai_overlap_prs: 1,
     },
   ],
+  prCycleTime: [
+    {
+      repo_key: "All repos",
+      merged_pr_count: 2,
+      codingHours: null,
+      pickupHours: 2,
+      reviewHours: 2,
+      mergeHours: null,
+    },
+  ],
+  prSizeDistribution: [
+    { bucket: "0-10", pull_requests: 0 },
+    { bucket: "11-50", pull_requests: 1 },
+  ],
+  prChurnSummary: {
+    medianChurn: 35,
+    p90Churn: 35,
+    avgChangedFiles: 2,
+    reworkProxyPct: 0,
+  },
 };
 
 const emptyBundle = {
@@ -74,6 +94,17 @@ const emptyBundle = {
   ],
   deploymentTimeline: [],
   repoComparison: [],
+  prCycleTime: [],
+  prSizeDistribution: [
+    { bucket: "0-10", pull_requests: 0 },
+    { bucket: "11-50", pull_requests: 0 },
+  ],
+  prChurnSummary: {
+    medianChurn: null,
+    p90Churn: null,
+    avgChangedFiles: null,
+    reworkProxyPct: null,
+  },
 };
 
 describe("DoraPage", () => {

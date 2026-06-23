@@ -12,9 +12,9 @@ use super::Db;
 use crate::error::Result;
 use crate::model::ProviderId;
 use crate::pricing::Pricing;
-use rusqlite::params;
+use rusqlite::{params, ToSql};
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 /// `authored_at_utc` range bound (commit-column twin of the message `TIME_BOUND`).
 /// Kept module-local so the heavily-tested git/dora queries stay untouched.
@@ -76,6 +76,42 @@ fn ratio(num: Option<f64>, denom: f64) -> Option<f64> {
         Some(n) if denom > 0.0 => Some(n / denom),
         _ => None,
     }
+}
+
+/// A `" AND provider IN (?,?…) "` fragment + the bound provider strings, for the
+/// message-based metrics that *are* provider-attributed. Empty (no filter) when all
+/// providers are selected. Mirrors `queries::provider_clause`.
+fn provider_filter(providers: &[ProviderId]) -> (String, Vec<&'static str>) {
+    if providers.is_empty() || providers.len() >= ProviderId::ALL.len() {
+        return (String::new(), Vec::new());
+    }
+    let mut seen = HashSet::new();
+    let mut vals = Vec::new();
+    for p in providers {
+        let s = p.as_str();
+        if seen.insert(s) {
+            vals.push(s);
+        }
+    }
+    if vals.is_empty() || vals.len() >= ProviderId::ALL.len() {
+        return (String::new(), Vec::new());
+    }
+    let placeholders = vec!["?"; vals.len()].join(",");
+    (format!(" AND provider IN ({placeholders}) "), vals)
+}
+
+/// Bind `since`, `until`, then the provider strings — the param order for a query that
+/// uses `MSG_TIME_BOUND` followed by a `provider_filter` clause.
+fn time_provider_params<'a>(
+    since: &'a Option<&'a str>,
+    until: &'a Option<&'a str>,
+    providers: &'a [&'static str],
+) -> Vec<&'a dyn ToSql> {
+    let mut out: Vec<&dyn ToSql> = vec![since, until];
+    for p in providers {
+        out.push(p);
+    }
+    out
 }
 
 // ---------- P0#1 line-level % AI-generated ----------
@@ -296,26 +332,31 @@ impl Db {
         &self,
         since: Option<&str>,
         until: Option<&str>,
+        providers: &[ProviderId],
     ) -> Result<AiAdoptionBundle> {
         let conn = self.conn.lock().unwrap();
+        let (pfilter, pvals) = provider_filter(providers);
         let daily_sql = format!(
             "SELECT substr(timestamp,1,10) AS day, \
              COUNT(DISTINCT provider || ':' || session_id), \
              COALESCE(SUM(CASE WHEN type='assistant' THEN 1 ELSE 0 END),0) \
-             FROM messages WHERE {MSG_TIME_BOUND} GROUP BY day ORDER BY day"
+             FROM messages WHERE {MSG_TIME_BOUND}{pfilter} GROUP BY day ORDER BY day"
         );
         let daily: Vec<AiAdoptionDayRow> = {
             let mut stmt = conn.prepare(&daily_sql)?;
             let rows = stmt
-                .query_map(params![since, until], |r| {
-                    let messages: i64 = r.get(2)?;
-                    Ok(AiAdoptionDayRow {
-                        day: r.get(0)?,
-                        sessions: r.get(1)?,
-                        messages,
-                        active: messages > 0,
-                    })
-                })?
+                .query_map(
+                    time_provider_params(&since, &until, &pvals).as_slice(),
+                    |r| {
+                        let messages: i64 = r.get(2)?;
+                        Ok(AiAdoptionDayRow {
+                            day: r.get(0)?,
+                            sessions: r.get(1)?,
+                            messages,
+                            active: messages > 0,
+                        })
+                    },
+                )?
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             rows
         };
@@ -326,12 +367,13 @@ impl Db {
              COALESCE(julianday(MAX(timestamp)) - julianday(MIN(timestamp)), 0), \
              COUNT(DISTINCT CASE WHEN is_sidechain=1 THEN agent_id END), \
              COUNT(*) \
-             FROM messages WHERE {MSG_TIME_BOUND}"
+             FROM messages WHERE {MSG_TIME_BOUND}{pfilter}"
         );
-        let (sessions, span_raw, agent_tasks, row_count): (i64, f64, i64, i64) =
-            conn.query_row(&agg_sql, params![since, until], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
-            })?;
+        let (sessions, span_raw, agent_tasks, row_count): (i64, f64, i64, i64) = conn.query_row(
+            &agg_sql,
+            time_provider_params(&since, &until, &pvals).as_slice(),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )?;
         drop(conn);
 
         let active_days = daily.iter().filter(|d| d.active).count() as i64;
@@ -394,11 +436,16 @@ impl Db {
         };
         let active_days: i64 = {
             let conn = self.conn.lock().unwrap();
+            let (pfilter, pvals) = provider_filter(providers);
             let sql = format!(
                 "SELECT COUNT(DISTINCT substr(timestamp,1,10)) \
-                 FROM messages WHERE type='assistant' AND {MSG_TIME_BOUND}"
+                 FROM messages WHERE type='assistant' AND {MSG_TIME_BOUND}{pfilter}"
             );
-            conn.query_row(&sql, params![since, until], |r| r.get(0))?
+            conn.query_row(
+                &sql,
+                time_provider_params(&since, &until, &pvals).as_slice(),
+                |r| r.get(0),
+            )?
         };
 
         // Per-provider cost from a single by_model pass (sum priced costs per provider).
@@ -482,6 +529,7 @@ impl Db {
         &self,
         since: Option<&str>,
         until: Option<&str>,
+        providers: &[ProviderId],
     ) -> Result<AiCorrelationBundle> {
         #[derive(Default)]
         struct Acc {
@@ -496,8 +544,8 @@ impl Db {
         }
         let mut map: BTreeMap<String, Acc> = BTreeMap::new();
 
-        // Usage/day (collapse providers) via the tested daily query.
-        for row in self.daily_for_providers(since, until, &[])? {
+        // Usage/day (provider-filtered) via the tested daily query.
+        for row in self.daily_for_providers(since, until, providers)? {
             let e = map.entry(row.day).or_default();
             e.sessions += row.sessions;
             e.input += row.input_tokens;
@@ -604,8 +652,8 @@ impl Db {
         Ok(AiImpactBundle {
             lines: self.ai_lines(since, until)?,
             roi: self.ai_roi(pricing, since, until, providers)?,
-            correlation: self.ai_correlation(since, until)?,
-            adoption: self.ai_adoption(since, until)?,
+            correlation: self.ai_correlation(since, until, providers)?,
+            adoption: self.ai_adoption(since, until, providers)?,
         })
     }
 }
@@ -728,7 +776,7 @@ mod tests {
         insert_msg(&db, "m3", "s2", "2026-01-03T09:00:00Z");
         insert_msg(&db, "m4", "s3", "2026-01-05T09:00:00Z");
 
-        let out = db.ai_adoption(None, None).unwrap();
+        let out = db.ai_adoption(None, None, &[]).unwrap();
         assert_eq!(out.active_days, 3);
         assert_eq!(out.sessions, 3);
         assert_eq!(out.messages, 4);
@@ -742,11 +790,35 @@ mod tests {
     #[test]
     fn ai_adoption_empty() {
         let db = Db::open_in_memory().unwrap();
-        let out = db.ai_adoption(None, None).unwrap();
+        let out = db.ai_adoption(None, None, &[]).unwrap();
         assert_eq!(out.active_days, 0);
         assert_eq!(out.span_days, 0);
         assert!(out.pct_active_days.is_none());
         assert!(out.avg_sessions_per_active_day.is_none());
+    }
+
+    #[test]
+    fn ai_adoption_filters_by_provider() {
+        let db = Db::open_in_memory().unwrap();
+        insert_msg(&db, "m1", "s1", "2026-01-01T09:00:00Z"); // claude
+        {
+            let conn = db.conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO messages(uuid, provider, session_id, project_slug, type, timestamp) \
+                 VALUES ('c1','codex','s2','repo','assistant','2026-01-02T09:00:00Z')",
+                [],
+            )
+            .unwrap();
+        }
+        // No filter → both providers counted.
+        let all = db.ai_adoption(None, None, &[]).unwrap();
+        assert_eq!(all.active_days, 2);
+        assert_eq!(all.sessions, 2);
+        // Filtered to Claude → only the Claude day/session/message.
+        let claude = db.ai_adoption(None, None, &[ProviderId::Claude]).unwrap();
+        assert_eq!(claude.active_days, 1);
+        assert_eq!(claude.sessions, 1);
+        assert_eq!(claude.messages, 1);
     }
 
     #[test]
@@ -802,7 +874,7 @@ mod tests {
         )
         .unwrap();
 
-        let out = db.ai_correlation(None, None).unwrap();
+        let out = db.ai_correlation(None, None, &[]).unwrap();
         assert_eq!(out.series.len(), 3);
         assert_eq!(out.series[0].sessions, 1);
         assert_eq!(out.series[2].commits, 3);

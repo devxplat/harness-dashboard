@@ -8,12 +8,30 @@ import { usePathname } from "next/navigation";
 import { AppSidebar } from "./app-sidebar";
 import { DateRangePicker } from "./date-range-picker";
 import { ProviderSelector } from "../provider-selector";
+import { LanguageSwitcher } from "./language-switcher";
 import { RangeSelector } from "./range-selector";
 import { RealtimeToggle } from "./realtime-toggle";
 import { ScanStatus } from "./scan-status";
 import { ThemeToggle } from "./theme-toggle";
+import { useTranslation } from "react-i18next";
+
+// Screens whose data is provider-attributed (the AI-tool usage views). The selector
+// is shown — and applied — only here; everywhere else its content has no provider
+// dimension (git commits, surveys, settings).
+const PROVIDER_SCOPED_ROUTES = new Set([
+  "/",
+  "/prompts",
+  "/sessions",
+  "/projects",
+  "/tools",
+  "/skills",
+  "/subagents",
+  "/workspaces",
+  "/ai-impact",
+]);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation();
   const raw = usePathname() ?? "/";
   // `trailingSlash: true` (static export) makes routes look like "/onboarding/",
   // so normalize before matching — otherwise the shell would wrap onboarding.
@@ -25,6 +43,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Settings opts out of the blur gate so the user can always act on the message.
   const gated = !pathname.startsWith("/settings");
 
+  // The provider selector only filters provider-attributed screens; on the
+  // git/local screens (DORA, allocation, team, DevEx, productivity, tips) and
+  // settings it would do nothing, so it's hidden there to avoid implying a filter.
+  const providerScoped = PROVIDER_SCOPED_ROUTES.has(pathname);
+
   return (
     <SidebarProvider>
       <OnboardingGate />
@@ -35,14 +58,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Image src="/logo.png" alt="" width={40} height={40} className="size-9" priority />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-medium">Welcome back 👋</span>
-            <span className="text-xs text-muted-foreground">Your local AI coding usage</span>
+            <span className="text-sm font-medium">{t("topbar.welcome")}</span>
+            <span className="text-xs text-muted-foreground">{t("topbar.subtitle")}</span>
           </div>
-          <div className="ml-auto flex items-center gap-2 [&_button]:shadow-sm">
-            <ProviderSelector />
+          <div className="flex flex-1 justify-center">{providerScoped ? <ProviderSelector /> : null}</div>
+          <div className="flex items-center gap-2 [&_button]:shadow-sm">
             <RangeSelector />
             <DateRangePicker />
             <RealtimeToggle />
+            <LanguageSwitcher />
             <ThemeToggle />
             <ScanStatus />
           </div>
