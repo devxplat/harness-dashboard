@@ -40,3 +40,7 @@ Thumbs.db
 
 # local design references (not shipped)
 docs/ref/
+
+# Local agent/runtime scratch
+.codex/
+tmp/
