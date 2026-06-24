@@ -11,6 +11,7 @@ const rows = [
     user_uuid: "u1",
     session_id: "s1",
     project_slug: "p",
+    sample_cwd: null,
     timestamp: "2026-06-19T10:00:00Z",
     prompt_text: "hello",
     prompt_chars: 5,
@@ -24,7 +25,7 @@ const rows = [
 
 describe("PromptsPage", () => {
   it("renders rows and toggles the sort", async () => {
-    const fetchMock = installFetch({ "/api/prompts": rows });
+    const fetchMock = installFetch({ "/api/prompts": { rows, total: 1 } });
     renderWithRange(<PromptsPage />);
     await waitFor(() => expect(screen.getByText("hello")).toBeInTheDocument());
     expect(screen.getByText("est.")).toBeInTheDocument();
@@ -33,7 +34,7 @@ describe("PromptsPage", () => {
   });
 
   it("renders the empty state", async () => {
-    installFetch({ "/api/prompts": [] });
+    installFetch({ "/api/prompts": { rows: [], total: 0 } });
     renderWithRange(<PromptsPage />);
     await waitFor(() => expect(screen.getByText("No prompts yet.")).toBeInTheDocument());
   });

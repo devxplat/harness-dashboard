@@ -1,6 +1,5 @@
 import { Providers } from "@/components/providers";
 import { AppShell } from "@/components/shell/app-shell";
-import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
@@ -8,14 +7,14 @@ import "./globals.css";
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "harness-dashboard",
-  description: "Local-first Claude Code usage dashboard",
+  title: "Harness Dashboard",
+  description: "Local-first Claude Code usage dashboard — DevX Platform",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={cn("dark", geist.variable)} suppressHydrationWarning>
-      <body className="font-sans antialiased">
+    <html lang="en" className={geist.variable} suppressHydrationWarning>
+      <body className="font-sans antialiased" suppressHydrationWarning>
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

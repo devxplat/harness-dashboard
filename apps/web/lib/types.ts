@@ -10,17 +10,32 @@ export interface Totals {
   cache_create_1h_tokens: number;
   cost_usd: number | null;
   cost_estimated: boolean;
+  reported_cost_usd: number | null;
 }
 
 export interface DailyRow {
+  provider: string;
   day: string;
+  sessions: number;
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
   cache_create_tokens: number;
 }
 
+export interface ActivityBucket {
+  provider: string;
+  key: string;
+  day: string;
+  half: string;
+  sessions: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_create_tokens: number;
+}
+
 export interface ModelRow {
+  provider: string;
   model: string | null;
   turns: number;
   input_tokens: number;
@@ -31,7 +46,11 @@ export interface ModelRow {
 }
 
 export interface ProjectRow {
+  provider: string;
+  providers?: string[];
   project_slug: string;
+  repo_key?: string | null;
+  repo_root?: string | null;
   sample_cwd: string | null;
   sessions: number;
   turns: number;
@@ -42,12 +61,14 @@ export interface ProjectRow {
 }
 
 export interface ToolRow {
+  provider: string;
   tool_name: string;
   calls: number;
   result_tokens: number;
 }
 
 export interface SessionRow {
+  provider: string;
   session_id: string;
   project_slug: string | null;
   sample_cwd: string | null;
@@ -57,9 +78,11 @@ export interface SessionRow {
   tokens: number;
   cost_usd: number | null;
   cost_estimated: boolean;
+  reported_cost_usd: number | null;
 }
 
 export interface MessageDetail {
+  provider: string;
   uuid: string;
   parent_uuid: string | null;
   type: string;
@@ -72,6 +95,9 @@ export interface MessageDetail {
   cache_read_tokens: number;
   cache_create_5m_tokens: number;
   cache_create_1h_tokens: number;
+  usage_source: string;
+  reported_cost_usd: number | null;
+  cost_source: string;
   prompt_text: string | null;
   prompt_chars: number | null;
   tool_calls_json: string | null;
@@ -80,9 +106,11 @@ export interface MessageDetail {
 }
 
 export interface PromptRow {
+  provider: string;
   user_uuid: string;
   session_id: string;
   project_slug: string;
+  sample_cwd: string | null;
   timestamp: string;
   prompt_text: string | null;
   prompt_chars: number | null;
@@ -91,6 +119,155 @@ export interface PromptRow {
   cache_read_tokens: number;
   estimated_cost_usd: number | null;
   cost_estimated: boolean;
+  reported_cost_usd: number | null;
+}
+
+export interface ProviderSummary {
+  provider: string;
+  label: string;
+  sessions: number;
+  messages: number;
+  turns: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_create_tokens: number;
+  cost_usd: number | null;
+  reported_cost_usd: number | null;
+  tokens_available: boolean;
+  cost_available: boolean;
+}
+
+/** Per-day commit counts (AI / human split + churn). `day` aligns with DailyRow.day. */
+export interface CommitDailyRow {
+  day: string;
+  commits: number;
+  ai_commits: number;
+  human_commits: number;
+  insertions: number;
+  deletions: number;
+}
+
+/** AI-vs-human commit counts grouped by day or project slug. */
+export interface AiSplitRow {
+  key: string;
+  ai_commits: number;
+  human_commits: number;
+}
+
+/** One cell of the dense 7×24 productive-hours matrix (local weekday × hour). */
+export interface ProductiveHourRow {
+  dow: number; // 0=Sunday..6=Saturday
+  hour: number; // 0..23
+  commits: number;
+  messages: number;
+}
+
+export interface CommitRow {
+  sha: string;
+  repo_key: string;
+  project_slug: string | null;
+  sample_cwd: string | null;
+  author_name: string | null;
+  author_email: string | null;
+  authored_at_utc: string;
+  authored_at_local: string | null;
+  subject: string | null;
+  branch: string | null;
+  files_changed: number;
+  insertions: number;
+  deletions: number;
+  is_merge: boolean;
+  ai_assisted: boolean;
+  ai_session_overlap: boolean;
+  ai_coauthor_trailer: boolean;
+  coauthors: string[];
+}
+
+/** The /api/productivity response. */
+export interface ProductivityBundle {
+  hours: ProductiveHourRow[];
+  aiByDay: AiSplitRow[];
+  aiByProject: AiSplitRow[];
+}
+
+export interface ProductivitySummary {
+  commits: number;
+  ai_commits: number;
+  messages: number;
+  meeting_minutes: number;
+  focus_minutes: number;
+  flow_minutes: number;
+  pr_count: number;
+  merged_pr_count: number;
+  avg_warmup_minutes: number | null;
+  estimated: boolean;
+}
+
+export interface ProductivityPeriodRow {
+  period: string;
+  commits: number;
+  ai_commits: number;
+  messages: number;
+  pr_count: number;
+  merged_pr_count: number;
+  meeting_minutes: number;
+  focus_minutes: number;
+  flow_minutes: number;
+  avg_warmup_minutes: number | null;
+}
+
+export interface FocusBlockRow {
+  period: string;
+  started_at: string;
+  ended_at: string;
+  duration_minutes: number;
+  events: number;
+  commits: number;
+  messages: number;
+  flow: boolean;
+}
+
+export interface WarmupBucketRow {
+  bucket: string;
+  count: number;
+  avg_minutes: number | null;
+}
+
+export interface PrCorrelationRow {
+  repo_key: string;
+  pr_count: number;
+  merged_pr_count: number;
+  avg_lead_hours: number | null;
+  avg_review_wait_hours: number | null;
+  churn: number;
+  ai_overlap_prs: number;
+  commits: number;
+  messages: number;
+}
+
+export interface ProductivityInsightsBundle {
+  grain: string;
+  summary: ProductivitySummary;
+  periods: ProductivityPeriodRow[];
+  focusBlocks: FocusBlockRow[];
+  warmup: WarmupBucketRow[];
+  prCorrelation: PrCorrelationRow[];
+}
+
+/** Per-day busy-meeting count + minutes (calendar overlay). `day` aligns with DailyRow.day. */
+export interface MeetingDay {
+  day: string;
+  count: number;
+  minutes: number;
+}
+
+/** Coding output during vs free of busy meetings. */
+export interface MeetingImpact {
+  during_commits: number;
+  free_commits: number;
+  during_messages: number;
+  free_messages: number;
 }
 
 export interface OverviewBundle {
@@ -99,7 +276,12 @@ export interface OverviewBundle {
   sessions: SessionRow[];
   tools: ToolRow[];
   daily: DailyRow[];
+  activity: ActivityBucket[];
+  providers: ProviderSummary[];
   byModel: ModelRow[];
+  commitsDaily: CommitDailyRow[];
+  productivity: ProductiveHourRow[];
+  meetingsDaily: MeetingDay[];
 }
 
 export interface RtkInfo {
@@ -111,12 +293,475 @@ export interface RtkInfo {
   monthly: unknown[];
 }
 
+/** One page of a server-paginated list endpoint. */
+export interface Paged<T> {
+  rows: T[];
+  total: number;
+}
+
 export interface SettingsInfo {
   claude_dir: string;
   projects_dir: string;
   projects_overridden: boolean;
   claude_dirs: string[];
   plan: string;
+  providers: ProviderConfig[];
+  /** Whether the first-run onboarding wizard has been completed. */
+  onboarding_done?: boolean;
+  /** Last onboarding step the user was on (for resume-where-you-left-off). */
+  onboarding_step?: number;
+}
+
+/** Whole-app ingest status — drives the data-screen gate and the shared status pill. */
+export interface IngestStatus {
+  /** Any local sessions indexed yet (message rows > 0). */
+  seeded: boolean;
+  onboarding_done: boolean;
+  /** A local-transcript scan is in flight. */
+  scanning: boolean;
+  messages: number;
+  github: {
+    configured: boolean;
+    syncing: boolean;
+    progress: GithubProgress | null;
+  };
+}
+
+export interface ProviderConfig {
+  id: string;
+  label: string;
+  enabled: boolean;
+  default_path: string;
+  configured_path: string | null;
+  active_path: string;
+  discovered: boolean;
+  capabilities: {
+    usage?: "exact" | "reported" | "missing" | string;
+    tokens: boolean;
+    cost?: "estimated" | "reported" | "missing" | string;
+    tools: boolean;
+    costs: boolean;
+    prompts: boolean;
+  };
+  supported?: ProviderCapabilitySet;
+  observed?: ProviderCapabilitySet;
+  last_scan_counts: {
+    sessions: number;
+    messages: number;
+    tools: number;
+    prompts?: number;
+  };
+  sources?: ProviderSourceConfig[];
+}
+
+export interface ProviderCapabilitySet {
+  usage?: "exact" | "reported" | "missing" | string;
+  tokens: boolean;
+  cost?: "estimated" | "reported" | "missing" | string;
+  tools: boolean;
+  costs: boolean;
+  prompts: boolean;
+}
+
+export interface ProviderSourceConfig {
+  key: string;
+  label: string;
+  enabled: boolean;
+  env_var?: string | null;
+  default_path: string | null;
+  configured_path: string | null;
+  active_path: string | null;
+  discovered: boolean;
+  setup_hint?: string | null;
+  capabilities: {
+    usage?: "exact" | "reported" | "missing" | string;
+    tokens: boolean;
+    cost?: "estimated" | "reported" | "missing" | string;
+    costs: boolean;
+    tools: boolean;
+    prompts: boolean;
+  };
+  supported?: ProviderCapabilitySet;
+  observed?: ProviderCapabilitySet;
+}
+
+/** One DORA metric; `value === null` means "not derivable from configured sources". */
+export interface DoraMetric {
+  key: string;
+  label: string;
+  value: number | null;
+  unit: string;
+  detail: string;
+  source: string;
+  exact: boolean;
+  band: "elite" | "high" | "medium" | "low" | null;
+  band_target: string | null;
+}
+
+export interface PrCycleTimeRow {
+  repo_key: string;
+  merged_pr_count: number;
+  codingHours: number | null;
+  pickupHours: number | null;
+  reviewHours: number | null;
+  mergeHours: number | null;
+}
+
+export interface PrSizeBucketRow {
+  bucket: string;
+  pull_requests: number;
+}
+
+export interface PrChurnSummary {
+  medianChurn: number | null;
+  p90Churn: number | null;
+  avgChangedFiles: number | null;
+  reworkProxyPct: number | null;
+}
+
+export interface DoraTrendRow {
+  period: string;
+  commits: number;
+  deploys: number;
+  avg_lead_hours: number | null;
+  change_failure_rate: number | null;
+}
+
+export interface LeadTimeBucketRow {
+  bucket: string;
+  pull_requests: number;
+}
+
+export interface DeploymentTimelineRow {
+  period: string;
+  deployments: number;
+  failures: number;
+}
+
+export interface DoraRepoRow {
+  repo_key: string;
+  commits: number;
+  deploys: number;
+  pr_count: number;
+  merged_pr_count: number;
+  avg_lead_hours: number | null;
+  change_failure_rate: number | null;
+  ai_overlap_prs: number;
+}
+
+export interface DoraBundle {
+  grain: string;
+  metrics: DoraMetric[];
+  trends: DoraTrendRow[];
+  leadTimeDistribution: LeadTimeBucketRow[];
+  deploymentTimeline: DeploymentTimelineRow[];
+  repoComparison: DoraRepoRow[];
+  prCycleTime: PrCycleTimeRow[];
+  prSizeDistribution: PrSizeBucketRow[];
+  prChurnSummary: PrChurnSummary;
+}
+
+// ---- AI Impact & ROI (P0) ----
+
+export interface AiLinesRow {
+  day: string;
+  ai_insertions: number;
+  ai_deletions: number;
+  human_insertions: number;
+  human_deletions: number;
+  ai_commits: number;
+  human_commits: number;
+}
+
+export interface AiLinesSummary {
+  ai_lines: number;
+  human_lines: number;
+  total_lines: number;
+  ai_line_pct: number | null;
+  ai_commit_pct: number | null;
+  pr_ai_lines: number;
+  pr_human_lines: number;
+  pr_ai_line_pct: number | null;
+}
+
+export interface AiLinesBundle {
+  summary: AiLinesSummary;
+  daily: AiLinesRow[];
+}
+
+export interface AiAdoptionDayRow {
+  day: string;
+  sessions: number;
+  messages: number;
+  active: boolean;
+}
+
+export interface AiAdoptionBundle {
+  active_days: number;
+  span_days: number;
+  sessions: number;
+  messages: number;
+  agent_tasks: number;
+  pct_active_days: number | null;
+  avg_sessions_per_active_day: number | null;
+  daily: AiAdoptionDayRow[];
+}
+
+export interface AiRoiByGroupRow {
+  group: string;
+  kind: string;
+  cost_usd: number | null;
+  cost_estimated: boolean;
+  merged_prs: number;
+  commits: number;
+  lines_shipped: number;
+  cost_per_merged_pr: number | null;
+  cost_per_commit: number | null;
+  cost_per_1k_lines: number | null;
+}
+
+export interface AiRoiBundle {
+  cost_usd: number | null;
+  cost_estimated: boolean;
+  reported_cost_usd: number | null;
+  active_days: number;
+  merged_prs: number;
+  commits: number;
+  lines_shipped: number;
+  cost_per_active_day: number | null;
+  cost_per_merged_pr: number | null;
+  cost_per_commit: number | null;
+  cost_per_1k_lines: number | null;
+  by_provider: AiRoiByGroupRow[];
+  by_project: AiRoiByGroupRow[];
+}
+
+export interface AiCorrelationSeriesRow {
+  day: string;
+  sessions: number;
+  active: boolean;
+  input_tokens: number;
+  output_tokens: number;
+  commits: number;
+  ai_commits: number;
+  merged_prs: number;
+  avg_lead_hours: number | null;
+}
+
+export interface AiCorrelationCoeffs {
+  usage_vs_commits: number | null;
+  usage_vs_merged_prs: number | null;
+  tokens_vs_lead_hours: number | null;
+}
+
+export interface AiCorrelationBundle {
+  series: AiCorrelationSeriesRow[];
+  coeffs: AiCorrelationCoeffs;
+  previous_period: AiCorrelationCoeffs | null;
+}
+
+export interface AiImpactBundle {
+  lines: AiLinesBundle;
+  roi: AiRoiBundle;
+  correlation: AiCorrelationBundle;
+  adoption: AiAdoptionBundle;
+}
+
+// ---- Investment allocation (P2) ----
+
+export interface AllocationRow {
+  category: string;
+  commits: number;
+  insertions: number;
+  deletions: number;
+  aiCommits: number;
+}
+
+export interface AllocationPeriodRow {
+  period: string;
+  feature: number;
+  fix: number;
+  ktlo: number;
+  chore: number;
+  other: number;
+}
+
+export interface AllocationBundle {
+  grain: string;
+  totals: AllocationRow[];
+  periods: AllocationPeriodRow[];
+}
+
+export interface IncidentDto {
+  source: string;
+  repo_key: string | null;
+  ext_id: string;
+  title: string | null;
+  severity: string | null;
+  opened_at_utc: string | null;
+  resolved_at_utc: string | null;
+  state: string | null;
+  html_url: string | null;
+  deployExtId: string | null;
+  mttrHours: number | null;
+}
+
+// ---- Per-author / team (P3) ----
+
+export interface AuthorRow {
+  author_email: string;
+  author_name: string | null;
+  commits: number;
+  ai_commits: number;
+  human_commits: number;
+  insertions: number;
+  deletions: number;
+  active_days: number;
+}
+
+export interface AuthorDoraRow {
+  author_email: string;
+  author_name: string | null;
+  throughputPerWeek: number | null;
+  changeFailurePct: number | null;
+}
+
+// ---- DevEx self-survey (P3) ----
+
+export interface SurveyResponseRow {
+  id: number;
+  submitted_at_utc: string;
+  flow: number | null;
+  productivity: number | null;
+  ai_helpful: number | null;
+  satisfaction: number | null;
+  note: string | null;
+}
+
+export interface SurveyTrendRow {
+  period: string;
+  responses: number;
+  avg_flow: number | null;
+  avg_productivity: number | null;
+  avg_ai_helpful: number | null;
+  avg_satisfaction: number | null;
+  commits: number;
+  ai_commits: number;
+  messages: number;
+}
+
+export interface SurveyCorrelationRow {
+  sentiment: string;
+  metric: string;
+  r: number | null;
+  n: number;
+}
+
+export interface SurveyCorrelationBundle {
+  trend: SurveyTrendRow[];
+  correlations: SurveyCorrelationRow[];
+  responses: SurveyResponseRow[];
+}
+
+export interface GithubRateBudget {
+  remaining: number | null;
+  limit: number | null;
+  reset_utc: string | null;
+}
+
+export interface GithubIntegration {
+  configured: boolean;
+  repo_count: number;
+  enabled_repo_count?: number;
+  last_sync: string | null;
+  login?: string | null;
+  scopes?: string[];
+  has_repo_scope?: boolean;
+  syncing?: boolean;
+  rate?: GithubRateBudget | null;
+  backfill?: GithubSyncSettings["backfill"];
+  autosync?: GithubSyncSettings["autosync"];
+}
+
+export interface IntegrationsInfo {
+  github: GithubIntegration;
+  google: { configured: boolean; last_sync: string | null };
+}
+
+/** One repo in the picker (flat form). */
+export interface GithubRepoItem {
+  repo_key: string;
+  owner: string;
+  repo: string;
+  primary_slug: string | null;
+  enabled: boolean;
+  last_synced_at: string | null;
+}
+
+/** Repos grouped by owner/org for the picker. */
+export interface GithubRepoOrg {
+  owner: string;
+  repos: GithubRepoItem[];
+  enabled_count: number;
+  total: number;
+}
+
+export interface GithubReposResponse {
+  orgs: GithubRepoOrg[];
+  total_repos: number;
+  enabled_repos: number;
+}
+
+/** Backfill window + auto-sync settings (user-controlled). */
+export interface GithubSyncSettings {
+  backfill: { value: number; unit: "days" | "weeks" | "months" | "all" | "recent" };
+  autosync: { enabled: boolean; interval_min: number };
+  /** Which PRs to import: every author's (baselines) or only the connected user's. */
+  pr_scope?: "all" | "mine";
+  backfill_done?: boolean;
+}
+
+/** Live sync progress (pushed over SSE + pollable). */
+export interface GithubProgress {
+  running: boolean;
+  repo_index: number;
+  repo_total: number;
+  current_repo: string | null;
+  pull_requests: number;
+  deployments: number;
+  rate_remaining: number | null;
+  rate_limit: number | null;
+  rate_reset_utc: string | null;
+  last_error: string | null;
+  finished_at: string | null;
+}
+
+export interface PullRequestRow {
+  repo_key: string;
+  number: number;
+  title: string | null;
+  state: string | null; // open | closed | merged
+  author: string | null;
+  created_at_utc: string | null;
+  merged_at_utc: string | null;
+  head_branch: string | null;
+  base_branch: string | null;
+  additions: number;
+  deletions: number;
+  changed_files: number;
+  review_count: number;
+  html_url: string | null;
+  ai_session_overlap: boolean;
+}
+
+export interface DeploymentRow {
+  repo_key: string;
+  kind: string; // tag | release | run
+  ext_id: string;
+  name: string | null;
+  created_at_utc: string | null;
+  status: string | null; // success | failure | null
+  html_url: string | null;
 }
 
 export interface SkillRow {
@@ -146,6 +791,7 @@ export interface SubagentsResponse {
 
 export interface WorkspaceRow {
   workspace: string;
+  sample_cwd: string | null;
   calls: number;
   files: number;
 }

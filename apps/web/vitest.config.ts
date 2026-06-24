@@ -19,6 +19,12 @@ export default defineConfig({
       include: ["lib/**", "components/**", "hooks/**", "app/**"],
       exclude: [
         "components/ui/**",
+        // recharts charts: their SVG draw callbacks need a real layout (jsdom gives
+        // charts zero size), so they can't be exercised by unit tests. The math is
+        // unit-tested in lib/activity-grid.ts; these render as smoke tests only.
+        "components/charts/activity-heatmap.tsx",
+        "components/charts/daily-chart.tsx",
+        "components/charts/ai-split-chart.tsx",
         "lib/utils.ts",
         "lib/test-utils.tsx",
         "app/layout.tsx",

@@ -1,56 +1,78 @@
 "use client";
 
+import { DataTable } from "@/components/data-table";
+import { ProviderBadge } from "@/components/provider-badge";
 import { EmptyBlock, ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useApi } from "@/hooks/use-api";
 import { rangeQuery } from "@/lib/api";
 import { formatInt, formatTokens } from "@/lib/format";
+import { useProviderFilter } from "@/lib/provider-filter";
 import { useRange } from "@/lib/range";
 import type { ToolRow } from "@/lib/types";
+import type { ColumnDef } from "@tanstack/react-table";
+import { useMemo } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
+
+const makeColumns = (t: TFunction): ColumnDef<ToolRow>[] => [
+  {
+    accessorKey: "tool_name",
+    header: t("pages.tools.tool"),
+    cell: ({ row }) => <span className="font-medium">{row.original.tool_name}</span>,
+  },
+  {
+    accessorKey: "provider",
+    header: t("pages.tools.provider"),
+    cell: ({ row }) => <ProviderBadge provider={row.original.provider} compact />,
+  },
+  {
+    accessorKey: "calls",
+    header: t("pages.tools.calls"),
+    cell: ({ row }) => formatInt(row.original.calls),
+    meta: { align: "right" },
+  },
+  {
+    accessorKey: "result_tokens",
+    header: t("pages.tools.resultTokens"),
+    cell: ({ row }) => formatTokens(row.original.result_tokens),
+    meta: { align: "right" },
+  },
+];
 
 export default function ToolsPage() {
-  const { since } = useRange();
-  const { data, error, loading } = useApi<ToolRow[]>(`/api/tools${rangeQuery(since)}`);
+  const { t } = useTranslation();
+  const columns = useMemo(() => makeColumns(t), [t]);
+  const { since, until } = useRange();
+  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { data, error, loading } = useApi<ToolRow[]>(
+    settingsLoaded && hasAvailableProviders
+      ? `/api/tools${rangeQuery(since, until, queryProviders)}`
+      : null,
+  );
 
   if (error) return <ErrorBlock error={error} />;
+  if (settingsLoaded && !hasAvailableProviders) {
+    return <EmptyBlock message={t("common.noProviders")} />;
+  }
   if (loading || !data) return <LoadingBlock />;
 
   return (
     <>
-      <PageTitle title="Tools" description="Tool calls and the result tokens they returned." />
+      <PageTitle title={t("pages.tools.title")} description={t("pages.tools.description")} />
       {data.length === 0 ? (
-        <EmptyBlock message="No tool calls in range." />
+        <EmptyBlock message={t("pages.tools.noToolCalls")} />
       ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tool</TableHead>
-                  <TableHead className="text-right">Calls</TableHead>
-                  <TableHead className="text-right">Result tokens</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.map((row) => (
-                  <TableRow key={row.tool_name}>
-                    <TableCell className="font-medium">{row.tool_name}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInt(row.calls)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatTokens(row.result_tokens)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <DataTable
+          columns={columns}
+          data={data}
+          search={{
+            fields: ["provider", "tool_name"],
+            placeholder: t("common.search"),
+            ariaLabel: t("pages.tools.title"),
+          }}
+          pageSize={25}
+          emptyMessage={t("pages.tools.noMatch")}
+        />
       )}
     </>
   );

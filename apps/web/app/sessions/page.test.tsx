@@ -50,10 +50,10 @@ const detail = [
 describe("SessionsPage", () => {
   it("lists sessions and filters to empty", async () => {
     nav.id = null;
-    installFetch({ "/api/sessions": sessions });
+    installFetch({ "/api/sessions": { rows: sessions, total: 1 } });
     renderWithRange(<SessionsPage />);
     await waitFor(() => expect(screen.getByText("myproj")).toBeInTheDocument());
-    await userEvent.type(screen.getByPlaceholderText("Filter by project or session id…"), "no-match");
+    await userEvent.type(screen.getByPlaceholderText("Filter this page…"), "no-match");
     await waitFor(() => expect(screen.getByText("No sessions match.")).toBeInTheDocument());
   });
 

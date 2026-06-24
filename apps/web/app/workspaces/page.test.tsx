@@ -7,7 +7,11 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("WorkspacesPage", () => {
   it("renders rows", async () => {
-    installFetch({ "/api/workspaces": [{ workspace: "myproj", calls: 3, files: 2 }] });
+    installFetch({
+      "/api/workspaces": [
+        { workspace: "D--Github-myproj", sample_cwd: "D:\\Github\\myproj", calls: 3, files: 2 },
+      ],
+    });
     renderWithRange(<WorkspacesPage />);
     await waitFor(() => expect(screen.getByText("myproj")).toBeInTheDocument());
     expect(screen.getByText("File-edit calls")).toBeInTheDocument();

@@ -1,23 +1,21 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useStream } from "@/hooks/use-stream";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ScanSyncContext } from "@/hooks/scan-sync";
 import { apiPost } from "@/lib/api";
 import { RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export function ScanStatus() {
+  // Reads the shared SSE (no second EventSource) — `last` updates when a scan ends.
+  const { last } = useContext(ScanSyncContext);
   const [scanning, setScanning] = useState(false);
 
-  useStream((e) => {
-    if (e.type === "scan") {
-      setScanning(false);
-      if (e.n && e.n.messages > 0) {
-        toast.success(`Scanned ${e.n.files} files, ${e.n.messages} new messages`);
-      }
-    }
-  });
+  useEffect(() => {
+    if (last) setScanning(false);
+  }, [last]);
 
   async function refresh() {
     setScanning(true);
@@ -30,16 +28,22 @@ export function ScanStatus() {
   }
 
   return (
-    <Button
-      size="sm"
-      variant="ghost"
-      onClick={refresh}
-      disabled={scanning}
-      aria-label="Rescan transcripts"
-      title="Rescan transcripts"
-    >
-      <RefreshCw className={scanning ? "animate-spin" : ""} />
-      <span className="hidden sm:inline">{scanning ? "Scanning…" : "Refresh"}</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={refresh}
+          disabled={scanning}
+          aria-label="Rescan transcripts"
+        >
+          <RefreshCw className={scanning ? "animate-spin" : ""} />
+          <span className="hidden sm:inline">{scanning ? "Scanning…" : "Refresh"}</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={8}>
+        {scanning ? "Scanning local transcripts" : "Rescan local transcripts"}
+      </TooltipContent>
+    </Tooltip>
   );
 }

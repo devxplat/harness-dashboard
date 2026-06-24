@@ -10,6 +10,8 @@ pub enum CoreError {
     Sqlite(#[from] rusqlite::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("git error: {0}")]
+    Git(#[from] git2::Error),
     #[error("{0}")]
     Other(String),
 }

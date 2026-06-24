@@ -37,3 +37,10 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# local design references (not shipped)
+docs/ref/
+
+# Local agent/runtime scratch
+.codex/
+tmp/
