@@ -5,11 +5,7 @@
 // toast feedback and re-reads the list.
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useApi } from "@/hooks/use-api";
 import { apiPost } from "@/lib/api";
 import { formatDateShort } from "@/lib/format";
@@ -24,7 +20,10 @@ export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
   );
   const [pending, setPending] = useState<string | null>(null);
 
-  async function toggle(body: { repo_key?: string; owner?: string; enabled: boolean }, key: string) {
+  async function toggle(
+    body: { repo_key?: string; owner?: string; enabled: boolean },
+    key: string,
+  ) {
     setPending(key);
     const p = apiPost("/api/integrations/github/repos/toggle", body);
     toast.promise(p, {
@@ -51,7 +50,8 @@ export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
   if (totalRepos === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        No GitHub repos discovered yet — use Claude Code in a repo with a GitHub origin, then rescan.
+        No GitHub repos discovered yet — use a supported AI coding provider in a repo with a GitHub
+        origin, then rescan.
       </p>
     );
   }
@@ -93,7 +93,10 @@ export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
           <CollapsibleContent>
             <ul className="divide-y divide-border/50 border-t border-border/50">
               {org.repos.map((r) => (
-                <li key={r.repo_key} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                <li
+                  key={r.repo_key}
+                  className="flex items-center justify-between gap-2 px-3 py-1.5"
+                >
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate text-sm">{r.repo}</span>
                     {r.last_synced_at ? (
@@ -108,7 +111,9 @@ export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
                     aria-pressed={r.enabled}
                     aria-label={`${r.enabled ? "Disable" : "Enable"} ${r.owner}/${r.repo}`}
                     disabled={pending === r.repo_key}
-                    onClick={() => toggle({ repo_key: r.repo_key, enabled: !r.enabled }, r.repo_key)}
+                    onClick={() =>
+                      toggle({ repo_key: r.repo_key, enabled: !r.enabled }, r.repo_key)
+                    }
                   >
                     {r.enabled ? "On" : "Off"}
                   </Button>

@@ -8,7 +8,7 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "Harness Dashboard",
-  description: "Local-first Claude Code usage dashboard — DevX Platform",
+  description: "Local-first AI coding analytics dashboard - DevX Platform",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

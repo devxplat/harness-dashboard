@@ -1,4 +1,4 @@
-//! harness-core — Claude Code transcript scanning, cost analytics, and persistence.
+//! harness-core — local AI coding data scanning, cost analytics, metrics, and persistence.
 //!
 //! Pure and synchronous (no HTTP server, no async runtime) so the scanner, dedup
 //! logic, cost engine, and read queries can be exercised directly with `cargo test`.

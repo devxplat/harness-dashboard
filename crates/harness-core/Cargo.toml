@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Claude Code transcript scanning, cost analytics, and persistence for harness-dashboard."
+description = "Local AI coding data scanning, cost analytics, metrics, and persistence for harness-dashboard."
 
 [dependencies]
 serde.workspace = true
