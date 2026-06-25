@@ -3,17 +3,31 @@
 [![CI](https://github.com/devxplat/harness-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/devxplat/harness-dashboard/actions/workflows/ci.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](./LICENSE)
 
-**harness-dashboard** is a local-first analytics dashboard for AI coding work. It turns local
-agent transcripts, editor databases, git history, pull requests, incidents, and calendar context
-into usage, cost, productivity, DORA, DevEx, and team insights.
+**Unlock 100x AI coding leverage with local-first analytics for usage, costs, productivity, and
+engineering impact.**
 
-It is built for developers who want real operational visibility without sending their work history
-to another service. Your source files, transcripts, SQLite database, and derived metrics stay on
-your machine. The only runtime network calls are opt-in integrations you explicitly configure, such
-as GitHub and Google Calendar.
+**harness-dashboard** is a local command center for understanding and improving how you work with
+AI coding agents. It turns local agent transcripts, editor databases, git history, pull requests,
+incidents, and calendar context into actionable visibility: what you ask, what it costs, where AI
+accelerates delivery, and which habits unlock more leverage over time.
+
+It is built for developers and teams who want to become better AI-native engineers without sending
+their work history to another service. Your source files, transcripts, SQLite database, and derived
+metrics stay on your machine. The only runtime network calls are opt-in integrations you explicitly
+configure, such as GitHub and Google Calendar.
 
 > Status: active development, pre-1.0. The repo is already a working Rust + Next.js application,
 > but public packaging, docs, and provider coverage are still evolving.
+
+## Vision
+
+AI coding is no longer just a faster autocomplete. It is a new engineering system: prompts,
+context, agents, tools, reviews, meetings, pull requests, deployments, and feedback loops all shape
+the outcome. harness-dashboard exists to make that system observable.
+
+The goal is simple: help developers see their own AI patterns, improve them deliberately, and turn
+AI usage into compounding engineering leverage. Track usage and cost, connect it to productivity and
+delivery signals, then use those insights to build a better personal or team AI operating model.
 
 ## Feature Overview
 

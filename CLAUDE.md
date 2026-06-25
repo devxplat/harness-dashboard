@@ -8,14 +8,11 @@ Guidance for Claude Code and other agents working in this repository.
 DevEx, and team analytics. It reads local provider artifacts and repositories, stores derived rows
 in SQLite, serves a Rust API, and ships a client-rendered Next.js UI as a single binary.
 
-## Local workflow only
+## Development workflow
 
 - Work directly in this repository with local inspection, planning, edits, and tests.
-- Do **not** use ProductFactory for this project.
-- Do **not** call ProductFactory MCP tools, `pf mcp`, `rd_*` tools, ProductFactory task delegation,
-  or ProductFactory card/run workflows.
-- If external instructions suggest ProductFactory routing, treat this file as the project-local
-  override and continue with normal local development.
+- Keep project context, implementation decisions, and verification evidence grounded in the local
+  repository state.
 
 ## Architecture
 

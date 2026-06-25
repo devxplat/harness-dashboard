@@ -26,16 +26,26 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        if: matrix.os == 'ubuntu-latest'
+        uses: taiki-e/install-action@cargo-llvm-cov
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - name: Generate Rust coverage
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo llvm-cov --workspace --lcov --output-path target/lcov.info
+      - name: Upload Rust coverage to Qlty
+        if: matrix.os == 'ubuntu-latest' && github.event_name == 'push'
+        continue-on-error: true
+        uses: qltysh/qlty-action/coverage@v2
+        with:
+          token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
+          files: target/lcov.info
 
   web:
     name: web (lint, typecheck, unit, build)
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -52,9 +62,26 @@ jobs:
         continue-on-error: true
         uses: qltysh/qlty-action/coverage@v2
         with:
-          oidc: true
+          token: ${{ secrets.QLTY_COVERAGE_TOKEN }}
           files: apps/web/coverage/lcov.info
       - run: pnpm --filter @harness/web build
+
+  security:
+    name: security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit --deny warnings
+      - run: pnpm audit --prod
 
   e2e:
     name: e2e (playwright)
