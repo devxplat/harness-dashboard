@@ -39,7 +39,7 @@ import type {
   PullRequestRow,
 } from "@/lib/types";
 import type { TFunction } from "i18next";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 type Grain = "day" | "week" | "month";

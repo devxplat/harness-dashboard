@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { seedConfiguredFixture } from "./support";
+
+test.beforeEach(async ({ request }) => {
+  await seedConfiguredFixture(request);
+});
 
 test.describe("overview", () => {
   test("renders KPIs and the daily chart", async ({ page }) => {
@@ -28,14 +33,14 @@ test.describe("sessions", () => {
   test("lists fixture sessions, filters, and drills into detail", async ({ page }) => {
     await page.goto("/sessions/");
     const main = page.getByRole("main");
-    await expect(main.getByRole("link", { name: "myproj" })).toHaveCount(2);
+    await expect(main.getByRole("link", { name: "proj" })).toHaveCount(2);
 
-    const filter = page.getByPlaceholder("Filter by project or session id…");
+    const filter = main.getByRole("combobox", { name: "Sessions" });
     await filter.fill("nomatch-xyz");
     await expect(main.getByText("No sessions match.")).toBeVisible();
 
-    await filter.fill("myproj");
-    await main.getByRole("link", { name: "myproj" }).first().click();
+    await filter.fill("proj");
+    await main.getByRole("link", { name: "proj" }).first().click();
     await expect(page).toHaveURL(/\?id=/);
     await expect(page.getByRole("heading", { name: "Session" })).toBeVisible();
   });
@@ -97,7 +102,7 @@ test.describe("workspaces and tips", () => {
     await page.goto("/workspaces/");
     const main = page.getByRole("main");
     await expect(main.getByText("File-edit calls")).toBeVisible();
-    await expect(main.getByText("myproj")).toBeVisible();
+    await expect(main.getByText("proj")).toBeVisible();
   });
 
   test("tips renders (empty for the fixture)", async ({ page }) => {

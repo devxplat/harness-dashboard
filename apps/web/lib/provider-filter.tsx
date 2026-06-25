@@ -60,7 +60,13 @@ export function ProviderFilterProvider({ children }: { children: React.ReactNode
       const next = available.filter((id) => ids.includes(id));
       setSelectedState(next);
     };
-    const queryProviders = settingsLoaded && selected.length > 0 ? selected : ["__none"];
+    const queryProviders = settingsLoaded
+      ? selected.length > 0
+        ? selected
+        : initialized.current
+          ? ["__none"]
+          : available
+      : [];
     return {
       selected,
       available,

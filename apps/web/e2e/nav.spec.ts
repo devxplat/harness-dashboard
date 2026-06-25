@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { seedConfiguredFixture } from "./support";
+
+test.beforeEach(async ({ request }) => {
+  await seedConfiguredFixture(request);
+});
 
 const NAV: Array<[label: string, heading: string]> = [
   ["Overview", "Overview"],
