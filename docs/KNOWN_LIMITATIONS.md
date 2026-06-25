@@ -1,45 +1,57 @@
-# Known limitations — v0.1
+# Known Limitations
 
-harness-dashboard v0.1 is honest about its boundaries. These are the things it does not do, or does
-only approximately, in this version. None of them require network access to work around — the tool
-stays fully local and offline.
+harness-dashboard is intentionally local-first and transparent about the precision of its metrics.
+These limitations are current product boundaries, not hidden failure modes.
 
-## Claude Code only
+## Provider Fidelity Varies
 
-The sole data source in v0.1 is Claude Code's JSONL transcripts under `~/.claude/projects/`. Other
-agents or harnesses are out of scope. The architecture leaves room for additional sources later, but
-none are supported now. If Claude Code changes its transcript layout or its `message.usage` /
-`message.model` fields, scanning may need updating.
+Not every AI coding provider exposes the same data. Claude Code, Codex, and Gemini CLI can provide
+exact usage tokens from local JSONL-like records. Cursor and some opencode/Copilot sources rely on
+provider-reported values. Antigravity currently exposes useful activity/tool signals but may not
+expose tokens, prompts, or costs.
 
-## Skill attribution for subagent-dispatched skills
+The database records `usage_source` and `cost_source` so the UI can label unavailable, reported,
+and estimated values rather than pretending all providers are equivalent.
 
-Skill usage is split into "you ran" (manual slash commands, recognized from
-`<command-name>/slug</command-name>` in user-message content) and "Claude invoked" (the Skill tool).
-Token attribution for skills dispatched inside a subagent (a sidechain `Task`) may be incomplete:
-subagent spend is tracked and reported under Subagents, but per-skill token attribution for those
-dispatched invocations can be approximate.
+## Pricing Is Best Effort
 
-## RTK view depends on an external binary
+Costs are analytics estimates, not billing records. For sources with exact usage but no reported
+cost, harness-dashboard estimates API-equivalent cost from `pricing.json`. Unknown models may use
+tier fallbacks; models without a tier produce `null` cost and render as unavailable.
 
-The RTK view is feature-detected. It appears only when an external `rtk` binary is present on the
-system; the `/api/rtk` endpoint reports `available: false` (rather than erroring) when it is absent,
-and the UI hides the view. harness-dashboard does not bundle or install `rtk`.
+Provider-reported cost is used when present, but provider billing models and subscriptions can
+differ from API-equivalent rates.
 
-## Pricing is best-effort
+## Integrations Are Opt-In Network Sources
 
-Cost figures are computed from `pricing.json`, which reflects published rates and is user-editable.
-They are estimates, not billing records, and they only stay accurate if `pricing.json` is kept
-current. Billable tokens are input + output + cache-creation (5m + 1h); cache reads are priced
-separately at the cache-read rate. A selected subscription plan is surfaced alongside the
-API-equivalent cost for context.
+Normal local scanning does not need network access. GitHub and Google Calendar do make runtime
+network calls after the user configures them.
 
-## Cost is null for unknown-tier models
+GitHub sync is limited by token scopes, selected repositories, rate limits, backfill windows, and
+the fields available from the REST API. Google Calendar requires server-side OAuth credentials and
+only uses calendar event timing for productivity analysis.
 
-When a message's model is unknown, cost falls back to its tier rate and is flagged "estimated". When
-no tier matches at all, the cost is `null` and is shown as "—" rather than guessed. A message with a
-`null` model (for example an error or refusal) still has its tokens counted; only its cost is `null`.
+## DORA And Productivity Metrics Are Approximate
 
-## Single user, single machine
+DORA metrics combine local git, tags, GitHub PRs/releases/workflows, and incident issues when
+available. Some values are exact for a configured source; others are approximations from available
+local data. The UI labels exact vs approximate metrics.
 
-There is no multi-user support, no authentication, and no remote storage. The model assumes one user
-on one machine, with a single scanner writer and many readers — no concurrency beyond that.
+Focus, flow, warm-up, and meeting-overlap metrics are estimates from observable activity and
+calendar timing. They should be used for trend awareness, not individual performance scoring.
+
+## RTK Is External
+
+The RTK view is feature-detected. It appears only when an external `rtk` binary is available. The
+dashboard reports `available: false` rather than failing when RTK is absent, and it does not bundle
+or install RTK.
+
+## Single User, Single Machine
+
+There is no multi-user support, authentication layer, remote storage, or hosted sync. The intended
+deployment is one local user on one machine, with one scanner writer and many local read queries.
+
+## Source Layouts Can Change
+
+AI coding tools and editor storage formats are not stable public standards. If a provider changes
+its transcript, database, or telemetry layout, the corresponding adapter may need to be updated.

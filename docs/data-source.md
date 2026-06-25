@@ -1,78 +1,99 @@
-# Data source — Claude Code JSONL
+# Data Sources
 
-harness-dashboard's only data source in v0.1 is the JSONL transcripts Claude Code writes on the
-user's own machine. Nothing is fetched over the network; the files on disk are the source of truth,
-and everything in the SQLite database is derived from them and can be cleared and replayed.
+harness-dashboard builds a local derived analytics store from provider files, editor databases,
+local git repositories, and explicit integrations. The dashboard never requires a hosted backend.
+Most sources are purely local; GitHub and Google Calendar are opt-in network enrichments.
 
-## Where the files live
+## Source Model
 
-Claude Code writes one JSONL file per session:
+Every AI coding source is normalized into provider-tagged message rows and optional tool-call rows.
+Each row carries provenance:
 
-```
-~/.claude/projects/<project-slug>/<session-id>.jsonl
-```
+- `provider`: `claude`, `codex`, `gemini`, `cursor`, `antigravity`, `copilot`, or `opencode`.
+- `usage_source`: `exact`, `provider_reported`, or `unavailable`.
+- `cost_source`: `api_estimate`, `provider_reported`, or `unavailable`.
+- `source_path`, `source_key`, and `source_fingerprint` for mutable source adapters.
 
-The scanner discovers `*.jsonl` files recursively under the projects root, which defaults to
-`~/.claude/projects/` and can be overridden with `CLAUDE_PROJECTS_DIR`. The home directory and
-`~/.claude` are resolved through a portable API, so the same logic works on Windows, macOS, and
-Linux. Scanning is incremental: each file's mtime and byte offset are tracked, and only the bytes
-past the last fully-parsed line are read on a subsequent scan.
+This lets the UI distinguish exact token counts from provider-reported values and unavailable
+fields instead of presenting every source as equally precise.
 
-## The slug encoding caveat
+## AI Coding Providers
 
-The `<project-slug>` directory name is **not** a path the tool controls — it is an identifier Claude
-Code already wrote to disk by encoding the project's working-directory path, with drive letters,
-colons, and path separators replaced by hyphens. On Windows it therefore encodes drive colons and
-backslashes.
+| Provider       | Source key                | Default path                                   | Env override                  | Usage       | Cost        | Tools/prompts |
+| -------------- | ------------------------- | ---------------------------------------------- | ----------------------------- | ----------- | ----------- | ------------- |
+| Claude Code    | `claude-projects`         | `~/.claude/projects`                           | `CLAUDE_PROJECTS_DIR`         | exact       | estimated   | yes/yes       |
+| Codex          | `codex-sessions`          | `~/.codex/sessions`                            | `CODEX_SESSIONS_DIR`          | exact       | estimated   | yes/yes       |
+| Gemini CLI     | `gemini-chats`            | `~/.gemini/tmp`                                | `GEMINI_CHATS_DIR`            | exact       | estimated   | yes/yes       |
+| Cursor         | `cursor-state`            | Cursor user `globalStorage/state.vscdb`        | `CURSOR_STATE_DB`             | reported    | reported    | yes/yes       |
+| Antigravity    | `antigravity-transcripts` | `~/.gemini/antigravity/brain`                  | `ANTIGRAVITY_TRANSCRIPTS_DIR` | unavailable | unavailable | yes/no        |
+| GitHub Copilot | `copilot-chat-otel`       | auto-detected VS Code/Cursor `agent-traces.db` | `COPILOT_OTEL_DB`             | reported    | unavailable | yes/yes       |
+| GitHub Copilot | `copilot-cli`             | `~/.copilot`                                   | `COPILOT_HOME`                | reported    | unavailable | yes/yes       |
+| opencode       | `opencode-storage`        | `~/.local/share/opencode`                      | `OPENCODE_DATA_DIR`           | reported    | reported    | yes/yes       |
+| opencode       | `opencode-run-logs`       | unset                                          | `OPENCODE_RUN_LOGS_DIR`       | reported    | reported    | yes/yes       |
 
-The slug is treated as **opaque**. The scanner reproduces Claude Code's exact encoding and decoding
-rather than normalizing the string through path APIs, because normalization would corrupt the
-identifier and break the join back to the real working directory. Workspace classification of a file
-target is a longest-prefix match against the index of observed `(cwd, project_slug)` pairs, not a
-path-library operation.
+Settings can enable/disable providers and source entries, override paths, and trigger refreshes.
 
-## Source record fields
+## Incremental Scanning
 
-Each transcript line is a JSON object (one message record). The fields the scanner consumes, and the
-columns they map to:
+File-tree sources are scanned incrementally. The scanner tracks each file's mtime and byte offset,
+reads only complete new lines, and leaves partial trailing writes to be retried later. If a file is
+truncated or rotated, its high-water mark is reset.
 
-| Source path | Meaning | Maps to |
-| --- | --- | --- |
-| `uuid` | per-line id (NOT the dedup key) | `messages.uuid` (PK) |
-| `parentUuid` | previous message link | `messages.parent_uuid` |
-| `sessionId` | session id | `messages.session_id` |
-| `type` | `user` \| `assistant` \| … | `messages.type` |
-| `timestamp` | ISO 8601 | `messages.timestamp` |
-| `cwd`, `gitBranch`, `version`, `entrypoint` | context (optional) | `messages.cwd`, `git_branch`, `cc_version`, `entrypoint` |
-| `isSidechain`, `agentId` | subagent dispatch markers | `messages.is_sidechain`, `agent_id` |
-| `message.id` | **snapshot dedup key** (with `sessionId`) | `messages.message_id` |
-| `message.model` | model id (may be null) | `messages.model` |
-| `message.usage.input_tokens` | fresh input | `messages.input_tokens` |
-| `message.usage.output_tokens` | output | `messages.output_tokens` |
-| `message.usage.cache_read_input_tokens` | cache reads | `messages.cache_read_tokens` |
-| `message.usage.cache_creation.ephemeral_5m_input_tokens` | 5m cache writes | `messages.cache_create_5m_tokens` |
-| `message.usage.cache_creation.ephemeral_1h_input_tokens` | 1h cache writes | `messages.cache_create_1h_tokens` |
-| `message.content[]` | text / `tool_use` / `tool_result` blocks | parsed into `tool_calls` rows |
+Mutable or database-backed sources use source keys and fingerprints. When an item changes, old rows
+for that `(provider, source_path, source_key)` are replaced; when an item disappears, stale derived
+rows are pruned.
 
-`tool_use` blocks become `tool_calls` rows with a per-tool target (file path, command, url, query,
-pattern, subagent type, or skill), and `tool_result` content sizes the result tokens. The project
-slug (the encoded directory name) is recorded as `messages.project_slug`.
+After AI provider scans, local git scanning runs once so delivery metrics are not tied to any one
+AI provider being enabled.
 
-Slash commands appear inside user-message content as `<command-name>/slug</command-name>` and are
-synthesized into a `Skill` tool-call row, so manual slash-command use can be distinguished from
-assistant-initiated Skill tool calls.
+## Snapshot Dedup
 
-## The dedup invariant
+Some providers emit repeated snapshots for the same assistant response. For those streams, the
+dedup key is `(session_id, message_id)`, not the per-line UUID.
 
-Claude Code writes several JSONL lines per assistant response: each carries a distinct top-level
-`uuid` but the same `message.id`, and each repeats the **final** usage totals. The scanner therefore
-keys dedup on `(session_id, message_id)`, **not** the per-line `uuid`:
+The rules are:
 
-- keep exactly one row per `(session_id, message_id)` — the latest snapshot (the keeper);
-- never sum usage across siblings (the totals are already final on each snapshot);
-- when a sibling is superseded, re-point its `tool_calls` onto the keeper rather than dropping them,
-  because parallel tool calls are spread across snapshot siblings.
+- keep one message row per `(session_id, message_id)`;
+- do not sum repeated usage totals across snapshot siblings;
+- when superseding a sibling, preserve its tool calls by re-pointing them to the keeper.
 
-Getting this wrong silently inflates every token and cost number, so it is covered by a golden
-fixture test. The full schema and invariants are in
-`specs/001-harness-dashboard/data-model.md`.
+This invariant protects token and cost totals from silent inflation.
+
+## Local Git
+
+Local git scanning reads repositories discovered from observed workspaces. It collects commits,
+authors, co-authors, insertions/deletions, conventional-commit categories, GitHub remote metadata,
+and tags used as local deployment signals.
+
+This source is offline. It does not call GitHub; it reads the repositories on disk with vendored
+`libgit2`.
+
+## GitHub Integration
+
+GitHub is an explicit enrichment source configured in Settings. A token is validated against the
+GitHub API, encrypted at rest, and then used only for selected repositories.
+
+The sync imports:
+
+- pull requests and PR cycle-time data;
+- releases and Actions workflow runs as deployment signals;
+- incident issues when configured by label;
+- repo metadata, high-water marks, ETags, and rate-limit status.
+
+Sync progress is emitted over SSE so the UI can show live backfill state.
+
+## Google Calendar Integration
+
+Google Calendar is optional and requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` on the
+server. The dashboard starts an OAuth loopback flow, stores tokens encrypted at rest, and reads
+primary-calendar event timing.
+
+Calendar events feed meeting overlap, productive-hours heatmaps, focus estimates, and warm-up
+analysis. Event contents are not a general analytics source; the integration is scoped to event
+timing needed for productivity views.
+
+## Database As Derived State
+
+SQLite stores derived rows and settings. Provider files, editor databases, local repositories, and
+configured remote integration APIs remain the source of truth. It is acceptable for schema changes
+to clear and replay derived tables when that is safer than fragile in-place migration.

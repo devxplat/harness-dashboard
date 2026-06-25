@@ -1,109 +1,138 @@
 # Architecture
 
-harness-dashboard is a local-first tool: it reads the JSONL transcripts Claude Code writes on the
-user's own machine and turns them into usage, cost, and session analytics. There is no backend
-service, no account, and no network access for user data. This document describes how the parts fit
-together — the two-crate Rust backend, the web app, the request/scan/SSE flow, and how a release
-collapses everything into a single binary.
+harness-dashboard is a local-first analytics app for AI coding work. It reads local provider
+artifacts, editor databases, and git repositories; optionally enriches them with user-configured
+GitHub and Google Calendar data; stores derived rows in SQLite; and serves a client-rendered
+dashboard from a single Rust binary.
 
-## The two-crate backend
+The hard constraints are unchanged: user data is local by default, runtime network access is opt-in
+and visible, the frontend never reads the filesystem or database directly, and the release artifact
+is one executable serving UI, API, and SSE.
 
-The backend is a Cargo workspace with two crates and a hard separation of concerns.
+## Backend Crates
 
-**`crates/harness-core`** is a pure, synchronous library. It owns the entire behavioral surface:
+The backend is a Cargo workspace with two crates and a strict separation of concerns.
 
-- JSONL parsing of Claude Code transcript records;
-- the incremental scan and streaming-snapshot dedup;
-- the SQLite schema, an ordered migration runner, materialized summary tables, and all read
-  queries;
-- the pricing/cost engine;
-- path handling (project slug encoding, workspace classification);
-- the skills and tips logic.
+**`crates/harness-core`** is a pure Rust library. It owns the behavioral surface:
 
-It has no HTTP and no async runtime. That is deliberate: keeping the core pure and synchronous means
-the load-bearing logic — scanning, dedup, cost, attribution — is fully exercised by plain
-`cargo test` against fixtures, which is where correctness is defined (behavioral parity, proven by
-tests, not by copying source).
+- provider parsers and adapters for Claude Code, Codex, Gemini CLI, Cursor, Antigravity, GitHub
+  Copilot, and opencode;
+- incremental file/source scanning, high-water marks, fingerprints, and streaming-snapshot dedup;
+- SQLite schema, migrations, summary tables, read queries, and parameter-bound persistence;
+- pricing/cost estimation and provider-reported cost handling;
+- local git scanning, repository discovery, commit classification, deployments from tags, and
+  GitHub remote parsing;
+- DORA, AI-impact, allocation, incident, survey, skills, tips, and workspace computations;
+- at-rest encryption helpers for opt-in integration tokens.
 
-**`crates/harness-server`** is thin glue over the core and produces the `harness-dashboard` binary.
-It owns:
+It has no HTTP server and no frontend dependency. Keeping this logic in Rust means scanner,
+aggregation, cost, and metric behavior can be tested directly with `cargo test`.
 
-- the axum router and `AppState` (the connection pool, the scan handle, and an in-process,
-  query-keyed response cache);
-- the `/api/*` HTTP handlers that call into `harness-core`;
-- the `/api/stream` Server-Sent Events stream and the background scan loop;
-- the `clap` CLI (flags and environment overrides);
-- in release builds, the embedded static frontend and the static-asset handler.
+**`crates/harness-server`** is process and transport glue over the core:
 
-The boundary is a hard line: business logic lives in `harness-core`, transport and process concerns
-live in `harness-server`, and presentation lives in the web app. The web app never reads the
-filesystem or the database directly — only the documented `/api/*` surface.
+- axum router and local `/api/*` JSON surface;
+- `AppState`, pricing, scan coordination, SSE broadcast, and background loops;
+- CLI flags and environment override resolution;
+- filesystem watcher for fast local refresh after transcript changes;
+- GitHub REST sync orchestration and Google Calendar OAuth/Calendar orchestration;
+- release static-asset serving, with the web export embedded by `rust-embed`.
 
-## The web app
+The server crate is the only place allowed to perform opt-in runtime network calls.
 
-`apps/web` is a Next.js (App Router) dashboard, fully client-rendered. Every page is a client
-component that fetches `/api/*` on mount and live-refreshes from the SSE stream. It is configured
-with `output: 'export'`, so `next build` emits a static `apps/web/out/` tree with no Node server at
-runtime — which is what allows the Rust binary to embed and serve it.
+## Web App
 
-The views cover the full v0.1 surface: Overview, Prompts, Sessions (list and detail), Projects,
-Tools, Skills, Subagents, Workspaces, Tips, and Settings, plus a feature-detected RTK view. The UI
-uses shadcn/ui ("new-york") with the dashboard18 base block and shadcn default tokens; charts are
-drawn with recharts. Session detail is a static client page that reads a `?id=<uuid>` query
-parameter rather than a dynamic route segment, because a static export cannot enumerate session ids
-at build time.
+`apps/web` is a Next.js App Router application, fully client-rendered and exported statically with
+`output: 'export'`. It uses React, shadcn/ui, Tailwind v4, recharts, TanStack Table, i18next,
+Radix primitives, and lucide icons.
 
-## Request, scan, and SSE flow
+The dashboard is organized into four navigation groups:
 
+- **Usage:** Overview, Prompts, Sessions, Projects.
+- **Tools & agents:** Tools, Skills, Subagents, Workspaces.
+- **Performance:** Productivity, AI Impact, DORA, Allocation, DevEx, Team.
+- **More:** Tips and Settings, with RTK inserted when the external `rtk` binary is detected.
+
+Global shell controls handle date ranges, custom ranges, provider filters on provider-scoped
+screens, live/pause behavior, language, theme, and manual refresh. The web app fetches local
+`/api/*` endpoints and subscribes to `/api/stream`; it does not open local files or SQLite.
+
+## Data Flow
+
+```text
+Local provider files / editor DBs / git repos
+        |
+        v
+harness-core scanners and provider adapters
+        |
+        v
+SQLite derived store  <---- optional GitHub / Google syncs
+        |
+        v
+harness-server /api/* and /api/stream
+        |
+        v
+client-rendered Next.js dashboard
 ```
-Claude Code transcripts            harness-server                 web app
-(~/.claude/projects/*.jsonl)   ┌────────────────────────┐   (client-rendered)
-        │                      │  scan loop / /api/refresh │        │
-        │  read new bytes      │           │              │        │
-        ▼                      │           ▼              │        │
-   ┌──────────┐  parse+dedup   │   ┌──────────────┐       │  GET   │
-   │harness-  │───────────────▶│   │   SQLite     │◀──────┼────────┤ /api/*
-   │  core    │  write rows    │   │  (WAL, bundled)│ read │        │
-   └──────────┘                │   └──────────────┘       │        │
-        │                      │           │  scan event  │  SSE   │
-        └──────────────────────┼───────────┴─────────────▶┼───────▶│ /api/stream
-                               └────────────────────────┘        live refresh
-```
 
-1. **Scan.** A scan runs on startup, on a periodic background loop, and on demand via `/api/refresh`
-   (async) or `/api/scan` (blocking). `harness-core` discovers `*.jsonl` files, reads only the bytes
-   past each file's recorded high-water mark, parses records, deduplicates streaming snapshots, and
-   writes rows. Summary tables are then (re)materialized.
-2. **Store.** Rows land in a single SQLite database (WAL mode), with a reader pool and one guarded
-   writer for the scanner. The JSONL transcripts on disk remain the source of truth; every table is
-   derived and may be cleared and replayed.
-3. **Serve.** GET handlers run read queries and annotate cost, with responses cached in-process by
-   query string and the cache cleared on each scan. POST handlers update the pricing plan, settings,
-   dismissed tips, or trigger a refresh.
-4. **Live refresh.** `/api/stream` emits a `scan` event each time a scan completes (plus `scan-skip`,
-   `error`, and a periodic keep-alive ping). The web app holds an `EventSource` and re-fetches the
-   current view's data when a scan event arrives.
+1. **Discover.** Provider defaults and Settings determine which sources are enabled and which
+   paths are active. Local git repositories are discovered from observed workspaces.
+2. **Scan.** File-based providers track mtimes and byte offsets. Mutable source adapters use
+   source-item fingerprints and replacement/pruning. Local git reads repository history
+   incrementally.
+3. **Normalize.** Rows are normalized into provider-tagged messages, tool calls, commits, PRs,
+   deployments, incidents, calendar events, survey responses, and derived summaries.
+4. **Store.** SQLite is the local derived store. Original provider files and repositories remain
+   the source of truth and can be replayed.
+5. **Serve.** API handlers open read connections, compute cost and metrics, and return JSON with
+   `Cache-Control: no-store`.
+6. **Refresh.** Scan and integration events are broadcast over SSE; the web shell refetches the
+   current view when live updates are enabled.
 
-## Single-binary embedding
+## Provider Adapters
 
-In a release build the web app is exported to `apps/web/out/` and embedded into `harness-server`
-via `rust-embed` (with compression), behind a `release-embed` cargo feature. A `build.rs` guard
-fails the release build if `apps/web/out/index.html` is missing. At runtime the static-asset handler
-resolves an exact asset, falls back to `index.html` (so client routes resolve), and returns a JSON
-404 for unknown `/api/*` paths. The result is one self-contained executable: SQLite is bundled
-(compiled into the binary, no system library), the UI is embedded, and the API, UI, and SSE stream
-are all served from a single local port — no Node.js and no second process.
+Provider adapters map different local artifacts into a shared provider-aware message model.
 
-## Dev versus packaged
+| Provider       | Source style                    | Usage/cost fidelity                                               |
+| -------------- | ------------------------------- | ----------------------------------------------------------------- |
+| Claude Code    | JSONL projects tree             | Exact usage tokens, estimated API cost.                           |
+| Codex          | JSONL sessions tree             | Exact usage tokens, estimated API cost.                           |
+| Gemini CLI     | JSONL chats                     | Exact usage tokens, estimated API cost.                           |
+| Cursor         | SQLite state database           | Provider-reported usage/cost where present.                       |
+| Antigravity    | Transcript files                | Tool/activity visibility; usage/cost may be unavailable.          |
+| GitHub Copilot | Chat OTel DB and CLI state      | Provider-reported usage where available; cost may be unavailable. |
+| opencode       | Storage and optional JSONL logs | Provider-reported usage/cost where available.                     |
 
-The same code runs in two shapes:
+The shared model records provenance with `usage_source` and `cost_source`, so the UI can avoid
+pretending all providers have equal fidelity.
 
-- **Dev (two ports).** `harness-server --dev` serves the API on `:8080`; the Next.js dev server
-  serves the UI on `:3000` with hot reload. The web app reads `NEXT_PUBLIC_API_BASE` (set to the
-  server's origin in `apps/web/.env.local`) and the server attaches a permissive CORS layer for
-  `localhost:3000` — only under `--dev`. `rust-embed`'s debug mode reads `apps/web/out/` from disk,
-  so the frontend can change without recompiling Rust.
-- **Packaged (one port).** The web is built with `NEXT_PUBLIC_API_BASE` empty, so every call is
-  same-origin (`/api/*`) and no CORS layer is attached. The single binary serves UI, API, and SSE
-  together. CI asserts the exported `out/` contains no hardcoded dev host, so the dev value can never
-  leak into a shipped artifact.
+For streaming snapshot providers, deduplication is load-bearing. Usage totals are not summed across
+snapshot siblings. The keeper is keyed by `(session_id, message_id)`, and tool calls from superseded
+siblings are re-pointed onto the keeper.
+
+## Git, GitHub, And Calendar Enrichment
+
+Local git scanning is offline. It discovers repositories from workspaces, reads commits with
+vendored `libgit2`, classifies conventional commit types, parses co-authors, maps GitHub remotes,
+and treats tags as local deployment signals.
+
+GitHub is opt-in. A user-provided token is validated, encrypted at rest, and used to fetch selected
+repositories, pull requests, releases, workflow runs, and incident-labeled issues. Sync uses
+backfill windows, high-water marks, ETags, rate-limit awareness, and SSE progress updates.
+
+Google Calendar is opt-in. OAuth uses a loopback redirect and requires `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` on the server. Stored tokens are encrypted at rest. Calendar data is used
+for meeting overlap, focus, warm-up, and productivity analysis.
+
+## Single-Binary Distribution
+
+`pnpm build` exports the web app to `apps/web/out` and builds `harness-server` with the
+`release-embed` feature. The release binary embeds the static web assets, bundles SQLite, and
+serves UI, API, and SSE from one local port. Node.js, a separate web server, and a system SQLite
+installation are not required at runtime.
+
+In development, `pnpm dev` runs two processes:
+
+- Rust API on `127.0.0.1:8080`, with dev CORS enabled.
+- Next.js dev server on `127.0.0.1:3000`, with hot reload.
+
+`pnpm dev:lan` binds the API to `0.0.0.0` for LAN testing.

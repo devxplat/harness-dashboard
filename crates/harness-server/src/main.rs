@@ -1,4 +1,4 @@
-//! `harness-dashboard` — local-first Claude Code usage dashboard server.
+//! `harness-dashboard` — local-first AI coding analytics dashboard server.
 //!
 //! axum HTTP server over `harness-core`: the `/api/*` JSON surface, an SSE scan
 //! stream, a periodic background scan, and (in release) the embedded frontend.
@@ -44,7 +44,7 @@ pub struct AppState {
 #[command(
     name = "harness-dashboard",
     version,
-    about = "Local-first Claude Code usage dashboard"
+    about = "Local-first AI coding analytics dashboard"
 )]
 struct Cli {
     /// Port to bind (env PORT, default 8080).

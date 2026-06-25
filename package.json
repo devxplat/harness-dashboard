@@ -2,7 +2,7 @@
   "name": "harness-dashboard",
   "version": "0.1.0",
   "private": true,
-  "description": "Local-first dashboard for Claude Code token usage, costs, and session history. Rust backend, Next.js frontend, shipped as a single binary.",
+  "description": "Local-first dashboard for AI coding usage, costs, productivity, DORA, and DevEx analytics. Rust backend, Next.js frontend, shipped as a single binary.",
   "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@10.33.2",
   "engines": {
