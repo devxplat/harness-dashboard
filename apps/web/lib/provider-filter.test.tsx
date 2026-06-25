@@ -51,9 +51,9 @@ describe("ProviderFilterProvider", () => {
       </ProviderFilterProvider>,
     );
 
-    await waitFor(() => expect(screen.getByTestId("loaded")).toHaveTextContent("true"));
+    await waitFor(() => expect(screen.getByTestId("query")).toHaveTextContent("__none"));
+    expect(screen.getByTestId("loaded")).toHaveTextContent("true");
     expect(screen.getByTestId("has")).toHaveTextContent("false");
     expect(screen.getByTestId("available")).toHaveTextContent("");
-    expect(screen.getByTestId("query")).toHaveTextContent("__none");
   });
 });
