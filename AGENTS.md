@@ -9,11 +9,11 @@ DevEx, and team analytics. It reads local provider artifacts and repositories, s
 in SQLite, serves a Rust API, and ships a client-rendered Next.js UI as a single binary.
 
 ## Development workflow
-  
-  - Work directly in this repository with local inspection, planning, edits, and tests.
-  - Keep project context, implementation decisions, and verification evidence grounded in the local
-    repository state.
-  
+
+- Work directly in this repository with local inspection, planning, edits, and tests.
+- Keep project context, implementation decisions, and verification evidence grounded in the local
+  repository state.
+
 ## Architecture
 
 - Polyglot monorepo: Cargo workspace under `crates/`, pnpm/turbo workspace under `apps/`.
