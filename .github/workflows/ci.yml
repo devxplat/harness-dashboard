@@ -9,6 +9,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   rust:
     name: rust (${{ matrix.os }})
@@ -30,11 +33,12 @@ jobs:
   web:
     name: web (lint, typecheck, unit, build)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -43,6 +47,13 @@ jobs:
       - run: pnpm exec eslint .
       - run: pnpm --filter @harness/web typecheck
       - run: pnpm --filter @harness/web test:coverage
+      - name: Upload web coverage to Qlty
+        if: github.event_name == 'push'
+        continue-on-error: true
+        uses: qltysh/qlty-action/coverage@v2
+        with:
+          oidc: true
+          files: apps/web/coverage/lcov.info
       - run: pnpm --filter @harness/web build
 
   e2e:
@@ -53,8 +64,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 24

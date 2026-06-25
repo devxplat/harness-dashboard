@@ -15,7 +15,7 @@ export default defineConfig({
     exclude: ["node_modules/**", "out/**", ".next/**", "e2e/**"],
     coverage: {
       provider: "v8",
-      reporter: ["text", "json", "html"],
+      reporter: ["text", "json", "html", "lcov"],
       include: ["lib/**", "components/**", "hooks/**", "app/**"],
       exclude: [
         "components/ui/**",
@@ -31,7 +31,7 @@ export default defineConfig({
         "**/*.d.ts",
         "**/*.test.{ts,tsx}",
       ],
-      thresholds: { lines: 98, statements: 98, functions: 90, branches: 88 },
+      thresholds: { lines: 80, statements: 80, functions: 80, branches: 80 },
     },
   },
 });

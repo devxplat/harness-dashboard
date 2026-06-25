@@ -7,10 +7,12 @@ export default tseslint.config(
     ignores: [
       "**/node_modules/**",
       "**/.next/**",
+      "**/.codex/**",
       "**/out/**",
       "**/.turbo/**",
       "**/coverage/**",
       "**/target/**",
+      "**/tmp/**",
     ],
   },
   js.configs.recommended,
