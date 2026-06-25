@@ -57,7 +57,7 @@ fn band_for(key: &str, value: Option<f64>) -> (Option<DoraBand>, Option<String>)
                     Low
                 }
             }),
-            Some("Elite < 24h · High < 1wk · Medium < 1mo".into()),
+            Some("Elite < 24h Â· High < 1wk Â· Medium < 1mo".into()),
         ),
         // Deploy frequency, deploys/week.
         "deploy_frequency" => (
@@ -72,7 +72,7 @@ fn band_for(key: &str, value: Option<f64>) -> (Option<DoraBand>, Option<String>)
                     Low
                 }
             }),
-            Some("Elite ≥ 1/day · High ≥ 1/wk · Medium ≥ 1/mo".into()),
+            Some("Elite â‰¥ 1/day Â· High â‰¥ 1/wk Â· Medium â‰¥ 1/mo".into()),
         ),
         // Change failure rate, percent.
         "change_failure" => (
@@ -87,7 +87,7 @@ fn band_for(key: &str, value: Option<f64>) -> (Option<DoraBand>, Option<String>)
                     Low
                 }
             }),
-            Some("Elite ≤ 5% · High ≤ 15% · Medium ≤ 30%".into()),
+            Some("Elite â‰¤ 5% Â· High â‰¤ 15% Â· Medium â‰¤ 30%".into()),
         ),
         _ => (None, None),
     }
@@ -121,7 +121,7 @@ impl Db {
             |r| r.get(0),
         )?;
 
-        // Merged PRs in range → average lead time (created → merged) in hours.
+        // Merged PRs in range â†’ average lead time (created â†’ merged) in hours.
         let (merged_prs, avg_lead_hours): (i64, f64) = conn.query_row(
             "SELECT COUNT(*), COALESCE(AVG((julianday(merged_at_utc)-julianday(created_at_utc))*24.0),0) \
              FROM pull_requests WHERE merged_at_utc IS NOT NULL AND created_at_utc IS NOT NULL \
@@ -132,7 +132,7 @@ impl Db {
         drop(conn);
 
         // Incident-derived MTTR / change-failure (falls back to heuristics when no
-        // incident source is connected — `incident_dora` locks the conn itself).
+        // incident source is connected â€” `incident_dora` locks the conn itself).
         let inc = self.incident_dora(since, until)?;
         let weeks = (span_days / 7.0).max(1.0);
         let mut out = Vec::new();
@@ -284,6 +284,7 @@ mod tests {
             review_count: 0,
             first_review_at_utc: None,
             merge_commit_sha: None,
+            head_sha: None,
             html_url: None,
         }
     }
@@ -320,7 +321,7 @@ mod tests {
         // Non-benchmarkable keys.
         assert_eq!(band_for("throughput", Some(10.0)), (None, None));
         assert_eq!(band_for("mttr", None), (None, None));
-        // Benchmarkable but no value → band None, target still present.
+        // Benchmarkable but no value â†’ band None, target still present.
         let (band, target) = band_for("lead_time", None);
         assert!(band.is_none());
         assert!(target.is_some());
@@ -329,7 +330,7 @@ mod tests {
     #[test]
     fn dora_attaches_bands() {
         let db = Db::open_in_memory().unwrap();
-        // Merged ~2h after creation → Elite lead time.
+        // Merged ~2h after creation â†’ Elite lead time.
         db.insert_pull_requests(
             "repo-key",
             &[merged_pr(1, "2026-01-01T08:00:00Z", "2026-01-01T10:00:00Z")],

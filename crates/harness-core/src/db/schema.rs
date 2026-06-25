@@ -222,6 +222,7 @@ CREATE TABLE IF NOT EXISTS pull_requests (
     review_count        INTEGER NOT NULL DEFAULT 0,
     first_review_at_utc TEXT,
     merge_commit_sha    TEXT,
+    head_sha            TEXT,
     html_url            TEXT,
     ai_session_overlap  INTEGER NOT NULL DEFAULT 0, -- opened/merged during a Claude session
     PRIMARY KEY (repo_key, number)
@@ -230,6 +231,55 @@ CREATE INDEX IF NOT EXISTS idx_pr_created ON pull_requests(created_at_utc);
 CREATE INDEX IF NOT EXISTS idx_pr_merged  ON pull_requests(merged_at_utc);
 CREATE INDEX IF NOT EXISTS idx_pr_repo_created ON pull_requests(repo_key, created_at_utc);
 CREATE INDEX IF NOT EXISTS idx_pr_repo_merged  ON pull_requests(repo_key, merged_at_utc);
+
+CREATE TABLE IF NOT EXISTS pull_request_events (
+    repo_key       TEXT NOT NULL,
+    pr_number      INTEGER NOT NULL,
+    event_type     TEXT NOT NULL, -- created | review | comment | check | merged | closed
+    ext_id         TEXT NOT NULL,
+    title          TEXT,
+    actor          TEXT,
+    body           TEXT,
+    state          TEXT,
+    conclusion     TEXT,
+    created_at_utc TEXT,
+    html_url       TEXT,
+    PRIMARY KEY (repo_key, pr_number, event_type, ext_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pr_events_pr_created ON pull_request_events(repo_key, pr_number, created_at_utc);
+
+CREATE TABLE IF NOT EXISTS pull_request_files (
+    repo_key       TEXT NOT NULL,
+    pr_number      INTEGER NOT NULL,
+    path           TEXT NOT NULL,
+    status         TEXT,
+    additions      INTEGER NOT NULL DEFAULT 0,
+    deletions      INTEGER NOT NULL DEFAULT 0,
+    changes        INTEGER NOT NULL DEFAULT 0,
+    previous_path  TEXT,
+    blob_url       TEXT,
+    PRIMARY KEY (repo_key, pr_number, path)
+);
+CREATE INDEX IF NOT EXISTS idx_pr_files_pr ON pull_request_files(repo_key, pr_number);
+
+CREATE TABLE IF NOT EXISTS pull_request_ai_indexes (
+    repo_key             TEXT NOT NULL,
+    pr_number            INTEGER NOT NULL,
+    index_type           TEXT NOT NULL, -- business_value | ai_maturity
+    score                INTEGER NOT NULL,
+    grade                TEXT,
+    category             TEXT,
+    category_scores_json TEXT NOT NULL DEFAULT '{}',
+    summary              TEXT,
+    evidence_json        TEXT NOT NULL DEFAULT '[]',
+    recommendations_json TEXT NOT NULL DEFAULT '[]',
+    confidence           REAL,
+    engine               TEXT,
+    input_hash           TEXT,
+    generated_at_utc     TEXT,
+    PRIMARY KEY (repo_key, pr_number, index_type)
+);
+CREATE INDEX IF NOT EXISTS idx_pr_ai_indexes_type_score ON pull_request_ai_indexes(index_type, score);
 
 -- A "deployment" abstraction over git tags (local), GitHub releases, and GitHub
 -- Actions workflow runs — whatever sources are configured. `kind` disambiguates.
@@ -357,6 +407,29 @@ pub const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_cal_end ON calendar_events(end_utc)",
     "CREATE INDEX IF NOT EXISTS idx_pr_repo_created ON pull_requests(repo_key, created_at_utc)",
     "CREATE INDEX IF NOT EXISTS idx_pr_repo_merged ON pull_requests(repo_key, merged_at_utc)",
+    "ALTER TABLE pull_requests ADD COLUMN head_sha TEXT",
+    "CREATE TABLE IF NOT EXISTS pull_request_events (
+        repo_key TEXT NOT NULL, pr_number INTEGER NOT NULL, event_type TEXT NOT NULL, ext_id TEXT NOT NULL,
+        title TEXT, actor TEXT, body TEXT, state TEXT, conclusion TEXT, created_at_utc TEXT, html_url TEXT,
+        PRIMARY KEY (repo_key, pr_number, event_type, ext_id)
+    )",
+    "CREATE INDEX IF NOT EXISTS idx_pr_events_pr_created ON pull_request_events(repo_key, pr_number, created_at_utc)",
+    "CREATE TABLE IF NOT EXISTS pull_request_files (
+        repo_key TEXT NOT NULL, pr_number INTEGER NOT NULL, path TEXT NOT NULL, status TEXT,
+        additions INTEGER NOT NULL DEFAULT 0, deletions INTEGER NOT NULL DEFAULT 0,
+        changes INTEGER NOT NULL DEFAULT 0, previous_path TEXT, blob_url TEXT,
+        PRIMARY KEY (repo_key, pr_number, path)
+    )",
+    "CREATE INDEX IF NOT EXISTS idx_pr_files_pr ON pull_request_files(repo_key, pr_number)",
+    "CREATE TABLE IF NOT EXISTS pull_request_ai_indexes (
+        repo_key TEXT NOT NULL, pr_number INTEGER NOT NULL, index_type TEXT NOT NULL,
+        score INTEGER NOT NULL, grade TEXT, category TEXT,
+        category_scores_json TEXT NOT NULL DEFAULT '{}', summary TEXT,
+        evidence_json TEXT NOT NULL DEFAULT '[]', recommendations_json TEXT NOT NULL DEFAULT '[]',
+        confidence REAL, engine TEXT, input_hash TEXT, generated_at_utc TEXT,
+        PRIMARY KEY (repo_key, pr_number, index_type)
+    )",
+    "CREATE INDEX IF NOT EXISTS idx_pr_ai_indexes_type_score ON pull_request_ai_indexes(index_type, score)",
     "CREATE INDEX IF NOT EXISTS idx_deploy_repo_created ON deployments(repo_key, created_at_utc)",
     "ALTER TABLE git_repos ADD COLUMN remote_url TEXT",
     "ALTER TABLE git_repos ADD COLUMN gh_owner TEXT",

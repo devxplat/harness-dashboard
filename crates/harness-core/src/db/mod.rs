@@ -10,6 +10,7 @@ mod dora;
 mod git;
 mod incidents;
 mod insights;
+mod pr_dashboard;
 mod queries;
 mod schema;
 mod survey;
@@ -24,7 +25,7 @@ pub use calendar::{MeetingDay, MeetingImpact};
 pub use dora::{DoraBand, DoraMetric};
 pub use git::{
     AiSplitGroup, AiSplitRow, CommitDailyRow, CommitRowDto, DeploymentDto, GithubRepo,
-    GithubRepoMeta, ProductiveHourRow, PullRequestDto, SyncState,
+    GithubRepoMeta, ProductiveHourRow, PullRequestDto, PullRequestEventDto, SyncState,
 };
 pub use incidents::{IncidentDoraStats, IncidentDto};
 pub use insights::{
@@ -32,6 +33,10 @@ pub use insights::{
     DoraRepoRow, DoraTrendRow, FocusBlockRow, Grain, LeadTimeBucketRow, PrChurnSummary,
     PrCorrelationRow, PrCycleTimeRow, PrSizeBucketRow, ProductivityInsightsBundle,
     ProductivityPeriodRow, ProductivitySummary, WarmupBucketRow,
+};
+pub use pr_dashboard::{
+    PrAiIndex, PrAnalyticsTile, PrAuthorOption, PrDashboardBundle, PrDashboardRow, PrFileRef,
+    PrGrain, PrInsight, PrInsightRule, PrPeriodRow, PrRef, PrSummary,
 };
 pub use queries::{
     AgentGroupRow, DailyRow, MessageDetail, ModelRow, OverviewUsageBundle, ProjectRow, PromptRow,

@@ -22,6 +22,7 @@ describe("AppSidebar", () => {
     installFetch({ "/api/rtk": { available: true } });
     wrap(<AppSidebar />);
     expect(screen.getByRole("link", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pull Requests" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("link", { name: "RTK" })).toBeInTheDocument());
   });

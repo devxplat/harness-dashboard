@@ -16,6 +16,7 @@
     "workspaces": "Workspaces",
     "productivity": "Productivity",
     "aiImpact": "AI Impact",
+    "pullRequests": "Pull Requests",
     "dora": "DORA",
     "allocation": "Allocation",
     "devex": "DevEx",
@@ -136,7 +137,9 @@
       "noSessions": "No sessions yet.",
       "noMatch": "No sessions match."
     },
-    "sessionDetail": { "title": "Session" },
+    "sessionDetail": {
+      "title": "Session"
+    },
     "projects": {
       "title": "Projects",
       "description": "Token usage grouped by project.",
@@ -242,6 +245,10 @@
       "status": "Status",
       "noSyncedDeployments": "No synced deployments in range.",
       "focusNote": "Focus, flow, meeting impact, and warm-up are estimated from local timestamps. DORA and PR metrics use source-backed fields when available."
+    },
+    "pullRequests": {
+      "title": "Pull Requests",
+      "description": "Review queue health, deterministic rules, and opt-in AI insights for synced pull requests."
     },
     "aiImpact": {
       "title": "AI Impact",
@@ -384,7 +391,10 @@
       "installed": "RTK detected — detailed savings views arrive in a follow-up.",
       "notInstalled": "RTK is not installed on this machine, so there are no savings to show."
     },
-    "settings": { "title": "Settings", "description": "Integrations, AI sources, plan and scan locations." }
+    "settings": {
+      "title": "Settings",
+      "description": "Integrations, AI sources, plan and scan locations."
+    }
   },
   "settings": {
     "nav": {

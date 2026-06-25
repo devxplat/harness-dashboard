@@ -16,6 +16,7 @@
     "workspaces": "ワークスペース",
     "productivity": "生産性",
     "aiImpact": "AIの効果",
+    "pullRequests": "Pull Requests",
     "dora": "DORA",
     "allocation": "配分",
     "devex": "DevEx",
@@ -136,7 +137,9 @@
       "noSessions": "セッションはまだありません。",
       "noMatch": "一致するセッションがありません。"
     },
-    "sessionDetail": { "title": "セッション" },
+    "sessionDetail": {
+      "title": "セッション"
+    },
     "projects": {
       "title": "プロジェクト",
       "description": "プロジェクト別のトークン使用状況。",
@@ -242,6 +245,10 @@
       "status": "ステータス",
       "noSyncedDeployments": "この範囲に同期済みのデプロイがありません。",
       "focusNote": "フォーカス、フロー、会議の影響、ウォームアップはローカルのタイムスタンプから推定されます。DORAとPRの指標は、利用可能な場合はソースに基づいたフィールドを使用します。"
+    },
+    "pullRequests": {
+      "title": "Pull Requests",
+      "description": "Review queue health, deterministic rules, and opt-in AI insights for synced pull requests."
     },
     "aiImpact": {
       "title": "AIの効果",
@@ -384,7 +391,10 @@
       "installed": "RTKが検出されました。詳細な削減量ビューはフォローアップで提供されます。",
       "notInstalled": "このマシンにRTKがインストールされていないため、削減量データがありません。"
     },
-    "settings": { "title": "設定", "description": "連携、AIソース、プラン、スキャン対象の場所。" }
+    "settings": {
+      "title": "設定",
+      "description": "連携、AIソース、プラン、スキャン対象の場所。"
+    }
   },
   "settings": {
     "nav": {

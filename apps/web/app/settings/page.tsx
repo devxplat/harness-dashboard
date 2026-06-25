@@ -8,6 +8,7 @@ import { IngestStatusPanel } from "@/components/ingest/ingest-status-panel";
 import { IntegrationsSettings } from "@/components/integrations-settings";
 import { IntegrationCard } from "@/components/settings/integration-card";
 import { ErrorBlock, LoadingBlock, PageTitle } from "@/components/states";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,13 +25,26 @@ import { LOCALES } from "@/lib/i18n/config";
 import { providerMeta } from "@/lib/providers";
 import { RANGES } from "@/lib/range";
 import type {
+  PrAiEngine,
+  PrInsightRule,
   ProviderCapabilitySet,
   ProviderConfig,
   ProviderSourceConfig,
   SettingsInfo,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Boxes, Plug, Rocket, SlidersHorizontal, User } from "lucide-react";
+import {
+  Boxes,
+  Copy,
+  GitPullRequest,
+  Plug,
+  Plus,
+  Rocket,
+  SlidersHorizontal,
+  Sparkles,
+  Trash2,
+  User,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -39,7 +53,14 @@ import { toast } from "sonner";
 
 const PLANS = ["api", "pro", "max", "max-20x", "team", "team-premium"];
 
-type SectionId = "profile" | "integrations" | "sources" | "general" | "onboarding";
+type SectionId =
+  | "profile"
+  | "integrations"
+  | "sources"
+  | "rules"
+  | "ai_features"
+  | "general"
+  | "onboarding";
 
 function FieldRow({
   label,
@@ -59,26 +80,38 @@ function FieldRow({
   );
 }
 
-function ProfileSettings() {
+function ProfileSettings({ data, onSaved }: { data: SettingsInfo; onSaved: () => void }) {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [defaultRange, setDefaultRange] = useState("30d");
+  const [githubLogin, setGithubLogin] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     setDisplayName(localStorage.getItem("harness.displayName") ?? "");
+    setGithubLogin(data.github_login ?? "");
     const saved = localStorage.getItem("harness.defaultRange");
     if (saved && ["7d", "30d", "90d", "all"].includes(saved)) setDefaultRange(saved);
-  }, []);
+  }, [data.github_login]);
 
-  function save() {
+  async function save() {
+    setSaving(true);
     localStorage.setItem("harness.displayName", displayName);
     localStorage.setItem("harness.defaultRange", defaultRange);
-    // Notify app-shell to re-read the display name on next paint.
-    window.dispatchEvent(new Event("harness.profile-saved"));
-    toast.success(t("settings.profile.saved"));
+    try {
+      await apiPost("/api/settings", { github_login: githubLogin.trim() });
+      // Notify app-shell to re-read the display name on next paint.
+      window.dispatchEvent(new Event("harness.profile-saved"));
+      onSaved();
+      toast.success(t("settings.profile.saved"));
+    } catch {
+      toast.error("Could not save GitHub default user");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const currentLang = i18n.resolvedLanguage ?? i18n.language;
@@ -89,7 +122,10 @@ function ProfileSettings() {
         <CardTitle>{t("settings.nav.profile")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <FieldRow label={t("settings.profile.displayName")} hint={t("settings.profile.displayNameHint")}>
+        <FieldRow
+          label={t("settings.profile.displayName")}
+          hint={t("settings.profile.displayNameHint")}
+        >
           <Input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
@@ -128,7 +164,10 @@ function ProfileSettings() {
           </FieldRow>
         )}
 
-        <FieldRow label={t("settings.profile.defaultRange")} hint={t("settings.profile.defaultRangeHint")}>
+        <FieldRow
+          label={t("settings.profile.defaultRange")}
+          hint={t("settings.profile.defaultRangeHint")}
+        >
           <Select value={defaultRange} onValueChange={setDefaultRange}>
             <SelectTrigger className="w-48" aria-label={t("settings.profile.defaultRange")}>
               <SelectValue />
@@ -143,8 +182,23 @@ function ProfileSettings() {
           </Select>
         </FieldRow>
 
+        <FieldRow
+          label="Default GitHub user"
+          hint="Pull Requests opens on this author by default. Leave blank to start with all contributors."
+        >
+          <Input
+            aria-label="Default GitHub user"
+            value={githubLogin}
+            onChange={(e) => setGithubLogin(e.target.value)}
+            placeholder="github-login"
+            className="max-w-xs"
+          />
+        </FieldRow>
+
         <div className="pt-2">
-          <Button onClick={save}>{t("settings.profile.save")}</Button>
+          <Button onClick={save} disabled={saving}>
+            {t("settings.profile.save")}
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -268,18 +322,28 @@ function ProviderSettingsCard({
       statusText={statusText}
     >
       <div className="space-y-3">
-        <CapabilityBadges label={t("settings.provider.supports")} capabilities={provider.supported ?? provider.capabilities} />
-        <CapabilityBadges label={t("settings.provider.observed")} capabilities={provider.observed ?? provider.capabilities} />
+        <CapabilityBadges
+          label={t("settings.provider.supports")}
+          capabilities={provider.supported ?? provider.capabilities}
+        />
+        <CapabilityBadges
+          label={t("settings.provider.observed")}
+          capabilities={provider.observed ?? provider.capabilities}
+        />
         {sources.length > 0 && (
           <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-            <div className="text-xs font-medium text-muted-foreground">{t("settings.provider.sources")}</div>
+            <div className="text-xs font-medium text-muted-foreground">
+              {t("settings.provider.sources")}
+            </div>
             {sources.map((source) => (
               <div key={source.key} className="space-y-2 rounded-md border bg-background p-2">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-medium">{source.label}</div>
                     <div className="text-[11px] text-muted-foreground">
-                      {source.discovered ? t("settings.provider.discovered") : t("settings.provider.notDiscovered")}
+                      {source.discovered
+                        ? t("settings.provider.discovered")
+                        : t("settings.provider.notDiscovered")}
                       {source.env_var ? ` - ${source.env_var}` : ""}
                     </div>
                   </div>
@@ -305,7 +369,8 @@ function ProviderSettingsCard({
                   aria-label={`${source.label} path`}
                 />
                 <p className="break-all text-[11px] text-muted-foreground">
-                  {t("settings.provider.active")} {source.active_path ?? t("settings.provider.notConfigured")}
+                  {t("settings.provider.active")}{" "}
+                  {source.active_path ?? t("settings.provider.notConfigured")}
                 </p>
                 {!source.discovered && source.setup_hint ? (
                   <p className="text-[11px] text-muted-foreground">{source.setup_hint}</p>
@@ -394,14 +459,540 @@ function OnboardingSettings() {
         <CardTitle>{t("settings.onboarding.title")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          {t("settings.onboarding.description")}
-        </p>
+        <p className="text-sm text-muted-foreground">{t("settings.onboarding.description")}</p>
         <Button asChild>
           <Link href="/onboarding">{t("settings.onboarding.openWizard")}</Link>
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+const RULE_METRICS = [
+  "open_age_hours",
+  "open_no_review_age_hours",
+  "awaiting_merge_age_hours",
+  "churn",
+  "additions",
+  "deletions",
+  "changed_files",
+  "churn_per_file",
+  "additions_per_file",
+  "single_file_churn",
+  "deletion_ratio_pct",
+  "additions_without_cleanup",
+  "reviews_per_kloc",
+  "large_pr_low_reviews",
+  "merge_without_review",
+  "review_wait_large_churn",
+  "review_wait_hours",
+  "cycle_hours",
+  "title_length",
+  "title_too_short",
+  "missing_conventional_prefix",
+  "missing_ticket",
+  "branch_length",
+  "branch_missing_ticket",
+  "generic_branch_name",
+  "non_standard_base",
+  "head_equals_base",
+  "no_ai_large_churn",
+  "awaiting_review_count",
+  "awaiting_merge_count",
+  "open_count",
+  "high_review_time_count",
+  "ai_share_pct",
+  "avg_cycle_hours",
+  "avg_review_wait_hours",
+  "avg_churn",
+];
+
+function normalizePrAiEngineId(value: string | null | undefined): string {
+  switch ((value ?? "").trim().toLowerCase()) {
+    case "codex":
+    case "codex-cli":
+    case "codex_cli":
+      return "codex_cli";
+    case "claude":
+    case "claude-cli":
+    case "claude_cli":
+      return "claude_cli";
+    case "gemini":
+    case "gemini-cli":
+    case "gemini_cli":
+      return "gemini_cli";
+    default:
+      return value ?? "";
+  }
+}
+
+const RULE_CATEGORIES = [
+  "flow",
+  "review",
+  "size",
+  "risk",
+  "ai",
+  "dry",
+  "kiss",
+  "solid",
+  "yagni",
+  "naming",
+  "traceability",
+];
+
+function newRule(): PrInsightRule {
+  return {
+    id: "",
+    title: "",
+    description: null,
+    enabled: true,
+    severity: "warning",
+    category: "flow",
+    scope: "pr",
+    metric: "churn",
+    operator: "gte",
+    threshold: 500,
+    recommendation: "",
+    custom: true,
+  };
+}
+
+function DeterministicRulesSettings() {
+  const { data, error, loading, refetch } = useApi<PrInsightRule[]>(
+    "/api/pull-requests/insight-rules",
+  );
+  const [draft, setDraft] = useState<PrInsightRule>(newRule);
+  const [saving, setSaving] = useState(false);
+  const rules = Array.isArray(data) ? data : [];
+  const customCount = rules.filter((rule) => rule.custom).length;
+
+  function patchDraft(patch: Partial<PrInsightRule>) {
+    setDraft((current) => ({ ...current, ...patch }));
+  }
+
+  async function upsert(rule: PrInsightRule) {
+    const id = rule.id.trim();
+    if (!id) {
+      toast.error("Rule id is required");
+      return;
+    }
+    if (!rule.title.trim() || !rule.recommendation.trim()) {
+      toast.error("Title and recommendation are required");
+      return;
+    }
+    setSaving(true);
+    try {
+      const next = [
+        ...rules.filter((item) => item.custom && item.id !== id),
+        {
+          ...rule,
+          id,
+          title: rule.title.trim(),
+          category: rule.category.trim() || "flow",
+          recommendation: rule.recommendation.trim(),
+          custom: true,
+        },
+      ];
+      await apiPost<PrInsightRule[]>("/api/pull-requests/insight-rules", { rules: next });
+      await refetch();
+      setDraft(newRule());
+      toast.success("Deterministic rule saved");
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(rule: PrInsightRule) {
+    setSaving(true);
+    try {
+      await apiPost<PrInsightRule[]>("/api/pull-requests/insight-rules", {
+        rules: rules.filter((item) => item.custom && item.id !== rule.id),
+      });
+      await refetch();
+      if (draft.id === rule.id) setDraft(newRule());
+      toast.success(rule.custom ? "Rule removed" : "Rule override removed");
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (error) return <ErrorBlock error={error} />;
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[1fr_420px]">
+      <Card>
+        <CardHeader>
+          <CardTitle>Deterministic PR Rules</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+            <span>{rules.length} total rules</span>
+            <span>{customCount} custom overrides</span>
+          </div>
+          {loading ? (
+            <LoadingBlock />
+          ) : (
+            <div className="space-y-2">
+              {rules.map((rule) => (
+                <div key={rule.id} className="rounded-lg border p-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{rule.title}</span>
+                        <Badge variant={rule.custom ? "default" : "outline"}>
+                          {rule.custom ? "custom" : "built-in"}
+                        </Badge>
+                        <Badge variant="outline">{rule.category}</Badge>
+                        <Badge variant="outline">{rule.severity}</Badge>
+                      </div>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {rule.id}: {rule.scope}.{rule.metric} {rule.operator} {rule.threshold}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{rule.recommendation}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => upsert({ ...rule, enabled: !rule.enabled, custom: true })}
+                        disabled={saving}
+                      >
+                        {rule.enabled ? "Disable" : "Enable"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setDraft({ ...rule, custom: true })}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        aria-label={`Clone ${rule.id}`}
+                        onClick={() =>
+                          setDraft({
+                            ...rule,
+                            id: `${rule.id}-custom`,
+                            title: `${rule.title} copy`,
+                            custom: true,
+                          })
+                        }
+                      >
+                        <Copy className="size-4" />
+                      </Button>
+                      {rule.custom ? (
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          aria-label={`Delete ${rule.id}`}
+                          onClick={() => remove(rule)}
+                          disabled={saving}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{draft.id ? "Edit rule" : "Create rule"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <FieldRow
+            label="Rule id"
+            hint="Lowercase letters, digits and hyphens. Use an existing built-in id to override it."
+          >
+            <Input
+              aria-label="Rule id"
+              value={draft.id}
+              onChange={(e) => patchDraft({ id: e.target.value })}
+              placeholder="large-pr-custom"
+            />
+          </FieldRow>
+          <FieldRow label="Title">
+            <Input
+              aria-label="Rule title"
+              value={draft.title}
+              onChange={(e) => patchDraft({ title: e.target.value })}
+              placeholder="Large PR risk"
+            />
+          </FieldRow>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldRow label="Category">
+              <Select
+                value={draft.category}
+                onValueChange={(value) => patchDraft({ category: value })}
+              >
+                <SelectTrigger aria-label="Rule category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RULE_CATEGORIES.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldRow>
+            <FieldRow label="Severity">
+              <Select
+                value={draft.severity}
+                onValueChange={(value) => patchDraft({ severity: value })}
+              >
+                <SelectTrigger aria-label="Rule severity">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="info">info</SelectItem>
+                  <SelectItem value="warning">warning</SelectItem>
+                  <SelectItem value="critical">critical</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldRow>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldRow label="Scope">
+              <Select value={draft.scope} onValueChange={(value) => patchDraft({ scope: value })}>
+                <SelectTrigger aria-label="Rule scope">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pr">pr</SelectItem>
+                  <SelectItem value="aggregate">aggregate</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldRow>
+            <FieldRow label="Metric">
+              <Select value={draft.metric} onValueChange={(value) => patchDraft({ metric: value })}>
+                <SelectTrigger aria-label="Rule metric">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RULE_METRICS.map((metric) => (
+                    <SelectItem key={metric} value={metric}>
+                      {metric}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldRow>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <FieldRow label="Operator">
+              <Select
+                value={draft.operator}
+                onValueChange={(value) => patchDraft({ operator: value })}
+              >
+                <SelectTrigger aria-label="Rule operator">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gt">gt</SelectItem>
+                  <SelectItem value="gte">gte</SelectItem>
+                  <SelectItem value="lt">lt</SelectItem>
+                  <SelectItem value="lte">lte</SelectItem>
+                  <SelectItem value="eq">eq</SelectItem>
+                </SelectContent>
+              </Select>
+            </FieldRow>
+            <FieldRow label="Threshold">
+              <Input
+                aria-label="Rule threshold"
+                type="number"
+                value={draft.threshold}
+                onChange={(e) => patchDraft({ threshold: Number(e.target.value) })}
+              />
+            </FieldRow>
+            <label className="flex items-end gap-2 pb-2 text-sm">
+              <input
+                type="checkbox"
+                checked={draft.enabled}
+                onChange={(e) => patchDraft({ enabled: e.target.checked })}
+                className="size-4 accent-primary"
+              />
+              Enabled
+            </label>
+          </div>
+          <FieldRow label="Description">
+            <textarea
+              aria-label="Rule description"
+              value={draft.description ?? ""}
+              onChange={(e) => patchDraft({ description: e.target.value || null })}
+              className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            />
+          </FieldRow>
+          <FieldRow label="Recommendation">
+            <textarea
+              aria-label="Rule recommendation"
+              value={draft.recommendation}
+              onChange={(e) => patchDraft({ recommendation: e.target.value })}
+              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            />
+          </FieldRow>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => upsert(draft)} disabled={saving}>
+              <Plus className="size-4" />
+              Save rule
+            </Button>
+            <Button variant="outline" onClick={() => setDraft(newRule())}>
+              Clear
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AiFeaturesSettings({ data, onSaved }: { data: SettingsInfo; onSaved: () => void }) {
+  const engines = useApi<PrAiEngine[]>("/api/pull-requests/ai-engines");
+  const [engine, setEngine] = useState("");
+  const [mode, setMode] = useState("per_pr");
+  const [businessPrompt, setBusinessPrompt] = useState("");
+  const [maturityPrompt, setMaturityPrompt] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const normalized = normalizePrAiEngineId(data.pr_ai_default_engine);
+    const options = Array.isArray(engines.data) ? engines.data : [];
+    setEngine(
+      options.some((item) => item.id === normalized)
+        ? normalized
+        : (data.pr_ai_default_engine ?? ""),
+    );
+    setMode(data.pr_ai_default_generation_mode ?? "per_pr");
+    setBusinessPrompt(data.pr_business_value_prompt ?? "");
+    setMaturityPrompt(data.pr_ai_maturity_prompt ?? "");
+  }, [
+    data.pr_ai_default_engine,
+    data.pr_ai_default_generation_mode,
+    data.pr_business_value_prompt,
+    data.pr_ai_maturity_prompt,
+    engines.data,
+  ]);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await apiPost("/api/settings", {
+        pr_ai_default_engine: engine,
+        pr_ai_default_generation_mode: mode,
+        pr_business_value_prompt: businessPrompt,
+        pr_ai_maturity_prompt: maturityPrompt,
+      });
+      onSaved();
+      toast.success("AI feature settings saved");
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const engineOptions = Array.isArray(engines.data) ? engines.data : [];
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
+      <Card>
+        <CardHeader>
+          <CardTitle>PR AI generation</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <FieldRow
+            label="Default engine"
+            hint="Used first on Pull Requests when the CLI is installed."
+          >
+            <Select
+              value={engine || "__auto"}
+              onValueChange={(value) => setEngine(value === "__auto" ? "" : value)}
+            >
+              <SelectTrigger aria-label="Default PR AI engine">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__auto">Auto-detect available CLI</SelectItem>
+                {engineOptions.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.label} {item.available ? "" : "(not installed)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FieldRow>
+
+          <FieldRow
+            label="Default generation mode"
+            hint="Pull Requests still lets you override this per run."
+          >
+            <Select value={mode} onValueChange={setMode}>
+              <SelectTrigger aria-label="Default PR AI generation mode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="per_pr">Per PR button</SelectItem>
+                <SelectItem value="all_mine">All PRs from default author</SelectItem>
+                <SelectItem value="repo">All PRs in a repo</SelectItem>
+                <SelectItem value="org">All PRs in an org</SelectItem>
+                <SelectItem value="batch">Selected PR batch</SelectItem>
+              </SelectContent>
+            </Select>
+          </FieldRow>
+
+          <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+            CLI execution stays local. LiteLLM, OpenRouter, or another OpenAI-compatible provider
+            can be added later behind the reserved engine without changing these prompts.
+          </div>
+
+          <Button onClick={save} disabled={saving}>
+            <Sparkles className="size-4" />
+            Save AI settings
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Index prompts</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <FieldRow
+            label="Business Value Index prompt"
+            hint="The backend always adds the deterministic PR payload and strict JSON schema."
+          >
+            <textarea
+              aria-label="Business Value Index prompt"
+              value={businessPrompt}
+              onChange={(event) => setBusinessPrompt(event.target.value)}
+              className="min-h-32 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            />
+          </FieldRow>
+          <FieldRow
+            label="AI Maturity prompt"
+            hint="Use this to tune what good AI-assisted delivery means for your team."
+          >
+            <textarea
+              aria-label="AI Maturity prompt"
+              value={maturityPrompt}
+              onChange={(event) => setMaturityPrompt(event.target.value)}
+              className="min-h-32 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            />
+          </FieldRow>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -411,13 +1002,70 @@ export default function SettingsPage() {
   const [section, setSection] = useState<SectionId>("profile");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get(
+      "section",
+    ) as SectionId | null;
+    if (
+      requested &&
+      [
+        "profile",
+        "integrations",
+        "sources",
+        "rules",
+        "ai_features",
+        "general",
+        "onboarding",
+      ].includes(requested)
+    ) {
+      setSection(requested);
+    }
+  }, []);
+
   const SECTIONS = useMemo(
     () => [
-      { id: "profile" as SectionId, label: t("settings.nav.profile"), icon: User, description: t("settings.nav.profileDesc") },
-      { id: "integrations" as SectionId, label: t("settings.nav.integrations"), icon: Plug, description: t("settings.nav.integrationsDesc") },
-      { id: "sources" as SectionId, label: t("settings.nav.sources"), icon: Boxes, description: t("settings.nav.sourcesDesc") },
-      { id: "general" as SectionId, label: t("settings.nav.general"), icon: SlidersHorizontal, description: t("settings.nav.generalDesc") },
-      { id: "onboarding" as SectionId, label: t("settings.nav.onboarding"), icon: Rocket, description: t("settings.nav.onboardingDesc") },
+      {
+        id: "profile" as SectionId,
+        label: t("settings.nav.profile"),
+        icon: User,
+        description: t("settings.nav.profileDesc"),
+      },
+      {
+        id: "integrations" as SectionId,
+        label: t("settings.nav.integrations"),
+        icon: Plug,
+        description: t("settings.nav.integrationsDesc"),
+      },
+      {
+        id: "sources" as SectionId,
+        label: t("settings.nav.sources"),
+        icon: Boxes,
+        description: t("settings.nav.sourcesDesc"),
+      },
+      {
+        id: "rules" as SectionId,
+        label: "PR Rules",
+        icon: GitPullRequest,
+        description: "Create, override, disable, and remove deterministic pull request rules.",
+      },
+      {
+        id: "ai_features" as SectionId,
+        label: "AI Features",
+        icon: Sparkles,
+        description: "Configure PR AI indexes, local CLI execution, and prompt overrides.",
+      },
+      {
+        id: "general" as SectionId,
+        label: t("settings.nav.general"),
+        icon: SlidersHorizontal,
+        description: t("settings.nav.generalDesc"),
+      },
+      {
+        id: "onboarding" as SectionId,
+        label: t("settings.nav.onboarding"),
+        icon: Rocket,
+        description: t("settings.nav.onboardingDesc"),
+      },
     ],
     [t],
   );
@@ -475,7 +1123,7 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground">{active.description}</p>
           </div>
 
-          {section === "profile" && <ProfileSettings />}
+          {section === "profile" && <ProfileSettings data={data} onSaved={refetch} />}
 
           {section === "integrations" && (
             <div className="space-y-4">
@@ -495,7 +1143,13 @@ export default function SettingsPage() {
               <p className="text-sm text-muted-foreground">{t("settings.provider.noSources")}</p>
             ))}
 
-          {section === "general" && <GeneralSettings data={data} onPlan={setPlan} saving={saving} />}
+          {section === "rules" && <DeterministicRulesSettings />}
+
+          {section === "ai_features" && <AiFeaturesSettings data={data} onSaved={refetch} />}
+
+          {section === "general" && (
+            <GeneralSettings data={data} onPlan={setPlan} saving={saving} />
+          )}
 
           {section === "onboarding" && <OnboardingSettings />}
         </div>

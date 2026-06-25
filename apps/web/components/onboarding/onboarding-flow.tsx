@@ -10,6 +10,14 @@ import { GithubSyncSettings } from "@/components/integrations/github-sync-settin
 import { LoadingBlock } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ScanSyncContext } from "@/hooks/scan-sync";
 import { useApi } from "@/hooks/use-api";
 import { apiPost } from "@/lib/api";
@@ -218,6 +226,8 @@ export function OnboardingFlow() {
   const { data, loading } = useApi<SettingsInfo>("/api/settings");
   const [step, setStep] = useState(0);
   const [selected, setSelected] = useState<Set<string> | null>(null);
+  const [githubLogin, setGithubLogin] = useState("");
+  const [aiGenerationMode, setAiGenerationMode] = useState("per_pr");
   const [busy, setBusy] = useState(false);
 
   const restored = useRef(false);
@@ -232,10 +242,10 @@ export function OnboardingFlow() {
   useEffect(() => {
     if (data && !restored.current) {
       restored.current = true;
-      const seed = (data.providers ?? [])
-        .filter((p) => p.enabled || p.discovered)
-        .map((p) => p.id);
+      const seed = (data.providers ?? []).filter((p) => p.enabled || p.discovered).map((p) => p.id);
       setSelected(new Set(seed));
+      setGithubLogin(data.github_login ?? "");
+      setAiGenerationMode(data.pr_ai_default_generation_mode ?? "per_pr");
       const resume = Math.min(Math.max(data.onboarding_step ?? 0, 0), STEPS.length - 1);
       if (resume) setStep(resume);
     }
@@ -277,6 +287,26 @@ export function OnboardingFlow() {
     }
   }
 
+  async function saveGithubDefaultUser() {
+    setBusy(true);
+    const p = apiPost("/api/settings", {
+      github_login: githubLogin.trim(),
+      pr_ai_default_generation_mode: aiGenerationMode,
+    });
+    toast.promise(p, {
+      loading: "Saving GitHub default user...",
+      success: "GitHub default user saved",
+      error: "Could not save GitHub user - you can change this later in Settings",
+    });
+    try {
+      await p;
+    } catch {
+      /* reported */
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function complete() {
     setBusy(true);
     try {
@@ -291,6 +321,7 @@ export function OnboardingFlow() {
 
   async function next() {
     if (step === 0) await saveCopilots();
+    if (step === 1) await saveGithubDefaultUser();
     if (step === STEPS.length - 1) {
       await complete();
       return;
@@ -329,19 +360,58 @@ export function OnboardingFlow() {
         </div>
         <p className="mb-5 text-sm text-muted-foreground">{current.blurb}</p>
 
-        {step === 0 && (
-          <CopilotPicker selected={sel} onToggle={toggle} discovered={discovered} />
+        {step === 0 && <CopilotPicker selected={sel} onToggle={toggle} discovered={discovered} />}
+        {step === 1 && (
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-background/60 p-4">
+              <label className="text-sm font-medium" htmlFor="onboarding-github-login">
+                Default GitHub user
+              </label>
+              <Input
+                id="onboarding-github-login"
+                aria-label="Default GitHub user"
+                value={githubLogin}
+                onChange={(event) => setGithubLogin(event.target.value)}
+                placeholder="github-login"
+                className="mt-2 max-w-sm"
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                Pull Requests opens on this author by default. Leave blank to start with all
+                contributors.
+              </p>
+            </div>
+            <div className="rounded-lg border bg-background/60 p-4">
+              <label className="text-sm font-medium" htmlFor="onboarding-pr-ai-mode">
+                PR AI index generation
+              </label>
+              <Select value={aiGenerationMode} onValueChange={setAiGenerationMode}>
+                <SelectTrigger
+                  id="onboarding-pr-ai-mode"
+                  aria-label="PR AI index generation"
+                  className="mt-2 max-w-sm"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="per_pr">Per PR button</SelectItem>
+                  <SelectItem value="all_mine">All my PRs</SelectItem>
+                  <SelectItem value="repo">Repo batch</SelectItem>
+                  <SelectItem value="org">Org batch</SelectItem>
+                  <SelectItem value="batch">Selected PR batch</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="mt-2 text-xs text-muted-foreground">
+                You can tune prompts and engines later in Settings, AI Features.
+              </p>
+            </div>
+            <IntegrationsSettings />
+          </div>
         )}
-        {step === 1 && <IntegrationsSettings />}
         {step === 2 && <SyncStep selectedCount={sel.size} />}
       </div>
 
       <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          onClick={() => goTo(step - 1)}
-          disabled={step === 0 || busy}
-        >
+        <Button variant="outline" onClick={() => goTo(step - 1)} disabled={step === 0 || busy}>
           Back
         </Button>
         <Button onClick={next} disabled={busy}>

@@ -16,6 +16,7 @@
     "workspaces": "Workspaces",
     "productivity": "Productividad",
     "aiImpact": "Impacto de la IA",
+    "pullRequests": "Pull Requests",
     "dora": "DORA",
     "allocation": "Asignación",
     "devex": "DevEx",
@@ -244,6 +245,10 @@
       "status": "Estado",
       "noSyncedDeployments": "No hay deployments sincronizados en el rango.",
       "focusNote": "El foco, flujo, impacto de reuniones y calentamiento son estimaciones basadas en marcas de tiempo locales. Las métricas DORA y de PRs usan campos respaldados por la fuente cuando están disponibles."
+    },
+    "pullRequests": {
+      "title": "Pull Requests",
+      "description": "Review queue health, deterministic rules, and opt-in AI insights for synced pull requests."
     },
     "aiImpact": {
       "title": "Impacto de la IA",

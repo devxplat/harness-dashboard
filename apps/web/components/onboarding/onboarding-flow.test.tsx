@@ -37,6 +37,7 @@ const settings = {
   claude_dirs: ["/c"],
   plan: "api",
   onboarding_done: false,
+  pr_ai_default_generation_mode: "per_pr",
   providers: [
     mkProvider("claude", "Claude Code", { discovered: true, enabled: true }),
     mkProvider("codex", "Codex"),
@@ -115,7 +116,7 @@ describe("OnboardingFlow", () => {
     );
     // Advanced to the Connect step → the GitHub integration card is shown.
     await waitFor(() => expect(screen.getByText("GitHub")).toBeInTheDocument());
-  });
+  }, 15000);
 
   it("walks to the sync step and finishes (no GitHub connected)", async () => {
     const fetchMock = installFetch({

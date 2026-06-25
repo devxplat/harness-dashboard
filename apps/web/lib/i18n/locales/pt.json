@@ -16,6 +16,7 @@
     "workspaces": "Workspaces",
     "productivity": "Produtividade",
     "aiImpact": "Impacto da IA",
+    "pullRequests": "Pull Requests",
     "dora": "DORA",
     "allocation": "Alocação",
     "devex": "DevEx",
@@ -136,7 +137,9 @@
       "noSessions": "Nenhuma sessão ainda.",
       "noMatch": "Nenhuma sessão encontrada."
     },
-    "sessionDetail": { "title": "Sessão" },
+    "sessionDetail": {
+      "title": "Sessão"
+    },
     "projects": {
       "title": "Projetos",
       "description": "Uso de tokens agrupado por projeto.",
@@ -242,6 +245,10 @@
       "status": "Status",
       "noSyncedDeployments": "Nenhum deployment sincronizado no período.",
       "focusNote": "Foco, fluxo, impacto de reuniões e aquecimento são estimados a partir de timestamps locais. As métricas DORA e PR usam campos com respaldo de fonte quando disponíveis."
+    },
+    "pullRequests": {
+      "title": "Pull Requests",
+      "description": "Review queue health, deterministic rules, and opt-in AI insights for synced pull requests."
     },
     "aiImpact": {
       "title": "Impacto da IA",
@@ -384,7 +391,10 @@
       "installed": "RTK detectado — visualizações detalhadas de economia chegam em breve.",
       "notInstalled": "RTK não está instalado nesta máquina, portanto não há economias a exibir."
     },
-    "settings": { "title": "Configurações", "description": "Integrações, fontes de IA, plano e locais de varredura." }
+    "settings": {
+      "title": "Configurações",
+      "description": "Integrações, fontes de IA, plano e locais de varredura."
+    }
   },
   "settings": {
     "nav": {

@@ -1,6 +1,6 @@
 //! Fixture tests for the local-git data source: incremental ingest + idempotency,
 //! the two AI-attribution signals (co-author trailer and session overlap), merge
-//! handling, sub-directory cwd → repo resolution, productive-hours tz bucketing,
+//! handling, sub-directory cwd â†’ repo resolution, productive-hours tz bucketing,
 //! and the missing-since-sha full-rewalk fallback. Real repos are built on disk
 //! with git2 (mirroring scan_dedup.rs's tempdir style).
 
@@ -132,7 +132,7 @@ fn ingest_basic_and_idempotent() {
     assert_eq!(daily[0].day, "2026-06-20");
     assert_eq!(daily[0].commits, 2);
 
-    // Re-scan with no new commits → idempotent (INSERT OR IGNORE), no duplicates.
+    // Re-scan with no new commits â†’ idempotent (INSERT OR IGNORE), no duplicates.
     let (_repos2, commits2) = git::scan_git(&db).unwrap();
     assert_eq!(commits2, 0, "second scan ingests nothing new");
     assert_eq!(db.commits(100, None, None).unwrap().len(), 2);
@@ -176,7 +176,7 @@ fn session_overlap_flags_ai() {
     let root = unique_tmp("overlap");
     let repo = init_repo(&root);
     let cwd = root.to_string_lossy().to_string();
-    // In-window commit (10:15, session 10:00–10:30) and an out-of-window control
+    // In-window commit (10:15, session 10:00â€“10:30) and an out-of-window control
     // the next day with no session.
     add_commit(
         &repo,
@@ -238,7 +238,7 @@ fn grace_window_after_session_end() {
     let root = unique_tmp("grace");
     let repo = init_repo(&root);
     let cwd = root.to_string_lossy().to_string();
-    // 20 min after the session ended → within the 30-min grace → still AI.
+    // 20 min after the session ended â†’ within the 30-min grace â†’ still AI.
     add_commit(
         &repo,
         "a.txt",
@@ -345,7 +345,7 @@ fn merge_commit_has_zero_stats() {
     assert!(merge.is_merge);
     assert_eq!(merge.insertions, 0, "merge diff stats are skipped");
     assert_eq!(merge.deletions, 0);
-    // The feature branch commit is reachable from a branch tip → captured too.
+    // The feature branch commit is reachable from a branch tip â†’ captured too.
     assert!(commits
         .iter()
         .any(|c| c.subject.as_deref() == Some("feature work")));
@@ -370,6 +370,7 @@ fn pr(number: i64, created: &str, merged: Option<&str>) -> PullRequestRow {
         review_count: 1,
         first_review_at_utc: None,
         merge_commit_sha: None,
+        head_sha: None,
         html_url: None,
     }
 }
@@ -377,7 +378,7 @@ fn pr(number: i64, created: &str, merged: Option<&str>) -> PullRequestRow {
 #[test]
 fn pull_request_overlap_and_read() {
     let db = Db::open_in_memory().unwrap();
-    // A Claude session 10:00–10:30 on slug "proj".
+    // A Claude session 10:00â€“10:30 on slug "proj".
     db.insert_messages(&[
         message("m1", "s1", "proj", "/x", "2026-06-20T10:00:00Z"),
         message("m2", "s1", "proj", "/x", "2026-06-20T10:30:00Z"),
@@ -549,7 +550,7 @@ fn ingests_tags_as_deployments_and_computes_dora() {
         epoch("2026-06-09T09:00:00Z"),
         0,
     );
-    // A lightweight tag on the second commit → one local "deployment".
+    // A lightweight tag on the second commit â†’ one local "deployment".
     repo.tag_lightweight("v1.0.0", &repo.find_object(tagged, None).unwrap(), false)
         .unwrap();
 
@@ -568,14 +569,14 @@ fn ingests_tags_as_deployments_and_computes_dora() {
     let by = |k: &str| dora.iter().find(|m| m.key == k).unwrap();
     assert!(by("throughput").exact, "throughput is exact (local git)");
     assert!(by("throughput").value.unwrap() > 0.0);
-    // 1 revert of 3 commits → ~33% change failure.
+    // 1 revert of 3 commits â†’ ~33% change failure.
     let cf = by("change_failure").value.unwrap();
-    assert!((cf - 33.3).abs() < 1.0, "change failure ≈33%, got {cf}");
+    assert!((cf - 33.3).abs() < 1.0, "change failure â‰ˆ33%, got {cf}");
     assert!(
         by("deploy_frequency").value.unwrap() > 0.0,
         "the tag counts as a deploy"
     );
-    // No PRs and no incidents → lead time / MTTR unavailable.
+    // No PRs and no incidents â†’ lead time / MTTR unavailable.
     assert!(by("lead_time").value.is_none());
     assert!(by("mttr").value.is_none());
 
@@ -585,7 +586,7 @@ fn ingests_tags_as_deployments_and_computes_dora() {
 #[test]
 fn meeting_impact_splits_output_in_vs_out_of_meetings() {
     let db = Db::open_in_memory().unwrap();
-    // Two assistant messages: one during a 10:00–11:00 meeting, one outside.
+    // Two assistant messages: one during a 10:00â€“11:00 meeting, one outside.
     db.insert_messages(&[
         message("m1", "s1", "proj", "/x", "2026-06-20T10:30:00Z"),
         message("m2", "s1", "proj", "/x", "2026-06-20T14:00:00Z"),
@@ -640,7 +641,7 @@ fn skips_commits_before_first_session() {
     );
 
     let db = Db::open_in_memory().unwrap();
-    // Earliest Claude activity on the repo is in 2026 → the 2020 commit is skipped.
+    // Earliest Claude activity on the repo is in 2026 â†’ the 2020 commit is skipped.
     db.insert_messages(&[message("m1", "s1", "proj", &cwd, "2026-06-19T08:00:00Z")])
         .unwrap();
     git::scan_git(&db).unwrap();
@@ -724,7 +725,7 @@ fn productive_hours_buckets_by_local_offset() {
     let root = unique_tmp("tz");
     let repo = init_repo(&root);
     let cwd = root.to_string_lossy().to_string();
-    // 01:30Z at -03:00 → local Fri (dow 5) 22:00 for both the commit (its own
+    // 01:30Z at -03:00 â†’ local Fri (dow 5) 22:00 for both the commit (its own
     // offset) and the message (the configured -180 offset).
     add_commit(
         &repo,
@@ -741,7 +742,7 @@ fn productive_hours_buckets_by_local_offset() {
     git::scan_git(&db).unwrap();
 
     let hours = db.productive_hours(-180, None, None).unwrap();
-    assert_eq!(hours.len(), 168, "dense 7×24 matrix");
+    assert_eq!(hours.len(), 168, "dense 7Ã—24 matrix");
     let cell = hours.iter().find(|h| h.dow == 5 && h.hour == 22).unwrap();
     assert_eq!(cell.commits, 1, "commit uses its own tz offset");
     assert_eq!(cell.messages, 1, "message shifted by the configured offset");
@@ -838,11 +839,11 @@ fn github_repo_enable_toggle_and_sync_state() {
     )
     .unwrap();
 
-    // Enabled by default → both in the sync work-list and the picker listing.
+    // Enabled by default â†’ both in the sync work-list and the picker listing.
     assert_eq!(db.github_repos().unwrap().len(), 2);
     assert_eq!(db.github_repos_all().unwrap().len(), 2);
 
-    // Disable one → drops from the work-list but stays (disabled) in the listing.
+    // Disable one â†’ drops from the work-list but stays (disabled) in the listing.
     db.set_repo_sync_enabled("rkA", false).unwrap();
     assert_eq!(db.github_repos().unwrap().len(), 1);
     assert!(

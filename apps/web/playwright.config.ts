@@ -55,7 +55,7 @@ export default defineConfig({
     {
       command: `${q(SERVER_BIN)} --dev --no-open --port ${API_PORT} --db ${q(E2E_DB)} --projects-dir ${q(FIXTURE_PROJECTS)}`,
       env: isolatedProviderEnv,
-      url: `http://127.0.0.1:${API_PORT}/api/overview`,
+      url: `http://127.0.0.1:${API_PORT}/api/auth/bootstrap`,
       reuseExistingServer: false,
       timeout: 60_000,
     },

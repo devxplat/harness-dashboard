@@ -12,6 +12,7 @@ import {
   MessagesSquare,
   Network,
   PieChart,
+  GitPullRequest,
   Settings,
   Sparkles,
   Users,
@@ -66,6 +67,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { title: "Productivity", key: "nav.productivity", href: "/productivity", icon: Gauge },
       { title: "AI Impact", key: "nav.aiImpact", href: "/ai-impact", icon: BrainCircuit },
+      { title: "Pull Requests", key: "nav.pullRequests", href: "/pull-requests", icon: GitPullRequest },
       { title: "DORA", key: "nav.dora", href: "/dora", icon: Activity },
       { title: "Allocation", key: "nav.allocation", href: "/allocation", icon: PieChart },
       { title: "DevEx", key: "nav.devex", href: "/devex", icon: HeartPulse },

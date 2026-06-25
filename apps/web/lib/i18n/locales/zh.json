@@ -16,6 +16,7 @@
     "workspaces": "工作区",
     "productivity": "生产力",
     "aiImpact": "AI 影响",
+    "pullRequests": "Pull Requests",
     "dora": "DORA",
     "allocation": "投入分配",
     "devex": "DevEx",
@@ -244,6 +245,10 @@
       "status": "状态",
       "noSyncedDeployments": "此范围内无已同步的部署。",
       "focusNote": "专注、心流、会议影响和预热均基于本地时间戳估算。DORA 和 PR 指标在可用时使用源数据字段。"
+    },
+    "pullRequests": {
+      "title": "Pull Requests",
+      "description": "Review queue health, deterministic rules, and opt-in AI insights for synced pull requests."
     },
     "aiImpact": {
       "title": "AI 影响",

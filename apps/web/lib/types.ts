@@ -305,6 +305,11 @@ export interface SettingsInfo {
   projects_overridden: boolean;
   claude_dirs: string[];
   plan: string;
+  github_login?: string | null;
+  pr_ai_default_engine?: string | null;
+  pr_ai_default_generation_mode?: "per_pr" | "all_mine" | "repo" | "org" | "batch" | string;
+  pr_business_value_prompt?: string | null;
+  pr_ai_maturity_prompt?: string | null;
   providers: ProviderConfig[];
   /** Whether the first-run onboarding wizard has been completed. */
   onboarding_done?: boolean;
@@ -752,6 +757,205 @@ export interface PullRequestRow {
   review_count: number;
   html_url: string | null;
   ai_session_overlap: boolean;
+}
+
+export interface PrAuthorOption {
+  login: string;
+  pull_requests: number;
+  is_default: boolean;
+}
+
+export interface PrSummary {
+  total: number;
+  ai_assisted: number;
+  open: number;
+  awaiting_review: number;
+  awaiting_merge: number;
+  high_review_time: number;
+  merged: number;
+  closed: number;
+  no_ai_signal: number;
+  avg_cycle_hours: number | null;
+  avg_review_wait_hours: number | null;
+  avg_churn: number | null;
+  merge_frequency_per_week: number | null;
+}
+
+export interface PrDashboardRow {
+  repo_key: string;
+  repo_owner: string | null;
+  repo_name: string | null;
+  repo_full_name: string;
+  number: number;
+  title: string | null;
+  state: string;
+  status_bucket: string;
+  author: string | null;
+  created_at_utc: string | null;
+  merged_at_utc: string | null;
+  closed_at_utc: string | null;
+  first_review_at_utc: string | null;
+  head_branch: string | null;
+  base_branch: string | null;
+  additions: number;
+  deletions: number;
+  size: number;
+  changed_files: number;
+  review_count: number;
+  merge_commit_sha: string | null;
+  html_url: string | null;
+  ai_session_overlap: boolean;
+  churn: number;
+  age_hours: number | null;
+  cycle_hours: number | null;
+  review_wait_hours: number | null;
+  timeline: PrTimelineEvent[];
+  files: PrFileRef[];
+  business_value_index: PrAiIndex | null;
+  ai_maturity_index: PrAiIndex | null;
+}
+
+export interface PrTimelineEvent {
+  event_type: string;
+  title: string | null;
+  actor: string | null;
+  body: string | null;
+  state: string | null;
+  conclusion: string | null;
+  created_at_utc: string | null;
+  html_url: string | null;
+}
+
+export interface PrFileRef {
+  path: string;
+  status: string | null;
+  additions: number;
+  deletions: number;
+  changes: number;
+  previous_path: string | null;
+  blob_url: string | null;
+}
+
+export interface PrAiIndex {
+  repo_key: string;
+  pr_number: number;
+  index_type: "business_value" | "ai_maturity" | string;
+  score: number;
+  grade: string | null;
+  category: string | null;
+  category_scores: Record<string, number>;
+  summary: string | null;
+  evidence: string[];
+  recommendations: string[];
+  confidence: number | null;
+  engine: string | null;
+  input_hash: string | null;
+  generated_at_utc: string | null;
+}
+
+export interface PrPeriodRow {
+  period: string;
+  opened: number;
+  merged: number;
+  ai_assisted: number;
+  avg_cycle_hours: number | null;
+  avg_review_wait_hours: number | null;
+}
+
+export interface PrAnalyticsTile {
+  key: string;
+  label: string;
+  value: string;
+  unit: string | null;
+  detail: string;
+  severity: string;
+}
+
+export interface PrRef {
+  repo_key: string;
+  repo_owner: string | null;
+  repo_name: string | null;
+  repo_full_name: string;
+  number: number;
+  title: string | null;
+  html_url: string | null;
+}
+
+export interface PrInsight {
+  id: string;
+  rule_id: string;
+  title: string;
+  severity: string;
+  category: string;
+  scope: string;
+  metric: string;
+  value: number;
+  threshold: number;
+  recommendation: string;
+  affected_prs: PrRef[];
+}
+
+export interface PrInsightRule {
+  id: string;
+  title: string;
+  description: string | null;
+  enabled: boolean;
+  severity: string;
+  category: string;
+  scope: string;
+  metric: string;
+  operator: string;
+  threshold: number;
+  recommendation: string;
+  custom: boolean;
+}
+
+export interface PrDashboardBundle {
+  grain: string;
+  active_author: string;
+  default_author: string | null;
+  authors: PrAuthorOption[];
+  summary: PrSummary;
+  rows: PrDashboardRow[];
+  periods: PrPeriodRow[];
+  tiles: PrAnalyticsTile[];
+  deterministic_insights: PrInsight[];
+  rules: PrInsightRule[];
+}
+
+export interface PrAiEngine {
+  id: string;
+  label: string;
+  available: boolean;
+  command: string;
+  notes: string;
+}
+
+export interface PrAiInsightItem {
+  title: string;
+  severity: string;
+  evidence: string;
+  recommendation: string;
+  affected_prs: string[];
+}
+
+export interface PrAiInsightResult {
+  summary: string;
+  insights: PrAiInsightItem[];
+  indexes: PrAiIndex[];
+}
+
+export interface PrAiInsightJob {
+  id: string;
+  engine: string;
+  analysis_type: string;
+  scope: string;
+  status: string;
+  created_at_utc: string;
+  finished_at_utc: string | null;
+  input_hash: string;
+  result: PrAiInsightResult | null;
+  error: string | null;
 }
 
 export interface DeploymentRow {

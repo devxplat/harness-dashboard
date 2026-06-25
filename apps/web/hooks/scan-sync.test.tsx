@@ -9,12 +9,13 @@ interface FakeES {
   close: () => void;
 }
 
-function installFakeEventSource(): { current: FakeES | null } {
-  const ref: { current: FakeES | null } = { current: null };
+function installFakeEventSource(): { current: FakeES | null; url: string | null } {
+  const ref: { current: FakeES | null; url: string | null } = { current: null, url: null };
   class ES implements FakeES {
     onmessage: ((e: { data: string }) => void) | null = null;
     close = vi.fn();
-    constructor(_url: string) {
+    constructor(url: string) {
+      ref.url = url;
       ref.current = this;
     }
   }
@@ -43,6 +44,7 @@ describe("ScanSyncProvider + useApi live refresh", () => {
     );
     await waitFor(() => expect(screen.getByText("n=1")).toBeInTheDocument());
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(es.url).toContain("api_key="));
 
     n = 2;
     act(() => es.current?.onmessage?.({ data: JSON.stringify({ type: "scan" }) }));
@@ -73,14 +75,20 @@ describe("ScanSyncProvider + useApi live refresh", () => {
 
     act(() =>
       es.current?.onmessage?.({
-        data: JSON.stringify({ type: "github-progress", progress: { repo_index: 3, repo_total: 12, running: true } }),
+        data: JSON.stringify({
+          type: "github-progress",
+          progress: { repo_index: 3, repo_total: 12, running: true },
+        }),
       }),
     );
     await waitFor(() => expect(screen.getByText("gh=3:0")).toBeInTheDocument());
 
     act(() =>
       es.current?.onmessage?.({
-        data: JSON.stringify({ type: "github-sync", progress: { repo_index: 12, repo_total: 12, running: false } }),
+        data: JSON.stringify({
+          type: "github-sync",
+          progress: { repo_index: 12, repo_total: 12, running: false },
+        }),
       }),
     );
     await waitFor(() => expect(screen.getByText("gh=12:1")).toBeInTheDocument());

@@ -16,6 +16,7 @@
     "workspaces": "Workspaces",
     "productivity": "Produktivität",
     "aiImpact": "KI-Wirkung",
+    "pullRequests": "Pull Requests",
     "dora": "DORA",
     "allocation": "Allokation",
     "devex": "DevEx",
@@ -136,7 +137,9 @@
       "noSessions": "Noch keine Sitzungen vorhanden.",
       "noMatch": "Keine Sitzungen gefunden."
     },
-    "sessionDetail": { "title": "Sitzung" },
+    "sessionDetail": {
+      "title": "Sitzung"
+    },
     "projects": {
       "title": "Projekte",
       "description": "Token-Nutzung nach Projekt gruppiert.",
@@ -242,6 +245,10 @@
       "status": "Status",
       "noSyncedDeployments": "Keine synchronisierten Deployments im Zeitraum.",
       "focusNote": "Fokus, Flow, Meeting-Wirkung und Aufwärmphase werden aus lokalen Zeitstempeln geschätzt. DORA- und PR-Metriken verwenden quellengestützte Felder, sofern verfügbar."
+    },
+    "pullRequests": {
+      "title": "Pull Requests",
+      "description": "Review queue health, deterministic rules, and opt-in AI insights for synced pull requests."
     },
     "aiImpact": {
       "title": "KI-Wirkung",
@@ -384,7 +391,10 @@
       "installed": "RTK erkannt — detaillierte Einsparungs-Ansichten folgen in einem Update.",
       "notInstalled": "RTK ist auf diesem Rechner nicht installiert, daher gibt es keine Einsparungen anzuzeigen."
     },
-    "settings": { "title": "Einstellungen", "description": "Integrationen, KI-Quellen, Plan und Scan-Speicherorte." }
+    "settings": {
+      "title": "Einstellungen",
+      "description": "Integrationen, KI-Quellen, Plan und Scan-Speicherorte."
+    }
   },
   "settings": {
     "nav": {

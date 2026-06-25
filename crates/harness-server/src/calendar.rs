@@ -37,16 +37,23 @@ pub fn pkce_pair() -> (String, String) {
     (verifier, challenge)
 }
 
+pub fn oauth_state() -> String {
+    let mut raw = [0u8; 32];
+    let _ = getrandom::getrandom(&mut raw);
+    b64(&raw)
+}
+
 /// The consent URL the user opens to grant calendar access.
-pub fn build_auth_url(client_id: &str, redirect_uri: &str, challenge: &str) -> String {
+pub fn build_auth_url(client_id: &str, redirect_uri: &str, challenge: &str, state: &str) -> String {
     let enc = urlencoding::encode;
     format!(
         "{AUTH_BASE}?client_id={}&redirect_uri={}&response_type=code&scope={}\
-         &access_type=offline&prompt=consent&code_challenge={}&code_challenge_method=S256",
+         &access_type=offline&prompt=consent&code_challenge={}&code_challenge_method=S256&state={}",
         enc(client_id),
         enc(redirect_uri),
         enc(SCOPE),
         enc(challenge),
+        enc(state),
     )
 }
 

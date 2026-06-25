@@ -234,7 +234,37 @@ pub struct PullRequestRow {
     pub review_count: i64,
     pub first_review_at_utc: Option<String>,
     pub merge_commit_sha: Option<String>,
+    pub head_sha: Option<String>,
     pub html_url: Option<String>,
+}
+
+/// One timeline event for a pull request, parsed from GitHub comments, reviews,
+/// checks, and lifecycle metadata.
+#[derive(Debug, Clone)]
+pub struct PullRequestEventRow {
+    pub pr_number: i64,
+    pub event_type: String,
+    pub ext_id: String,
+    pub title: Option<String>,
+    pub actor: Option<String>,
+    pub body: Option<String>,
+    pub state: Option<String>,
+    pub conclusion: Option<String>,
+    pub created_at_utc: Option<String>,
+    pub html_url: Option<String>,
+}
+
+/// One changed file in a pull request, parsed from GitHub's PR files endpoint.
+#[derive(Debug, Clone)]
+pub struct PullRequestFileRow {
+    pub pr_number: i64,
+    pub path: String,
+    pub status: Option<String>,
+    pub additions: i64,
+    pub deletions: i64,
+    pub changes: i64,
+    pub previous_path: Option<String>,
+    pub blob_url: Option<String>,
 }
 
 /// A deployment-like event: a git tag, a GitHub release, or an Actions run.
