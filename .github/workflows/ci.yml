@@ -54,6 +54,7 @@ jobs:
         with:
           oidc: true
           files: apps/web/coverage/lcov.info
+          add-prefix: apps/web
       - run: pnpm --filter @harness/web build
 
   e2e:
