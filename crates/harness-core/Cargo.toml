@@ -22,7 +22,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
 # At-rest encryption for opt-in integration tokens. Pure-Rust (no C deps), so it
 # keeps the single-binary promise. getrandom supplies the key/nonce bytes.
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 base64 = "0.22"
 getrandom = "0.2"
 
