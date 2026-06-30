@@ -1,25 +1,37 @@
-export function formatTokens(n: number | null | undefined): string {
-  if (n == null) return "—";
-  if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
-  if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
-  return String(n);
+import i18n from "@/lib/i18n/config";
+
+function currentLocale(locale?: string): string {
+  return locale ?? i18n.resolvedLanguage ?? i18n.language ?? "en";
 }
 
-export function formatUSD(n: number | null | undefined): string {
+export function formatTokens(n: number | null | undefined, locale?: string): string {
   if (n == null) return "—";
-  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return new Intl.NumberFormat(currentLocale(locale), {
+    notation: n >= 1e3 ? "compact" : "standard",
+    minimumFractionDigits: n >= 1e3 && n < 1e6 ? 1 : 0,
+    maximumFractionDigits: n >= 1e6 ? 2 : n >= 1e3 ? 1 : 0,
+  }).format(n);
 }
 
-export function formatInt(n: number | null | undefined): string {
+export function formatUSD(n: number | null | undefined, locale?: string): string {
   if (n == null) return "—";
-  return n.toLocaleString("en-US");
+  return new Intl.NumberFormat(currentLocale(locale), {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
 }
 
-export function formatDate(s: string | null | undefined): string {
+export function formatInt(n: number | null | undefined, locale?: string): string {
+  if (n == null) return "—";
+  return new Intl.NumberFormat(currentLocale(locale)).format(n);
+}
+
+export function formatDate(s: string | null | undefined, locale?: string): string {
   if (!s) return "—";
   const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? s : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? s : d.toLocaleString(currentLocale(locale));
 }
 
 export function shortId(s: string | null | undefined): string {
@@ -27,11 +39,11 @@ export function shortId(s: string | null | undefined): string {
 }
 
 /** Compact date+time ("Jun 20, 18:30") for dense tables. */
-export function formatDateShort(s: string | null | undefined): string {
+export function formatDateShort(s: string | null | undefined, locale?: string): string {
   if (!s) return "—";
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString(currentLocale(locale), {
     month: "short",
     day: "numeric",
     hour: "2-digit",

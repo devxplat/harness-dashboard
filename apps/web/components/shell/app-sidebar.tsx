@@ -39,14 +39,14 @@ export function AppSidebar() {
         <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton size="lg" asChild tooltip="Harness Dashboard">
+              <SidebarMenuButton size="lg" asChild tooltip={t("components.shell.productName")}>
                 <Link href="/">
                   <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-md">
                     <Image src="/logo.png" alt="" width={32} height={32} className="size-8" priority />
                   </div>
                   <div className="grid flex-1 text-left leading-tight">
-                    <span className="truncate font-semibold">Harness Dashboard</span>
-                    <span className="truncate text-xs text-muted-foreground/80">DevX Platform</span>
+                    <span className="truncate font-semibold">{t("components.shell.productName")}</span>
+                    <span className="truncate text-xs text-muted-foreground/80">{t("components.shell.productTagline")}</span>
                   </div>
                 </Link>
               </SidebarMenuButton>
@@ -103,13 +103,13 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" className="cursor-default hover:bg-transparent" tooltip="Local data">
+            <SidebarMenuButton size="lg" className="cursor-default hover:bg-transparent" tooltip={t("components.shell.localData")}>
               <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-accent text-sidebar-accent-foreground">
                 <Database className="size-4" />
               </div>
               <div className="grid flex-1 text-left leading-tight">
-                <span className="truncate text-sm font-medium">Local</span>
-                <span className="truncate text-xs text-muted-foreground">~/.claude/projects</span>
+                <span className="truncate text-sm font-medium">{t("components.shell.local")}</span>
+                <span className="truncate text-xs text-muted-foreground">{t("components.shell.localPathHint")}</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>

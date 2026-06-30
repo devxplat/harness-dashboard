@@ -14,6 +14,7 @@ const NAV: Array<[label: string, heading: string]> = [
   ["Skills", "Skills"],
   ["Subagents", "Subagents"],
   ["Workspaces", "Workspaces"],
+  ["Pull Requests", "Pull Requests"],
   ["Tips", "Tips"],
   ["Settings", "Settings"],
 ];

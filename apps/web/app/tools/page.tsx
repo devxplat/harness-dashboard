@@ -43,9 +43,10 @@ export default function ToolsPage() {
   const { t } = useTranslation();
   const columns = useMemo(() => makeColumns(t), [t]);
   const { since, until } = useRange();
-  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { queryProviders, settingsLoaded, hasAvailableProviders, hasSelectedProviders } =
+    useProviderFilter();
   const { data, error, loading } = useApi<ToolRow[]>(
-    settingsLoaded && hasAvailableProviders
+    settingsLoaded && hasAvailableProviders && hasSelectedProviders
       ? `/api/tools${rangeQuery(since, until, queryProviders)}`
       : null,
   );

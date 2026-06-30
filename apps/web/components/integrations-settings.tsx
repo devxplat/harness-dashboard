@@ -49,11 +49,12 @@ const TONE: Record<string, string> = {
 };
 
 function RateChip({ gh }: { gh: GithubIntegration }) {
+  const { t } = useTranslation();
   if (!gh.rate || gh.rate.remaining == null) return null;
   const tone = rateBudgetTone(gh.rate.remaining, gh.rate.limit);
   return (
     <span className="text-xs text-muted-foreground">
-      API budget{" "}
+      {t("components.integrations.apiBudget")}{" "}
       <span className={`font-medium tabular-nums ${TONE[tone]}`}>{rateBudgetLabel(gh.rate)}</span>
     </span>
   );

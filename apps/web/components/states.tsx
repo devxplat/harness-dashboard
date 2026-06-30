@@ -4,8 +4,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslation } from "react-i18next";
 
 export function LoadingBlock() {
+  const { t } = useTranslation();
   return (
-    <div className="space-y-3" aria-busy="true" aria-label="Loading">
+    <div className="space-y-3" aria-busy="true" aria-label={t("common.loading")}>
       <Skeleton className="h-8 w-48" />
       <Skeleton className="h-40 w-full" />
     </div>

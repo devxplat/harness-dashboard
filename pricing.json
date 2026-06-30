@@ -157,5 +157,80 @@
     "max-20x": { "monthly": 200, "label": "Max 20x" },
     "team": { "monthly": 25, "label": "Team Standard" },
     "team-premium": { "monthly": 125, "label": "Team Premium" }
+  },
+  "source_checked_at": "2026-06-29",
+  "provider_plans": {
+    "claude": [
+      { "plan_id": "claude:api", "label": "API / pay-per-token", "audience": "individual", "billing_unit": "usage", "monthly_usd": 0, "price_note": "API-equivalent costs only", "selectable": true, "source_url": "https://claude.com/pricing" },
+      { "plan_id": "claude:free", "label": "Free", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 0, "selectable": true, "source_url": "https://claude.com/pricing" },
+      { "plan_id": "claude:pro", "label": "Pro", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 20, "annual_monthly_usd": 17, "selectable": true, "source_url": "https://claude.com/pricing" },
+      { "plan_id": "claude:max-5x", "label": "Max 5x", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 100, "selectable": true, "source_url": "https://claude.com/pricing" },
+      { "plan_id": "claude:max-20x", "label": "Max 20x", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 200, "selectable": true, "source_url": "https://claude.com/pricing" },
+      { "plan_id": "claude:team-standard", "label": "Team Standard", "audience": "team", "billing_unit": "seat_month", "monthly_usd": 25, "annual_monthly_usd": 20, "selectable": true, "source_url": "https://claude.com/pricing" },
+      { "plan_id": "claude:team-premium", "label": "Team Premium", "audience": "team", "billing_unit": "seat_month", "monthly_usd": 125, "annual_monthly_usd": 100, "selectable": true, "source_url": "https://claude.com/pricing" },
+      { "plan_id": "claude:enterprise", "label": "Enterprise", "audience": "enterprise", "billing_unit": "contract", "price_note": "Coming soon", "selectable": false, "source_url": "https://claude.com/pricing" }
+    ],
+    "codex": [
+      { "plan_id": "codex:api", "label": "API Key", "audience": "individual", "billing_unit": "usage", "monthly_usd": 0, "price_note": "Pay-per-token", "selectable": true, "source_url": "https://developers.openai.com/codex/pricing" },
+      { "plan_id": "codex:free", "label": "Free", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 0, "selectable": true, "source_url": "https://developers.openai.com/codex/pricing" },
+      { "plan_id": "codex:go", "label": "Go", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 8, "selectable": true, "source_url": "https://developers.openai.com/codex/pricing" },
+      { "plan_id": "codex:plus", "label": "Plus", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 20, "selectable": true, "source_url": "https://developers.openai.com/codex/pricing" },
+      { "plan_id": "codex:pro-5x", "label": "Pro 5x", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 100, "selectable": true, "source_url": "https://developers.openai.com/codex/pricing" },
+      { "plan_id": "codex:pro-20x", "label": "Pro 20x", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 200, "selectable": true, "source_url": "https://developers.openai.com/codex/pricing" },
+      { "plan_id": "codex:business", "label": "Business", "audience": "team", "billing_unit": "seat_month", "monthly_usd": 25, "annual_monthly_usd": 20, "price_note": "2+ users", "selectable": true, "source_url": "https://developers.openai.com/codex/pricing" },
+      { "plan_id": "codex:enterprise", "label": "Enterprise", "audience": "enterprise", "billing_unit": "contract", "price_note": "Coming soon", "selectable": false, "source_url": "https://developers.openai.com/codex/pricing" }
+    ],
+    "gemini": [
+      { "plan_id": "gemini:free", "label": "Gemini Code Assist Free", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 0, "selectable": true, "source_url": "https://cloud.google.com/products/gemini/pricing" },
+      { "plan_id": "gemini:code-assist-standard", "label": "Gemini Code Assist Standard", "audience": "team", "billing_unit": "seat_month", "price_note": "See current Google Cloud pricing", "selectable": true, "source_url": "https://cloud.google.com/products/gemini/pricing" },
+      { "plan_id": "gemini:google-ai-pro", "label": "Google AI Pro", "audience": "individual", "billing_unit": "user_month", "price_note": "See current Google AI plan pricing", "selectable": true, "source_url": "https://cloud.google.com/products/gemini/pricing" },
+      { "plan_id": "gemini:google-ai-ultra", "label": "Google AI Ultra", "audience": "individual", "billing_unit": "user_month", "price_note": "See current Google AI plan pricing", "selectable": true, "source_url": "https://cloud.google.com/products/gemini/pricing" },
+      { "plan_id": "gemini:enterprise", "label": "Enterprise", "audience": "enterprise", "billing_unit": "contract", "price_note": "Coming soon", "selectable": false, "source_url": "https://cloud.google.com/products/gemini/pricing" }
+    ],
+    "cursor": [
+      { "plan_id": "cursor:hobby", "label": "Hobby", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 0, "selectable": true, "source_url": "https://cursor.com/pricing" },
+      { "plan_id": "cursor:pro", "label": "Pro", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 20, "selectable": true, "source_url": "https://cursor.com/pricing" },
+      { "plan_id": "cursor:pro-plus", "label": "Pro+", "audience": "individual", "billing_unit": "user_month", "price_note": "See current Cursor pricing", "selectable": true, "source_url": "https://cursor.com/pricing" },
+      { "plan_id": "cursor:ultra", "label": "Ultra", "audience": "individual", "billing_unit": "user_month", "price_note": "See current Cursor pricing", "selectable": true, "source_url": "https://cursor.com/pricing" },
+      { "plan_id": "cursor:teams-standard", "label": "Teams Standard", "audience": "team", "billing_unit": "seat_month", "monthly_usd": 40, "selectable": true, "source_url": "https://cursor.com/pricing" },
+      { "plan_id": "cursor:teams-premium", "label": "Teams Premium", "audience": "team", "billing_unit": "seat_month", "price_note": "See current Cursor pricing", "selectable": true, "source_url": "https://cursor.com/pricing" },
+      { "plan_id": "cursor:enterprise", "label": "Enterprise", "audience": "enterprise", "billing_unit": "contract", "price_note": "Coming soon", "selectable": false, "source_url": "https://cursor.com/pricing" }
+    ],
+    "antigravity": [
+      { "plan_id": "antigravity:free", "label": "Free", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 0, "selectable": true, "source_url": "https://antigravity.google/docs/plans" },
+      { "plan_id": "antigravity:google-ai-pro", "label": "Google AI Pro", "audience": "individual", "billing_unit": "user_month", "price_note": "See current Antigravity plan docs", "selectable": true, "source_url": "https://antigravity.google/docs/plans" },
+      { "plan_id": "antigravity:google-ai-ultra", "label": "Google AI Ultra", "audience": "individual", "billing_unit": "user_month", "price_note": "See current Antigravity plan docs", "selectable": true, "source_url": "https://antigravity.google/docs/plans" },
+      { "plan_id": "antigravity:enterprise", "label": "Enterprise", "audience": "enterprise", "billing_unit": "contract", "price_note": "Coming soon", "selectable": false, "source_url": "https://antigravity.google/docs/plans" }
+    ],
+    "copilot": [
+      { "plan_id": "copilot:free", "label": "Free", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 0, "selectable": true, "source_url": "https://github.com/features/copilot/plans" },
+      { "plan_id": "copilot:pro", "label": "Pro", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 10, "selectable": true, "source_url": "https://github.com/features/copilot/plans" },
+      { "plan_id": "copilot:pro-plus", "label": "Pro+", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 39, "selectable": true, "source_url": "https://github.com/features/copilot/plans" },
+      { "plan_id": "copilot:max", "label": "Max", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 100, "selectable": true, "source_url": "https://github.com/features/copilot/plans" },
+      { "plan_id": "copilot:business", "label": "Business", "audience": "team", "billing_unit": "seat_month", "price_note": "See current GitHub pricing", "selectable": true, "source_url": "https://github.com/features/copilot/plans" },
+      { "plan_id": "copilot:enterprise", "label": "Enterprise", "audience": "enterprise", "billing_unit": "contract", "price_note": "Coming soon", "selectable": false, "source_url": "https://github.com/features/copilot/plans" }
+    ],
+    "opencode": [
+      { "plan_id": "opencode:byok", "label": "BYOK", "audience": "individual", "billing_unit": "usage", "monthly_usd": 0, "price_note": "Provider bills usage directly", "selectable": true, "source_url": "https://opencode.ai/docs/providers/" },
+      { "plan_id": "opencode:go", "label": "Go", "audience": "individual", "billing_unit": "user_month", "monthly_usd": 10, "price_note": "$5 first month, then $10/month", "selectable": true, "source_url": "https://opencode.ai/docs/go/" },
+      { "plan_id": "opencode:zen", "label": "Zen balance", "audience": "individual", "billing_unit": "credits", "price_note": "See current opencode docs", "selectable": true, "source_url": "https://opencode.ai/docs/go/" }
+    ]
+  },
+  "context_windows": {
+    "claude": {
+      "claude-sonnet-4-6": { "context_window": 200000, "max_context_window": 1000000, "source": "https://claude.com/pricing" },
+      "claude-opus-4-6": { "context_window": 200000, "max_context_window": 1000000, "source": "https://claude.com/pricing" },
+      "claude-opus-4-8": { "context_window": 200000, "max_context_window": 1000000, "source": "https://claude.com/pricing" },
+      "claude-haiku-4-5": { "context_window": 200000, "source": "https://claude.com/pricing" }
+    },
+    "codex": {
+      "gpt-5.5": { "context_window": 272000, "max_context_window": 1000000, "effective_context_window_percent": 95, "source": "https://github.com/openai/codex" },
+      "gpt-5.4": { "context_window": 272000, "max_context_window": 1000000, "effective_context_window_percent": 95, "source": "https://github.com/openai/codex" },
+      "gpt-5.4-mini": { "context_window": 128000, "effective_context_window_percent": 95, "source": "https://github.com/openai/codex" }
+    },
+    "gemini": {
+      "gemini-2.5-pro": { "context_window": 1000000, "source": "https://cloud.google.com/products/gemini/pricing" },
+      "gemini-2.5-flash": { "context_window": 1000000, "source": "https://cloud.google.com/products/gemini/pricing" }
+    }
   }
 }

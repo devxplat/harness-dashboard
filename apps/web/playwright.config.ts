@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 const API_PORT = 8080;
@@ -12,6 +13,8 @@ const FIXTURE_HOME = join(RUN_ROOT, "home");
 const FIXTURE_EMPTY = join(RUN_ROOT, "empty");
 const FIXTURE_APPDATA = join(RUN_ROOT, "appdata");
 const E2E_DB = join(RUN_ROOT, "harness.db");
+
+mkdirSync(RUN_ROOT, { recursive: true });
 
 // OS-correct path to the debug binary (backslashes + .exe on Windows).
 const SERVER_BIN = join(
@@ -55,7 +58,7 @@ export default defineConfig({
     {
       command: `${q(SERVER_BIN)} --dev --no-open --port ${API_PORT} --db ${q(E2E_DB)} --projects-dir ${q(FIXTURE_PROJECTS)}`,
       env: isolatedProviderEnv,
-      url: `http://127.0.0.1:${API_PORT}/api/overview`,
+      url: `http://127.0.0.1:${API_PORT}/api/auth/bootstrap`,
       reuseExistingServer: false,
       timeout: 60_000,
     },

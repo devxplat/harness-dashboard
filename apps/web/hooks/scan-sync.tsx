@@ -1,6 +1,6 @@
 "use client";
 
-import { API_BASE } from "@/lib/api-base";
+import { authenticatedStreamUrl } from "@/lib/api-auth";
 import type { GithubProgress } from "@/lib/types";
 import { createContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -58,54 +58,65 @@ export function ScanSyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof EventSource === "undefined") return;
+    let cancelled = false;
+    let es: EventSource | null = null;
     // A single app-wide SSE connection (multiple long-lived ones exhaust the
     // browser's per-host connection budget and stall ordinary fetches).
-    const es = new EventSource(`${API_BASE}/api/stream`);
-    es.onmessage = (ev) => {
-      let e: ScanEvent;
-      try {
-        e = JSON.parse(ev.data) as ScanEvent;
-      } catch {
-        return; // keep-alive / malformed
-      }
-      // GitHub sync: surface live progress without bumping the global data version
-      // (avoids refetch thrash on every tick); the terminal event bumps its own
-      // version so integration views refresh once when it's done.
-      if (e.type === "github-progress" || e.type === "github-sync") {
-        if (e.progress) setGithubProgress(e.progress);
-        if (e.type === "github-sync") setGithubSyncVersion((v) => v + 1);
-        return;
-      }
-      // Live scan lifecycle: `scan-start` flips the indexing flag on; the terminal
-      // `scan` (or `error` / `scan-skip`) clears it.
-      if (e.type === "scan-start") {
-        setScanning(true);
-        return;
-      }
-      if (e.type === "error" || e.type === "scan-skip") {
-        setScanning(false);
-        return;
-      }
-      if (e.type !== "scan") return;
-      setScanning(false);
-      setLast(e);
-      if (!liveRef.current) return; // paused → don't trigger refetches
+    void authenticatedStreamUrl("/api/stream")
+      .then((url) => {
+        if (cancelled) return;
+        es = new EventSource(url);
+        es.onmessage = (ev) => {
+          let e: ScanEvent;
+          try {
+            e = JSON.parse(ev.data) as ScanEvent;
+          } catch {
+            return; // keep-alive / malformed
+          }
+          // GitHub sync: surface live progress without bumping the global data version
+          // (avoids refetch thrash on every tick); the terminal event bumps its own
+          // version so integration views refresh once when it's done.
+          if (e.type === "github-progress" || e.type === "github-sync") {
+            if (e.progress) setGithubProgress(e.progress);
+            if (e.type === "github-sync") setGithubSyncVersion((v) => v + 1);
+            return;
+          }
+          // Live scan lifecycle: `scan-start` flips the indexing flag on; the terminal
+          // `scan` (or `error` / `scan-skip`) clears it.
+          if (e.type === "scan-start") {
+            setScanning(true);
+            return;
+          }
+          if (e.type === "error" || e.type === "scan-skip") {
+            setScanning(false);
+            return;
+          }
+          if (e.type !== "scan") return;
+          setScanning(false);
+          setLast(e);
+          if (!liveRef.current) return; // paused → don't trigger refetches
 
-      const now = Date.now();
-      const elapsed = now - lastBumpRef.current;
-      if (elapsed >= THROTTLE_MS) {
-        lastBumpRef.current = now;
-        setVersion((v) => v + 1);
-      } else if (!pendingRef.current) {
-        pendingRef.current = setTimeout(() => {
-          pendingRef.current = null;
-          lastBumpRef.current = Date.now();
-          setVersion((v) => v + 1);
-        }, THROTTLE_MS - elapsed);
-      }
-    };
+          const now = Date.now();
+          const elapsed = now - lastBumpRef.current;
+          if (elapsed >= THROTTLE_MS) {
+            lastBumpRef.current = now;
+            setVersion((v) => v + 1);
+          } else if (!pendingRef.current) {
+            pendingRef.current = setTimeout(() => {
+              pendingRef.current = null;
+              lastBumpRef.current = Date.now();
+              setVersion((v) => v + 1);
+            }, THROTTLE_MS - elapsed);
+          }
+        };
+      })
+      .catch(() => {
+        // Ordinary API calls surface auth/bootstrap failures; the stream is only
+        // live refresh plumbing, so avoid crashing the shell if it cannot attach.
+      });
     return () => {
-      es.close();
+      cancelled = true;
+      es?.close();
       if (pendingRef.current) clearTimeout(pendingRef.current);
     };
   }, []);
@@ -116,9 +127,5 @@ export function ScanSyncProvider({ children }: { children: ReactNode }) {
     [version, live, last, scanning, githubProgress, githubSyncVersion],
   );
 
-  return (
-    <ScanSyncContext.Provider value={value}>
-      {children}
-    </ScanSyncContext.Provider>
-  );
+  return <ScanSyncContext.Provider value={value}>{children}</ScanSyncContext.Provider>;
 }

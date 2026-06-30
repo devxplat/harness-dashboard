@@ -70,6 +70,8 @@ Conventions: `core` = `crates/harness-core`, `server` = `crates/harness-server`,
 - [ ] T154 `core/queries`: single-session messages in timestamp order. `[P]`
 - [ ] T155 `core/queries`: daily series + by-model. `[P]`
 - [ ] T156 `core/queries`: subagents (by kind/entrypoint, dispatch tree) + workspaces + cross-workspace edits. `[P]`
+- [x] T157 `core/db/pricing`: provider plan selections, catalog extensions, latest context snapshots, and latest plan-usage windows.
+- [x] T158 `core/queries`: session bundle with context-window provenance and provider plan-usage windows.
 
 ## Phase 3 — `harness-server` API/SSE
 
@@ -77,6 +79,7 @@ Conventions: `core` = `crates/harness-core`, `server` = `crates/harness-server`,
 - [ ] T201 `server`: env overrides `PORT`, `HOST`, `CLAUDE_PROJECTS_DIR`, `HARNESS_DB` (+ `TOKEN_DASHBOARD_DB` alias) with flags taking precedence (FR-040/041).
 - [ ] T202 `server`: GET handlers mirroring `contracts/api.md`; `since`/`until` parsing; `limit` clamp ≤ 1000; `Cache-Control: no-store`. `[P]`
 - [ ] T203 `server`: POST handlers — `/api/plan`, `/api/settings`, `/api/tips/dismiss`, `/api/refresh`; body clamp ≤ 1 MB. `[P]`
+- [x] T203a `server`: `/api/provider-plans`, `/api/sessions/:id/bundle`, and `statusline-snapshot` CLI.
 - [ ] T204 `server`: response cache keyed by query string, cleared on scan (FR-023).
 - [ ] T205 `server`: `/api/scan` blocking rescan + `/api/refresh` async scan via `spawn_blocking`.
 - [ ] T206 `server`: `/api/stream` SSE — `scan` / `scan-skip` / `error` events + `: ping` keep-alive (FR-021).
@@ -93,10 +96,12 @@ Conventions: `core` = `crates/harness-core`, `server` = `crates/harness-server`,
 - [ ] T304 `web`: Prompts page — sortable (`tokens`/`recent`) expensive-prompt table (US2). `[P]`
 - [ ] T305 `web`: Sessions list — filter/sort + totals row (US3). `[P]`
 - [ ] T306 `web`: Session detail — client page reading `?id=`, fetches `/api/sessions/:id`, deep-linkable (US3, FR-031).
+- [x] T306a `web`: Session detail bundle — context-window header, provenance breakdown, and plan-usage bars.
 - [ ] T307 `web`: Projects + Tools pages (US4). `[P]`
 - [ ] T308 `web`: Skills + Subagents + Workspaces pages (US5). `[P]`
 - [ ] T309 `web`: Tips page — categorized suggestions + dismiss (US6). `[P]`
 - [ ] T310 `web`: Settings page — pricing plan, claude-dir override, refresh (US7). `[P]`
+- [x] T310a `web`: Settings Plans & Usage section — provider-specific plan selection and Claude Status Line setup.
 - [ ] T311 `web`: RTK page — hidden when `/api/rtk` reports unavailable (FR-033). `[P]`
 - [ ] T312 `web`: empty-state rendering for missing/empty transcript directory (edge cases). `[P]`
 - [ ] T313 `web`: `vitest` unit tests for hooks/lib + a Playwright smoke test against a running axum.

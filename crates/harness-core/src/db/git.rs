@@ -5,7 +5,9 @@
 
 use super::Db;
 use crate::error::Result;
-use crate::model::{CommitRow, DeploymentRow, PullRequestRow};
+use crate::model::{
+    CommitRow, DeploymentRow, PullRequestEventRow, PullRequestFileRow, PullRequestRow,
+};
 use rusqlite::params;
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -122,6 +124,21 @@ pub struct PullRequestDto {
     pub review_count: i64,
     pub html_url: Option<String>,
     pub ai_session_overlap: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PullRequestEventDto {
+    pub repo_key: String,
+    pub pr_number: i64,
+    pub event_type: String,
+    pub ext_id: String,
+    pub title: Option<String>,
+    pub actor: Option<String>,
+    pub body: Option<String>,
+    pub state: Option<String>,
+    pub conclusion: Option<String>,
+    pub created_at_utc: Option<String>,
+    pub html_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -654,6 +671,10 @@ impl Db {
         for table in [
             "commits",
             "deployments",
+            "pull_request_ai_indexes",
+            "pull_request_session_correlations",
+            "pull_request_events",
+            "pull_request_files",
             "pull_requests",
             "github_sync_state",
             "git_repos",
@@ -682,8 +703,8 @@ impl Db {
                 "INSERT OR REPLACE INTO pull_requests \
                  (repo_key, number, title, state, author, created_at_utc, merged_at_utc, closed_at_utc, \
                   head_branch, base_branch, additions, deletions, changed_files, review_count, \
-                  first_review_at_utc, merge_commit_sha, html_url, ai_session_overlap) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,\
+                  first_review_at_utc, merge_commit_sha, head_sha, html_url, ai_session_overlap) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,\
                    COALESCE((SELECT ai_session_overlap FROM pull_requests WHERE repo_key=?1 AND number=?2),0))",
             )?;
             for pr in prs {
@@ -704,12 +725,105 @@ impl Db {
                     pr.review_count,
                     pr.first_review_at_utc,
                     pr.merge_commit_sha,
+                    pr.head_sha,
                     pr.html_url
                 ])?;
             }
         }
         tx.commit()?;
         Ok(prs.len())
+    }
+
+    /// Replace timeline events for the PRs included in a sync page. This keeps
+    /// comments/reviews/checks fresh without preserving stale events that were
+    /// deleted or re-run upstream.
+    pub fn replace_pull_request_events(
+        &self,
+        repo_key: &str,
+        events: &[PullRequestEventRow],
+    ) -> Result<usize> {
+        if events.is_empty() {
+            return Ok(0);
+        }
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        {
+            let mut seen_prs = std::collections::BTreeSet::new();
+            for event in events {
+                if seen_prs.insert(event.pr_number) {
+                    tx.execute(
+                        "DELETE FROM pull_request_events WHERE repo_key=?1 AND pr_number=?2",
+                        params![repo_key, event.pr_number],
+                    )?;
+                }
+            }
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO pull_request_events \
+                 (repo_key, pr_number, event_type, ext_id, title, actor, body, state, conclusion, created_at_utc, html_url) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            )?;
+            for event in events {
+                stmt.execute(params![
+                    repo_key,
+                    event.pr_number,
+                    event.event_type,
+                    event.ext_id,
+                    event.title,
+                    event.actor,
+                    event.body,
+                    event.state,
+                    event.conclusion,
+                    event.created_at_utc,
+                    event.html_url,
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(events.len())
+    }
+
+    /// Replace changed-file rows for the PRs included in a sync page.
+    pub fn replace_pull_request_files(
+        &self,
+        repo_key: &str,
+        files: &[PullRequestFileRow],
+    ) -> Result<usize> {
+        if files.is_empty() {
+            return Ok(0);
+        }
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        {
+            let mut seen_prs = std::collections::BTreeSet::new();
+            for file in files {
+                if seen_prs.insert(file.pr_number) {
+                    tx.execute(
+                        "DELETE FROM pull_request_files WHERE repo_key=?1 AND pr_number=?2",
+                        params![repo_key, file.pr_number],
+                    )?;
+                }
+            }
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO pull_request_files \
+                 (repo_key, pr_number, path, status, additions, deletions, changes, previous_path, blob_url) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            )?;
+            for file in files {
+                stmt.execute(params![
+                    repo_key,
+                    file.pr_number,
+                    file.path,
+                    file.status,
+                    file.additions,
+                    file.deletions,
+                    file.changes,
+                    file.previous_path,
+                    file.blob_url,
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(files.len())
     }
 
     /// Upsert deployment-like events for a repo (tags / releases / runs).

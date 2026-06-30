@@ -6,6 +6,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 export function IntegrationCard({
   icon,
@@ -23,6 +24,7 @@ export function IntegrationCard({
   statusText?: string | null;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-xl border bg-card">
       <div className="flex items-center gap-3 border-b p-4">
@@ -38,11 +40,11 @@ export function IntegrationCard({
                 className="bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-400"
               >
                 <span className="mr-1 size-1.5 rounded-full bg-current" aria-hidden />
-                Connected
+                {t("components.integrations.connected")}
               </Badge>
             ) : (
               <Badge variant="outline" className="text-muted-foreground">
-                Not connected
+                {t("components.integrations.notConnected")}
               </Badge>
             )}
           </div>

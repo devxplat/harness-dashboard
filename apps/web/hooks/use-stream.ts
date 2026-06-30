@@ -1,6 +1,6 @@
 "use client";
 
-import { API_BASE } from "@/lib/api-base";
+import { authenticatedStreamUrl } from "@/lib/api-auth";
 import { useEffect, useRef, useState } from "react";
 
 export interface ScanEvent {
@@ -17,17 +17,29 @@ export function useStream(onScan?: (e: ScanEvent) => void): ScanEvent | null {
   cb.current = onScan;
 
   useEffect(() => {
-    const es = new EventSource(`${API_BASE}/api/stream`);
-    es.onmessage = (ev) => {
-      try {
-        const e = JSON.parse(ev.data) as ScanEvent;
-        setLast(e);
-        cb.current?.(e);
-      } catch {
-        /* ignore keep-alive / malformed frames */
-      }
+    let cancelled = false;
+    let es: EventSource | null = null;
+    void authenticatedStreamUrl("/api/stream")
+      .then((url) => {
+        if (cancelled) return;
+        es = new EventSource(url);
+        es.onmessage = (ev) => {
+          try {
+            const e = JSON.parse(ev.data) as ScanEvent;
+            setLast(e);
+            cb.current?.(e);
+          } catch {
+            /* ignore keep-alive / malformed frames */
+          }
+        };
+      })
+      .catch(() => {
+        /* auth bootstrap can fail if the API is not reachable yet */
+      });
+    return () => {
+      cancelled = true;
+      es?.close();
     };
-    return () => es.close();
   }, []);
 
   return last;

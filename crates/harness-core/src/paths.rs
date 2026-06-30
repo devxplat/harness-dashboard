@@ -36,6 +36,15 @@ pub fn codex_sessions_dir() -> PathBuf {
     })
 }
 
+pub fn codex_models_cache() -> PathBuf {
+    env_path("CODEX_MODELS_CACHE").unwrap_or_else(|| {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".codex")
+            .join("models_cache.json")
+    })
+}
+
 pub fn gemini_chats_dir() -> PathBuf {
     env_path("GEMINI_CHATS_DIR").unwrap_or_else(|| {
         dirs::home_dir()

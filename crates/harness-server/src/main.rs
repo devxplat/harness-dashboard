@@ -4,16 +4,19 @@
 //! stream, a periodic background scan, and (in release) the embedded frontend.
 
 mod api;
+mod auth;
 mod calendar;
 mod github;
 #[cfg(feature = "release-embed")]
 mod static_assets;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use harness_core::db::Db;
 use harness_core::paths;
 use harness_core::pricing::Pricing;
 use notify::{RecursiveMode, Watcher};
+use std::collections::HashMap;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -38,6 +41,10 @@ pub struct AppState {
     pub github_syncing: Arc<AtomicBool>,
     /// Latest GitHub-sync progress snapshot (for the `/status` poll).
     pub github_progress: Arc<Mutex<Option<github::GithubProgress>>>,
+    /// Completed local PR AI insight runs, keyed by generated job id.
+    pub pr_ai_jobs: Arc<Mutex<HashMap<String, api::PrAiInsightJob>>>,
+    /// Local API-key auth used by the browser and CLI callers.
+    pub api_auth: Arc<auth::ApiAuth>,
 }
 
 #[derive(Parser, Debug)]
@@ -47,6 +54,8 @@ pub struct AppState {
     about = "Local-first AI coding analytics dashboard"
 )]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<CliCommand>,
     /// Port to bind (env PORT, default 8080).
     #[arg(long)]
     port: Option<u16>,
@@ -70,6 +79,12 @@ struct Cli {
     no_scan: bool,
 }
 
+#[derive(Subcommand, Debug)]
+enum CliCommand {
+    /// Capture a Claude Code Status Line payload into the local dashboard database.
+    StatuslineSnapshot,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -80,10 +95,15 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
+    if matches!(cli.command, Some(CliCommand::StatuslineSnapshot)) {
+        return statusline_snapshot(cli.db.unwrap_or_else(paths::db_path));
+    }
+
     let host = cli
         .host
         .or_else(|| std::env::var("HOST").ok())
         .unwrap_or_else(|| "127.0.0.1".to_string());
+    validate_bind_host(&host)?;
     let port = cli
         .port
         .or_else(|| std::env::var("PORT").ok().and_then(|p| p.parse().ok()))
@@ -92,6 +112,7 @@ async fn main() -> anyhow::Result<()> {
     let projects_dir = cli.projects_dir.unwrap_or_else(paths::projects_dir);
 
     let db = Arc::new(Db::open(&db_path)?);
+    let api_auth = Arc::new(auth::load_or_create(&db)?);
     let pricing = Arc::new(Pricing::load_default());
     let (tx, _rx) = broadcast::channel(64);
 
@@ -106,6 +127,8 @@ async fn main() -> anyhow::Result<()> {
         port,
         github_syncing: Arc::new(AtomicBool::new(false)),
         github_progress: Arc::new(Mutex::new(None)),
+        pr_ai_jobs: Arc::new(Mutex::new(HashMap::new())),
+        api_auth,
     };
 
     tracing::info!("database: {}", db_path.display());
@@ -216,7 +239,52 @@ async fn main() -> anyhow::Result<()> {
         open_browser(&url);
     }
 
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
+    Ok(())
+}
+
+fn statusline_snapshot(db_path: PathBuf) -> anyhow::Result<()> {
+    let mut input = String::new();
+    std::io::stdin().read_to_string(&mut input)?;
+    let payload: serde_json::Value = serde_json::from_str(&input)?;
+    let db = Db::open(&db_path)?;
+    db.save_claude_statusline_snapshot(&payload)?;
+
+    let ctx = payload
+        .pointer("/context_window/used_percentage")
+        .and_then(serde_json::Value::as_f64)
+        .map(|pct| format!("ctx {:.0}%", pct));
+    let five_hour = payload
+        .pointer("/rate_limits/five_hour/used_percentage")
+        .and_then(serde_json::Value::as_f64)
+        .map(|pct| format!("5h {:.0}%", pct));
+    let seven_day = payload
+        .pointer("/rate_limits/seven_day/used_percentage")
+        .and_then(serde_json::Value::as_f64)
+        .map(|pct| format!("7d {:.0}%", pct));
+    let parts = [ctx, five_hour, seven_day]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    if !parts.is_empty() {
+        println!("Harness {}", parts.join(" / "));
+    }
+    Ok(())
+}
+
+fn validate_bind_host(host: &str) -> anyhow::Result<()> {
+    if host.is_empty()
+        || host.len() > 255
+        || !host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+    {
+        anyhow::bail!("invalid host");
+    }
     Ok(())
 }
 
@@ -238,4 +306,19 @@ fn open_browser(url: &str) {
     let _ = std::process::Command::new("open").arg(url).spawn();
     #[cfg(all(unix, not(target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bind_host_rejects_shell_metacharacters() {
+        assert!(validate_bind_host("127.0.0.1").is_ok());
+        assert!(validate_bind_host("localhost").is_ok());
+        assert!(validate_bind_host("0.0.0.0").is_ok());
+        assert!(validate_bind_host("[::1]").is_ok());
+        assert!(validate_bind_host("127.0.0.1 & calc").is_err());
+        assert!(validate_bind_host("localhost;touch").is_err());
+    }
 }

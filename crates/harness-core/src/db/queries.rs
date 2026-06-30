@@ -4,9 +4,11 @@
 use super::Db;
 use crate::error::Result;
 use crate::model::{MessageRow, ProviderId, ToolCall, Usage};
-use crate::pricing::Pricing;
+use crate::paths;
+use crate::pricing::{ContextWindowSpec, Pricing};
 use rusqlite::{params, ToSql};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// `timestamp >= since AND timestamp < until`, with NULL bounds meaning unbounded.
@@ -211,6 +213,86 @@ pub struct MessageDetail {
     pub cwd: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ProviderPlanSelection {
+    pub provider: String,
+    pub plan_id: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextWindowComponent {
+    pub key: String,
+    pub label: String,
+    pub tokens: i64,
+    pub pct: Option<f64>,
+    pub source: String,
+    pub confidence: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ContextWindowDetail {
+    pub provider: String,
+    pub session_id: String,
+    pub captured_at: Option<String>,
+    pub source: String,
+    pub model: Option<String>,
+    pub context_window_size: Option<i64>,
+    pub used_tokens: i64,
+    pub used_pct: Option<f64>,
+    pub remaining_pct: Option<f64>,
+    pub current_usage: Value,
+    pub components: Vec<ContextWindowComponent>,
+    pub supported: bool,
+    pub observed: bool,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PlanUsageWindow {
+    pub provider: String,
+    pub account_scope: String,
+    pub window_key: String,
+    pub label: String,
+    pub captured_at: Option<String>,
+    pub source: String,
+    pub used_pct: Option<f64>,
+    pub resets_at: Option<String>,
+    pub used_amount: Option<f64>,
+    pub limit_amount: Option<f64>,
+    pub unit: Option<String>,
+    pub details: Value,
+    pub supported: bool,
+    pub observed: bool,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PlanUsageSnapshotWindow {
+    pub window_key: String,
+    pub label: String,
+    pub captured_at: Option<String>,
+    pub used_pct: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ProviderSnapshotStatus {
+    pub provider: String,
+    pub context_observed: bool,
+    pub context_captured_at: Option<String>,
+    pub plan_usage_observed: bool,
+    pub plan_usage_captured_at: Option<String>,
+    pub windows: Vec<PlanUsageSnapshotWindow>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionBundle {
+    pub session: Option<SessionRow>,
+    pub messages: Vec<MessageDetail>,
+    pub context_window: ContextWindowDetail,
+    pub plan_usage: Vec<PlanUsageWindow>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct PromptRow {
     pub provider: String,
@@ -371,6 +453,239 @@ fn add_reported_cost(dst: &mut Option<f64>, value: Option<f64>) {
     }
 }
 
+fn now_rfc3339() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+fn epoch_seconds_to_rfc3339(value: i64) -> Option<String> {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(value, 0)
+        .map(|dt| dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+}
+
+fn value_i64_any(value: &Value, keys: &[&str]) -> i64 {
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(Value::as_i64))
+        .unwrap_or(0)
+}
+
+fn value_f64_any(value: &Value, keys: &[&str]) -> Option<f64> {
+    keys.iter().find_map(|key| {
+        value
+            .get(*key)
+            .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|n| n as f64)))
+    })
+}
+
+fn legacy_to_claude_plan(plan: &str) -> String {
+    match plan.trim() {
+        "max" => "claude:max-5x",
+        "max-20x" => "claude:max-20x",
+        "team" => "claude:team-standard",
+        "team-premium" => "claude:team-premium",
+        "pro" => "claude:pro",
+        "free" => "claude:free",
+        _ => "claude:api",
+    }
+    .to_string()
+}
+
+fn plan_local_id(plan_id: &str) -> &str {
+    plan_id
+        .trim()
+        .rsplit_once(':')
+        .map(|(_, local)| local)
+        .unwrap_or_else(|| plan_id.trim())
+}
+
+fn qualify_plan_id(provider: ProviderId, plan_id: &str) -> String {
+    let plan_id = plan_id.trim();
+    if plan_id.contains(':') {
+        plan_id.to_string()
+    } else {
+        format!("{}:{plan_id}", provider.as_str())
+    }
+}
+
+fn claude_plan_to_legacy(plan_id: &str) -> String {
+    match plan_local_id(plan_id) {
+        "max-5x" => "max",
+        "team-standard" => "team",
+        other => other,
+    }
+    .to_string()
+}
+
+fn default_plan_for_provider(provider: ProviderId) -> &'static str {
+    match provider {
+        ProviderId::Claude => "claude:api",
+        ProviderId::Codex => "codex:api",
+        ProviderId::Opencode => "opencode:byok",
+        ProviderId::Cursor => "cursor:hobby",
+        ProviderId::Gemini => "gemini:free",
+        ProviderId::Antigravity => "antigravity:free",
+        ProviderId::Copilot => "copilot:free",
+    }
+}
+
+fn plan_usage_label(key: &str) -> String {
+    match key {
+        "five_hour" | "5h" => "5-hour limit".to_string(),
+        "seven_day" | "7d" | "weekly" => "Weekly limit".to_string(),
+        "sonnet_only" | "sonnet" => "Sonnet only".to_string(),
+        "usage_credits" | "credits" => "Usage credits".to_string(),
+        other => other
+            .split('_')
+            .map(|part| {
+                let mut chars = part.chars();
+                match chars.next() {
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    }
+}
+
+fn component_pct(tokens: i64, context_window_size: Option<i64>) -> Option<f64> {
+    let size = context_window_size?;
+    (size > 0).then(|| tokens as f64 * 100.0 / size as f64)
+}
+
+fn context_component(
+    key: &str,
+    label: &str,
+    tokens: i64,
+    context_window_size: Option<i64>,
+    source: &str,
+    confidence: &str,
+) -> ContextWindowComponent {
+    ContextWindowComponent {
+        key: key.to_string(),
+        label: label.to_string(),
+        tokens: tokens.max(0),
+        pct: component_pct(tokens.max(0), context_window_size),
+        source: source.to_string(),
+        confidence: confidence.to_string(),
+    }
+}
+
+fn components_from_usage(
+    usage: &Value,
+    context_window_size: Option<i64>,
+    used_tokens: i64,
+) -> Vec<ContextWindowComponent> {
+    let input = value_i64_any(usage, &["input_tokens", "inputTokens", "input"]);
+    let output = value_i64_any(usage, &["output_tokens", "outputTokens", "output"]);
+    let cache_create = value_i64_any(
+        usage,
+        &[
+            "cache_creation_input_tokens",
+            "cache_create_tokens",
+            "cacheCreateTokens",
+        ],
+    );
+    let cache_read = value_i64_any(
+        usage,
+        &[
+            "cache_read_input_tokens",
+            "cache_read_tokens",
+            "cacheReadTokens",
+            "cached_input_tokens",
+        ],
+    );
+    let messages = input + output;
+    let free = context_window_size
+        .map(|size| size - used_tokens)
+        .unwrap_or(0)
+        .max(0);
+    let attributed = messages + cache_create + cache_read;
+    let unattributed = (used_tokens - attributed).max(0);
+
+    vec![
+        context_component(
+            "messages",
+            "Messages",
+            messages,
+            context_window_size,
+            "reported",
+            "high",
+        ),
+        context_component(
+            "memory_files",
+            "Memory files / cached context",
+            cache_read,
+            context_window_size,
+            "reported",
+            "medium",
+        ),
+        context_component(
+            "system_prompt",
+            "System prompt / cache creation",
+            cache_create,
+            context_window_size,
+            "reported",
+            "medium",
+        ),
+        context_component(
+            "system_tools",
+            "System tools",
+            0,
+            context_window_size,
+            "estimated",
+            "low",
+        ),
+        context_component(
+            "mcp_tools",
+            "MCP tools",
+            0,
+            context_window_size,
+            "estimated",
+            "low",
+        ),
+        context_component(
+            "skills",
+            "Skills",
+            0,
+            context_window_size,
+            "estimated",
+            "low",
+        ),
+        context_component(
+            "compact_buffer",
+            "Compact buffer",
+            0,
+            context_window_size,
+            "estimated",
+            "low",
+        ),
+        context_component(
+            "custom_agents",
+            "Custom agents",
+            0,
+            context_window_size,
+            "estimated",
+            "low",
+        ),
+        context_component(
+            "unattributed",
+            "Unattributed",
+            unattributed,
+            context_window_size,
+            "estimated",
+            "low",
+        ),
+        context_component(
+            "free_space",
+            "Free space",
+            free,
+            context_window_size,
+            "computed",
+            "medium",
+        ),
+    ]
+}
+
 type RepoLookup = (
     HashMap<String, (String, String)>,
     Vec<(String, String, String)>,
@@ -451,6 +766,121 @@ fn priced_usage(
     let provider = provider.parse().unwrap_or(ProviderId::Claude);
     let cost = pricing.cost_for_provider(provider, model, usage);
     (cost.usd, cost.estimated)
+}
+
+fn context_window_from_pricing(
+    pricing: &Pricing,
+    provider: ProviderId,
+    model: Option<&str>,
+) -> Option<ContextWindowSpec> {
+    let model = model?;
+    let provider_key = provider.as_str();
+    let by_provider = pricing.context_windows.get(provider_key)?;
+    by_provider
+        .get(model)
+        .cloned()
+        .or_else(|| {
+            if provider == ProviderId::Claude {
+                let tier = ["fable", "opus", "sonnet", "haiku"]
+                    .into_iter()
+                    .find(|tier| model.contains(tier))?;
+                by_provider
+                    .iter()
+                    .find(|(key, _)| key.contains(tier))
+                    .map(|(_, spec)| spec.clone())
+            } else {
+                None
+            }
+        })
+        .or_else(|| {
+            let qualified = format!("{provider_key}:{model}");
+            by_provider.get(&qualified).cloned()
+        })
+}
+
+fn codex_model_info_from_value(value: &Value, model: &str) -> Option<ContextWindowSpec> {
+    match value {
+        Value::Object(map) => {
+            let object_matches = map
+                .get("slug")
+                .or_else(|| map.get("id"))
+                .or_else(|| map.get("model"))
+                .or_else(|| map.get("name"))
+                .and_then(Value::as_str)
+                .is_some_and(|slug| slug == model);
+            let has_context = map.get("context_window").is_some()
+                || map.get("contextWindow").is_some()
+                || map.get("max_context_window").is_some()
+                || map.get("maxContextWindow").is_some();
+            if object_matches && has_context {
+                return Some(ContextWindowSpec {
+                    context_window: map
+                        .get("context_window")
+                        .or_else(|| map.get("contextWindow"))
+                        .and_then(Value::as_i64),
+                    max_context_window: map
+                        .get("max_context_window")
+                        .or_else(|| map.get("maxContextWindow"))
+                        .and_then(Value::as_i64),
+                    effective_context_window_percent: map
+                        .get("effective_context_window_percent")
+                        .or_else(|| map.get("effectiveContextWindowPercent"))
+                        .and_then(Value::as_i64),
+                    source: Some(paths::codex_models_cache().display().to_string()),
+                });
+            }
+            for (key, child) in map {
+                if key == model && child.is_object() {
+                    if let Some(mut spec) = codex_model_info_from_value(child, model) {
+                        if spec.source.is_none() {
+                            spec.source = Some(paths::codex_models_cache().display().to_string());
+                        }
+                        return Some(spec);
+                    }
+                    if let Value::Object(child_map) = child {
+                        let has_context = child_map.get("context_window").is_some()
+                            || child_map.get("contextWindow").is_some()
+                            || child_map.get("max_context_window").is_some()
+                            || child_map.get("maxContextWindow").is_some();
+                        if has_context {
+                            return Some(ContextWindowSpec {
+                                context_window: child_map
+                                    .get("context_window")
+                                    .or_else(|| child_map.get("contextWindow"))
+                                    .and_then(Value::as_i64),
+                                max_context_window: child_map
+                                    .get("max_context_window")
+                                    .or_else(|| child_map.get("maxContextWindow"))
+                                    .and_then(Value::as_i64),
+                                effective_context_window_percent: child_map
+                                    .get("effective_context_window_percent")
+                                    .or_else(|| child_map.get("effectiveContextWindowPercent"))
+                                    .and_then(Value::as_i64),
+                                source: Some(paths::codex_models_cache().display().to_string()),
+                            });
+                        }
+                    }
+                }
+                if let Some(spec) = codex_model_info_from_value(child, model) {
+                    return Some(spec);
+                }
+            }
+            None
+        }
+        Value::Array(items) => items
+            .iter()
+            .find_map(|item| codex_model_info_from_value(item, model)),
+        _ => None,
+    }
+}
+
+fn codex_context_window_from_cache(model: Option<&str>) -> Option<ContextWindowSpec> {
+    let model = model?;
+    let path = paths::codex_models_cache();
+    let value = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok())?;
+    codex_model_info_from_value(&value, model)
 }
 
 impl Db {
@@ -759,20 +1189,225 @@ impl Db {
 
     pub fn get_plan(&self) -> Result<String> {
         let conn = self.conn.lock().unwrap();
-        Ok(conn
-            .query_row("SELECT v FROM plan WHERE k='plan'", [], |r| {
-                r.get::<_, String>(0)
+        let selected = conn
+            .query_row(
+                "SELECT plan_id FROM provider_plan_selections WHERE provider='claude'",
+                [],
+                |r| r.get::<_, String>(0),
+            )
+            .ok()
+            .or_else(|| {
+                conn.query_row("SELECT v FROM plan WHERE k='plan'", [], |r| {
+                    r.get::<_, String>(0)
+                })
+                .ok()
+                .map(|legacy| legacy_to_claude_plan(&legacy))
             })
-            .unwrap_or_else(|_| "api".to_string()))
+            .unwrap_or_else(|| "api".to_string());
+        Ok(claude_plan_to_legacy(&selected))
     }
 
     pub fn set_plan(&self, plan: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        let plan_id = legacy_to_claude_plan(plan);
+        let updated_at = now_rfc3339();
         conn.execute(
             "INSERT INTO plan (k,v) VALUES ('plan',?1) ON CONFLICT(k) DO UPDATE SET v=?1",
             params![plan],
         )?;
+        conn.execute(
+            "INSERT INTO provider_plan_selections (provider, plan_id, updated_at) \
+             VALUES ('claude', ?1, ?2) \
+             ON CONFLICT(provider) DO UPDATE SET plan_id=?1, updated_at=?2",
+            params![plan_id, updated_at],
+        )?;
         Ok(())
+    }
+
+    pub fn get_provider_plan(&self, provider: ProviderId) -> Result<String> {
+        let conn = self.conn.lock().unwrap();
+        let provider_id = provider;
+        let provider = provider_id.as_str();
+        let selected = conn
+            .query_row(
+                "SELECT plan_id FROM provider_plan_selections WHERE provider=?1",
+                params![provider],
+                |r| r.get::<_, String>(0),
+            )
+            .ok();
+        if let Some(selected) = selected {
+            return Ok(qualify_plan_id(provider_id, &selected));
+        }
+        if provider == "claude" {
+            if let Ok(legacy) = conn.query_row("SELECT v FROM plan WHERE k='plan'", [], |r| {
+                r.get::<_, String>(0)
+            }) {
+                return Ok(legacy_to_claude_plan(&legacy));
+            }
+        }
+        Ok(default_plan_for_provider(provider_id).to_string())
+    }
+
+    pub fn set_provider_plan(&self, provider: ProviderId, plan_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let provider = provider.as_str();
+        let updated_at = now_rfc3339();
+        conn.execute(
+            "INSERT INTO provider_plan_selections (provider, plan_id, updated_at) \
+             VALUES (?1, ?2, ?3) \
+             ON CONFLICT(provider) DO UPDATE SET plan_id=?2, updated_at=?3",
+            params![provider, plan_id.trim(), updated_at],
+        )?;
+        if provider == "claude" {
+            conn.execute(
+                "INSERT INTO plan (k,v) VALUES ('plan',?1) ON CONFLICT(k) DO UPDATE SET v=?1",
+                params![claude_plan_to_legacy(plan_id.trim())],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn provider_plan_selections(&self) -> Result<Vec<ProviderPlanSelection>> {
+        let conn = self.conn.lock().unwrap();
+        let mut rows_by_provider = HashMap::new();
+        let mut stmt =
+            conn.prepare("SELECT provider, plan_id, updated_at FROM provider_plan_selections")?;
+        let rows = stmt.query_map([], |r| {
+            let provider: String = r.get(0)?;
+            let raw_plan_id: String = r.get(1)?;
+            let plan_id = provider
+                .parse::<ProviderId>()
+                .map(|provider_id| qualify_plan_id(provider_id, &raw_plan_id))
+                .unwrap_or(raw_plan_id);
+            Ok(ProviderPlanSelection {
+                provider,
+                plan_id,
+                updated_at: r.get(2)?,
+            })
+        })?;
+        for row in rows {
+            let row = row?;
+            rows_by_provider.insert(row.provider.clone(), row);
+        }
+        drop(stmt);
+
+        let legacy_claude = conn
+            .query_row("SELECT v FROM plan WHERE k='plan'", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .ok()
+            .map(|legacy| legacy_to_claude_plan(&legacy));
+        let now = now_rfc3339();
+        for provider in ProviderId::ALL {
+            let key = provider.as_str().to_string();
+            rows_by_provider.entry(key.clone()).or_insert_with(|| {
+                let plan_id = if provider == ProviderId::Claude {
+                    legacy_claude
+                        .clone()
+                        .unwrap_or_else(|| default_plan_for_provider(provider).to_string())
+                } else {
+                    default_plan_for_provider(provider).to_string()
+                };
+                ProviderPlanSelection {
+                    provider: key,
+                    plan_id,
+                    updated_at: now.clone(),
+                }
+            });
+        }
+        let mut out = rows_by_provider.into_values().collect::<Vec<_>>();
+        out.sort_by(|a, b| a.provider.cmp(&b.provider));
+        Ok(out)
+    }
+
+    pub fn provider_snapshot_statuses(&self) -> Result<Vec<ProviderSnapshotStatus>> {
+        let conn = self.conn.lock().unwrap();
+        let mut by_provider: HashMap<String, ProviderSnapshotStatus> = ProviderId::ALL
+            .into_iter()
+            .map(|provider| {
+                let provider = provider.as_str().to_string();
+                (
+                    provider.clone(),
+                    ProviderSnapshotStatus {
+                        provider,
+                        context_observed: false,
+                        context_captured_at: None,
+                        plan_usage_observed: false,
+                        plan_usage_captured_at: None,
+                        windows: Vec::new(),
+                    },
+                )
+            })
+            .collect();
+
+        let mut stmt = conn.prepare(
+            "SELECT provider, MAX(captured_at) FROM session_context_latest GROUP BY provider",
+        )?;
+        let context_rows = stmt.query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+        })?;
+        for row in context_rows {
+            let (provider, captured_at) = row?;
+            let entry =
+                by_provider
+                    .entry(provider.clone())
+                    .or_insert_with(|| ProviderSnapshotStatus {
+                        provider,
+                        context_observed: false,
+                        context_captured_at: None,
+                        plan_usage_observed: false,
+                        plan_usage_captured_at: None,
+                        windows: Vec::new(),
+                    });
+            entry.context_observed = captured_at.is_some();
+            entry.context_captured_at = captured_at;
+        }
+        drop(stmt);
+
+        let mut stmt = conn.prepare(
+            "SELECT provider, window_key, captured_at, used_pct \
+             FROM provider_plan_usage_latest ORDER BY provider, window_key",
+        )?;
+        let usage_rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, Option<f64>>(3)?,
+            ))
+        })?;
+        for row in usage_rows {
+            let (provider, window_key, captured_at, used_pct) = row?;
+            let entry =
+                by_provider
+                    .entry(provider.clone())
+                    .or_insert_with(|| ProviderSnapshotStatus {
+                        provider,
+                        context_observed: false,
+                        context_captured_at: None,
+                        plan_usage_observed: false,
+                        plan_usage_captured_at: None,
+                        windows: Vec::new(),
+                    });
+            entry.plan_usage_observed = true;
+            let replace_latest = entry
+                .plan_usage_captured_at
+                .as_ref()
+                .is_none_or(|latest| captured_at > *latest);
+            if replace_latest {
+                entry.plan_usage_captured_at = Some(captured_at.clone());
+            }
+            entry.windows.push(PlanUsageSnapshotWindow {
+                label: plan_usage_label(&window_key),
+                window_key,
+                captured_at: Some(captured_at),
+                used_pct,
+            });
+        }
+
+        let mut out = by_provider.into_values().collect::<Vec<_>>();
+        out.sort_by(|a, b| a.provider.cmp(&b.provider));
+        Ok(out)
     }
 
     /// Read a key from the `settings` k/v table (used for integration tokens).
@@ -2078,6 +2713,385 @@ impl Db {
         Ok(rows)
     }
 
+    pub fn save_claude_statusline_snapshot(&self, payload: &Value) -> Result<()> {
+        let Some(session_id) = payload.get("session_id").and_then(Value::as_str) else {
+            return Ok(());
+        };
+        let captured_at = now_rfc3339();
+        let model = payload
+            .pointer("/model/id")
+            .and_then(Value::as_str)
+            .or_else(|| {
+                payload
+                    .pointer("/model/display_name")
+                    .and_then(Value::as_str)
+            })
+            .map(str::to_string);
+
+        let context_window = payload.get("context_window").unwrap_or(&Value::Null);
+        if context_window.is_object() {
+            let current_usage = context_window
+                .get("current_usage")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            let context_window_size = context_window
+                .get("context_window_size")
+                .and_then(Value::as_i64);
+            let used_tokens = current_usage
+                .as_object()
+                .map(|obj| obj.values().filter_map(Value::as_i64).sum::<i64>())
+                .unwrap_or(0);
+            let used_pct = value_f64_any(context_window, &["used_percentage"]);
+            let remaining_pct = value_f64_any(context_window, &["remaining_percentage"]);
+            let components =
+                components_from_usage(&current_usage, context_window_size, used_tokens);
+            let conn = self.conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO session_context_latest \
+                 (provider, session_id, captured_at, source, model, context_window_size, used_tokens, used_pct, remaining_pct, current_usage_json, components_json) \
+                 VALUES ('claude', ?1, ?2, 'statusline', ?3, ?4, ?5, ?6, ?7, ?8, ?9) \
+                 ON CONFLICT(provider, session_id) DO UPDATE SET \
+                 captured_at=?2, source='statusline', model=?3, context_window_size=?4, used_tokens=?5, used_pct=?6, remaining_pct=?7, current_usage_json=?8, components_json=?9",
+                params![
+                    session_id,
+                    captured_at,
+                    model,
+                    context_window_size,
+                    used_tokens,
+                    used_pct,
+                    remaining_pct,
+                    serde_json::to_string(&current_usage)?,
+                    serde_json::to_string(&components)?,
+                ],
+            )?;
+        }
+
+        if let Some(rate_limits) = payload.get("rate_limits").and_then(Value::as_object) {
+            let conn = self.conn.lock().unwrap();
+            for (window_key, detail) in rate_limits {
+                if !detail.is_object() {
+                    continue;
+                }
+                let used_pct = value_f64_any(detail, &["used_percentage", "usedPercent"]);
+                let resets_at = detail
+                    .get("resets_at")
+                    .or_else(|| detail.get("resetsAt"))
+                    .and_then(Value::as_i64)
+                    .and_then(epoch_seconds_to_rfc3339);
+                let used_amount = value_f64_any(detail, &["used_amount", "used", "current"]);
+                let limit_amount = value_f64_any(detail, &["limit_amount", "limit", "maximum"]);
+                let unit = detail
+                    .get("unit")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                conn.execute(
+                    "INSERT INTO provider_plan_usage_latest \
+                     (provider, account_scope, window_key, captured_at, source, used_pct, resets_at, used_amount, limit_amount, unit, details_json) \
+                     VALUES ('claude', 'default', ?1, ?2, 'statusline', ?3, ?4, ?5, ?6, ?7, ?8) \
+                     ON CONFLICT(provider, account_scope, window_key) DO UPDATE SET \
+                     captured_at=?2, source='statusline', used_pct=?3, resets_at=?4, used_amount=?5, limit_amount=?6, unit=?7, details_json=?8",
+                    params![
+                        window_key,
+                        captured_at,
+                        used_pct,
+                        resets_at,
+                        used_amount,
+                        limit_amount,
+                        unit,
+                        serde_json::to_string(detail)?,
+                    ],
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn session_summary_for_provider(
+        &self,
+        pricing: &Pricing,
+        session_id: &str,
+        provider: ProviderId,
+    ) -> Result<Option<SessionRow>> {
+        let conn = self.conn.lock().unwrap();
+        let provider_str = provider.as_str();
+        let row = conn
+            .query_row(
+                "SELECT provider, session_id, MAX(project_slug), MAX(cwd), MIN(timestamp), MAX(timestamp), \
+                 SUM(CASE WHEN type='user' AND prompt_chars IS NOT NULL THEN 1 ELSE 0 END), \
+                 COALESCE(SUM(input_tokens+output_tokens),0), SUM(reported_cost_usd) \
+                 FROM messages WHERE provider=?1 AND session_id=?2 GROUP BY provider, session_id",
+                params![provider_str, session_id],
+                |r| {
+                    Ok(SessionRow {
+                        provider: r.get(0)?,
+                        session_id: r.get(1)?,
+                        project_slug: r.get(2)?,
+                        sample_cwd: r.get(3)?,
+                        started: r.get(4)?,
+                        ended: r.get(5)?,
+                        turns: r.get(6)?,
+                        tokens: r.get(7)?,
+                        cost_usd: None,
+                        cost_estimated: false,
+                        reported_cost_usd: r.get(8)?,
+                    })
+                },
+            )
+            .ok();
+        drop(conn);
+        let Some(mut row) = row else {
+            return Ok(None);
+        };
+
+        let mut model_usage: HashMap<Option<String>, TokenAcc> = HashMap::new();
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT model, COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), \
+             COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(cache_create_5m_tokens),0), \
+             COALESCE(SUM(cache_create_1h_tokens),0) \
+             FROM messages WHERE provider=?1 AND session_id=?2 GROUP BY model",
+        )?;
+        let rows = stmt.query_map(params![provider_str, session_id], |r| {
+            Ok((
+                r.get::<_, Option<String>>(0)?,
+                Usage {
+                    input_tokens: r.get(1)?,
+                    output_tokens: r.get(2)?,
+                    cache_read_tokens: r.get(3)?,
+                    cache_create_5m_tokens: r.get(4)?,
+                    cache_create_1h_tokens: r.get(5)?,
+                },
+            ))
+        })?;
+        for item in rows {
+            let (model, usage) = item?;
+            model_usage.entry(model).or_default().add(usage);
+        }
+        drop(stmt);
+        drop(conn);
+
+        let mut cost = None;
+        let mut estimated = false;
+        for (model, acc) in model_usage {
+            let c = pricing.cost_for_provider(provider, model.as_deref(), &acc.usage());
+            if let Some(usd) = c.usd {
+                cost = Some(cost.unwrap_or(0.0) + usd);
+                estimated |= c.estimated;
+            }
+        }
+        row.cost_usd = cost;
+        row.cost_estimated = estimated;
+        Ok(Some(row))
+    }
+
+    fn context_window_for_session(
+        &self,
+        pricing: &Pricing,
+        session_id: &str,
+        provider: ProviderId,
+    ) -> Result<ContextWindowDetail> {
+        let conn = self.conn.lock().unwrap();
+        let provider_str = provider.as_str();
+        let stored = conn
+            .query_row(
+                "SELECT captured_at, source, model, context_window_size, used_tokens, used_pct, remaining_pct, current_usage_json, components_json \
+                 FROM session_context_latest WHERE provider=?1 AND session_id=?2",
+                params![provider_str, session_id],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                        r.get::<_, Option<i64>>(3)?,
+                        r.get::<_, Option<i64>>(4)?,
+                        r.get::<_, Option<f64>>(5)?,
+                        r.get::<_, Option<f64>>(6)?,
+                        r.get::<_, String>(7)?,
+                        r.get::<_, String>(8)?,
+                    ))
+                },
+            )
+            .ok();
+        if let Some((
+            captured_at,
+            source,
+            model,
+            context_window_size,
+            used_tokens,
+            used_pct,
+            remaining_pct,
+            current_usage_json,
+            components_json,
+        )) = stored
+        {
+            let current_usage = serde_json::from_str::<Value>(&current_usage_json)
+                .unwrap_or_else(|_| serde_json::json!({}));
+            let components = serde_json::from_str::<Vec<ContextWindowComponent>>(&components_json)
+                .unwrap_or_default();
+            return Ok(ContextWindowDetail {
+                provider: provider_str.to_string(),
+                session_id: session_id.to_string(),
+                captured_at: Some(captured_at),
+                source,
+                model,
+                context_window_size,
+                used_tokens: used_tokens.unwrap_or(0),
+                used_pct,
+                remaining_pct,
+                current_usage,
+                components,
+                supported: true,
+                observed: true,
+                note: None,
+            });
+        }
+
+        let mut stmt = conn.prepare(
+            "SELECT model, COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), \
+             COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(cache_create_5m_tokens+cache_create_1h_tokens),0) \
+             FROM messages WHERE provider=?1 AND session_id=?2 GROUP BY model ORDER BY MAX(timestamp) DESC",
+        )?;
+        let mut rows = stmt.query(params![provider_str, session_id])?;
+        let mut model = None;
+        let mut usage = serde_json::json!({
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+        });
+        if let Some(r) = rows.next()? {
+            model = r.get::<_, Option<String>>(0)?;
+            usage = serde_json::json!({
+                "input_tokens": r.get::<_, i64>(1)?,
+                "output_tokens": r.get::<_, i64>(2)?,
+                "cache_read_input_tokens": r.get::<_, i64>(3)?,
+                "cache_creation_input_tokens": r.get::<_, i64>(4)?,
+            });
+        }
+        drop(rows);
+        drop(stmt);
+        drop(conn);
+
+        let spec = if provider == ProviderId::Codex {
+            codex_context_window_from_cache(model.as_deref())
+                .or_else(|| context_window_from_pricing(pricing, provider, model.as_deref()))
+        } else {
+            context_window_from_pricing(pricing, provider, model.as_deref())
+        };
+        let context_window_size = spec.as_ref().and_then(|s| s.context_window);
+        let used_tokens = usage
+            .as_object()
+            .map(|obj| obj.values().filter_map(Value::as_i64).sum::<i64>())
+            .unwrap_or(0);
+        let used_pct = context_window_size
+            .filter(|size| *size > 0)
+            .map(|size| used_tokens as f64 * 100.0 / size as f64);
+        let remaining_pct = used_pct.map(|pct| (100.0 - pct).max(0.0));
+        let components = components_from_usage(&usage, context_window_size, used_tokens);
+        let supported = context_window_size.is_some() || used_tokens > 0;
+        Ok(ContextWindowDetail {
+            provider: provider_str.to_string(),
+            session_id: session_id.to_string(),
+            captured_at: None,
+            source: if context_window_size.is_some() {
+                "estimated".to_string()
+            } else {
+                "unavailable".to_string()
+            },
+            model,
+            context_window_size,
+            used_tokens,
+            used_pct,
+            remaining_pct,
+            current_usage: usage,
+            components,
+            supported,
+            observed: false,
+            note: if supported {
+                Some("Estimated from local message usage; provider did not expose an official context snapshot.".to_string())
+            } else {
+                Some(
+                    "No local context-window source is available for this provider/session."
+                        .to_string(),
+                )
+            },
+        })
+    }
+
+    fn plan_usage_for_provider(&self, provider: ProviderId) -> Result<Vec<PlanUsageWindow>> {
+        let conn = self.conn.lock().unwrap();
+        let provider_str = provider.as_str();
+        let mut stmt = conn.prepare(
+            "SELECT account_scope, window_key, captured_at, source, used_pct, resets_at, used_amount, limit_amount, unit, details_json \
+             FROM provider_plan_usage_latest WHERE provider=?1 ORDER BY window_key",
+        )?;
+        let rows = stmt
+            .query_map(params![provider_str], |r| {
+                let window_key: String = r.get(1)?;
+                let details_json: String = r.get(9)?;
+                Ok(PlanUsageWindow {
+                    provider: provider_str.to_string(),
+                    account_scope: r.get(0)?,
+                    label: plan_usage_label(&window_key),
+                    window_key,
+                    captured_at: Some(r.get(2)?),
+                    source: r.get(3)?,
+                    used_pct: r.get(4)?,
+                    resets_at: r.get(5)?,
+                    used_amount: r.get(6)?,
+                    limit_amount: r.get(7)?,
+                    unit: r.get(8)?,
+                    details: serde_json::from_str(&details_json)
+                        .unwrap_or_else(|_| serde_json::json!({})),
+                    supported: true,
+                    observed: true,
+                    note: None,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        if rows.is_empty() {
+            return Ok(vec![PlanUsageWindow {
+                provider: provider_str.to_string(),
+                account_scope: "default".to_string(),
+                window_key: "unavailable".to_string(),
+                label: "Plan usage".to_string(),
+                captured_at: None,
+                source: "unavailable".to_string(),
+                used_pct: None,
+                resets_at: None,
+                used_amount: None,
+                limit_amount: None,
+                unit: None,
+                details: serde_json::json!({}),
+                supported: false,
+                observed: false,
+                note: Some(match provider {
+                    ProviderId::Claude => "Enable the Claude Status Line snapshot command in Settings to capture official plan usage.".to_string(),
+                    _ => "No reliable local plan-usage source has been observed for this provider.".to_string(),
+                }),
+            }]);
+        }
+        Ok(rows)
+    }
+
+    pub fn session_bundle_for_provider(
+        &self,
+        pricing: &Pricing,
+        session_id: &str,
+        provider: ProviderId,
+    ) -> Result<SessionBundle> {
+        let session = self.session_summary_for_provider(pricing, session_id, provider)?;
+        let messages = self.session_detail_for_provider(session_id, Some(provider))?;
+        let context_window = self.context_window_for_session(pricing, session_id, provider)?;
+        let plan_usage = self.plan_usage_for_provider(provider)?;
+        Ok(SessionBundle {
+            session,
+            messages,
+            context_window,
+            plan_usage,
+        })
+    }
+
     /// Expensive user prompts: main-thread assistant work in the window between a
     /// prompt and the next prompt in the same session (INV-4).
     pub fn expensive_prompts(
@@ -2608,5 +3622,175 @@ mod tests {
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].provider, "codex", "later instant first");
         assert_eq!(rows[1].provider, "claude");
+    }
+
+    #[test]
+    fn legacy_plan_migrates_to_claude_provider_selection() {
+        let db = Db::open_in_memory().unwrap();
+        db.set_plan("max").unwrap();
+        assert_eq!(db.get_plan().unwrap(), "max");
+        assert_eq!(
+            db.get_provider_plan(ProviderId::Claude).unwrap(),
+            "claude:max-5x"
+        );
+        db.set_provider_plan(ProviderId::Claude, "claude:team-standard")
+            .unwrap();
+        assert_eq!(db.get_plan().unwrap(), "team");
+    }
+
+    #[test]
+    fn provider_snapshot_statuses_reports_empty_statuses() {
+        let db = Db::open_in_memory().unwrap();
+        let statuses = db.provider_snapshot_statuses().unwrap();
+        let claude = statuses
+            .iter()
+            .find(|status| status.provider == ProviderId::Claude.as_str())
+            .unwrap();
+
+        assert!(!statuses.is_empty());
+        assert!(!claude.context_observed);
+        assert!(claude.context_captured_at.is_none());
+        assert!(!claude.plan_usage_observed);
+        assert!(claude.plan_usage_captured_at.is_none());
+        assert!(claude.windows.is_empty());
+    }
+
+    #[test]
+    fn provider_snapshot_statuses_reports_claude_snapshots() {
+        let db = Db::open_in_memory().unwrap();
+        let payload = serde_json::json!({
+            "session_id": "s1",
+            "model": { "id": "claude-sonnet-4-6" },
+            "context_window": {
+                "context_window_size": 200000,
+                "current_usage": {
+                    "input_tokens": 1000,
+                    "output_tokens": 250
+                },
+                "used_percentage": 1.0,
+                "remaining_percentage": 99.0
+            },
+            "rate_limits": {
+                "five_hour": { "used_percentage": 40, "resets_at": 1782774000 }
+            }
+        });
+        db.save_claude_statusline_snapshot(&payload).unwrap();
+
+        let statuses = db.provider_snapshot_statuses().unwrap();
+        let claude = statuses
+            .iter()
+            .find(|status| status.provider == ProviderId::Claude.as_str())
+            .unwrap();
+
+        assert!(claude.context_observed);
+        assert!(claude.context_captured_at.is_some());
+        assert!(claude.plan_usage_observed);
+        assert!(claude.plan_usage_captured_at.is_some());
+        assert!(claude.windows.iter().any(|window| {
+            window.window_key == "five_hour"
+                && window.label == "5-hour limit"
+                && window.used_pct == Some(40.0)
+        }));
+    }
+
+    #[test]
+    fn claude_statusline_snapshot_preserves_generic_usage_windows() {
+        let db = Db::open_in_memory().unwrap();
+        let payload = serde_json::json!({
+            "session_id": "s1",
+            "model": { "id": "claude-sonnet-4-6" },
+            "context_window": {
+                "context_window_size": 200000,
+                "current_usage": {
+                    "input_tokens": 1000,
+                    "output_tokens": 250,
+                    "cache_creation_input_tokens": 500,
+                    "cache_read_input_tokens": 2000
+                },
+                "used_percentage": 2.0,
+                "remaining_percentage": 98.0
+            },
+            "rate_limits": {
+                "five_hour": { "used_percentage": 40, "resets_at": 1782774000 },
+                "sonnet_only": { "used_percentage": 11, "resets_at": 1782777600 },
+                "future_window": { "used_percentage": 7 }
+            }
+        });
+        db.save_claude_statusline_snapshot(&payload).unwrap();
+
+        let pricing = Pricing::load_default();
+        let bundle = db
+            .session_bundle_for_provider(&pricing, "s1", ProviderId::Claude)
+            .unwrap();
+        assert!(bundle.context_window.observed);
+        assert_eq!(bundle.context_window.context_window_size, Some(200000));
+        assert_eq!(bundle.context_window.used_tokens, 3750);
+        assert!(bundle
+            .plan_usage
+            .iter()
+            .any(|window| window.window_key == "future_window" && window.used_pct == Some(7.0)));
+    }
+
+    #[test]
+    fn codex_model_cache_context_window_parser_accepts_nested_models() {
+        let value = serde_json::json!({
+            "models": {
+                "gpt-5-codex": {
+                    "context_window": 272000,
+                    "max_context_window": 400000,
+                    "effective_context_window_percent": 68
+                }
+            }
+        });
+
+        let spec = codex_model_info_from_value(&value, "gpt-5-codex").unwrap();
+        assert_eq!(spec.context_window, Some(272000));
+        assert_eq!(spec.max_context_window, Some(400000));
+        assert_eq!(spec.effective_context_window_percent, Some(68));
+        assert!(spec.source.is_some());
+    }
+
+    #[test]
+    fn session_bundle_estimates_context_without_snapshot() {
+        let db = Db::open_in_memory().unwrap();
+        {
+            let conn = db.conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO messages(uuid, provider, session_id, project_slug, type, timestamp, model, input_tokens, output_tokens) \
+                 VALUES ('m1','claude','s1','repo','assistant','2026-06-22T20:00:00Z','claude-sonnet-4-6',100,50)",
+                [],
+            )
+            .unwrap();
+        }
+        let pricing = Pricing::load_default();
+        let bundle = db
+            .session_bundle_for_provider(&pricing, "s1", ProviderId::Claude)
+            .unwrap();
+        assert!(bundle.session.is_some());
+        assert!(!bundle.context_window.observed);
+        assert_eq!(bundle.context_window.used_tokens, 150);
+        assert!(bundle.context_window.context_window_size.is_some());
+    }
+
+    #[test]
+    fn session_bundle_wrong_provider_returns_empty_unavailable_bundle() {
+        let db = Db::open_in_memory().unwrap();
+        {
+            let conn = db.conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO messages(uuid, provider, session_id, project_slug, type, timestamp, model, input_tokens, output_tokens) \
+                 VALUES ('m1','claude','s1','repo','assistant','2026-06-22T20:00:00Z','claude-sonnet-4-6',100,50)",
+                [],
+            )
+            .unwrap();
+        }
+        let pricing = Pricing::load_default();
+        let bundle = db
+            .session_bundle_for_provider(&pricing, "s1", ProviderId::Codex)
+            .unwrap();
+        assert!(bundle.session.is_none());
+        assert!(bundle.messages.is_empty());
+        assert!(!bundle.context_window.supported);
+        assert_eq!(bundle.plan_usage[0].window_key, "unavailable");
     }
 }

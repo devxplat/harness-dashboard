@@ -19,7 +19,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 # libgit2 (no system git / system libgit2 needed), keeping the single-binary
 # promise. default-features=false drops the HTTPS/SSH transports we never use —
 # all reads are of local repositories.
-git2 = { version = "0.19", default-features = false, features = ["vendored-libgit2"] }
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
 # At-rest encryption for opt-in integration tokens. Pure-Rust (no C deps), so it
 # keeps the single-binary promise. getrandom supplies the key/nonce bytes.
 aes-gcm = "0.10"

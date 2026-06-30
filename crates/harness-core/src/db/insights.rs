@@ -164,7 +164,7 @@ pub struct PrChurnSummary {
     pub p90_churn: Option<f64>,
     #[serde(rename = "avgChangedFiles")]
     pub avg_changed_files: Option<f64>,
-    /// Share of PRs whose deletion ratio exceeds 0.5 — a rework proxy (labeled as such).
+    /// Share of PRs whose deletion ratio exceeds 0.5 â€” a rework proxy (labeled as such).
     #[serde(rename = "reworkProxyPct")]
     pub rework_proxy_pct: Option<f64>,
 }
@@ -1021,8 +1021,8 @@ impl Db {
                     t.lead_sum += hours;
                     t.lead_count += 1;
 
-                    // Cycle-time stages: pickup (open→first review), review (first
-                    // review→merge). Coding/merge stages are unavailable (see DTO docs).
+                    // Cycle-time stages: pickup (openâ†’first review), review (first
+                    // reviewâ†’merge). Coding/merge stages are unavailable (see DTO docs).
                     let c = cycle.entry(repo_key).or_default();
                     c.merged += 1;
                     if let Some(fr) = first_review.as_deref().and_then(parse_ts) {
@@ -1469,6 +1469,7 @@ mod tests {
                 review_count: 1,
                 first_review_at_utc: Some("2026-01-01T10:00:00Z".into()),
                 merge_commit_sha: None,
+                head_sha: None,
                 html_url: None,
             }],
         )
@@ -1504,7 +1505,7 @@ mod tests {
             .unwrap();
         assert_eq!(lead_bucket.pull_requests, 1);
 
-        // Cycle-time: pickup (08:00→10:00) = 2h, review (10:00→12:00) = 2h; coding gap.
+        // Cycle-time: pickup (08:00â†’10:00) = 2h, review (10:00â†’12:00) = 2h; coding gap.
         let all = dora
             .pr_cycle_time
             .iter()
@@ -1515,7 +1516,7 @@ mod tests {
         assert_eq!(all.review_hours, Some(2.0));
         assert!(all.coding_hours.is_none());
 
-        // Size/churn: 30 + 5 = 35 lines → "11-50" bucket; median churn 35; low deletion share.
+        // Size/churn: 30 + 5 = 35 lines â†’ "11-50" bucket; median churn 35; low deletion share.
         let size = dora
             .pr_size_distribution
             .iter()
@@ -1570,7 +1571,7 @@ mod tests {
         assert_eq!(by("other").commits, 1);
         // Totals are emitted in canonical order.
         assert_eq!(out.totals.first().unwrap().category, "feature");
-        // Single day → one period with the right per-category buckets.
+        // Single day â†’ one period with the right per-category buckets.
         assert_eq!(out.periods.len(), 1);
         assert_eq!(out.periods[0].feature, 1);
         assert_eq!(out.periods[0].ktlo, 1);
@@ -1599,6 +1600,7 @@ mod tests {
                     review_count: 0,
                     first_review_at_utc: None,
                     merge_commit_sha: None,
+                    head_sha: None,
                     html_url: None,
                 },
                 PullRequestRow {
@@ -1617,6 +1619,7 @@ mod tests {
                     review_count: 0,
                     first_review_at_utc: None,
                     merge_commit_sha: None,
+                    head_sha: None,
                     html_url: None,
                 },
             ],

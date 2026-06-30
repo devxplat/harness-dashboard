@@ -23,9 +23,9 @@ import {
 import { formatInt, formatTokens } from "@/lib/format";
 import { dayTokens, parseDay } from "@/lib/heatmap";
 import type { ActivityBucket, DailyRow } from "@/lib/types";
+import { useTranslation } from "react-i18next";
 import { Bar, BarChart, Tooltip, useActiveTooltipCoordinate, usePlotArea, XAxis, YAxis } from "recharts";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const TOKEN_COLOR = "var(--color-tokens)"; // AM tokens (lower)
 const TOKEN_PM_COLOR = "color-mix(in oklch, var(--color-tokens) 58%, var(--background))"; // PM tokens (upper)
 const SESSION_COLOR = "var(--color-sessions)";
@@ -43,9 +43,9 @@ interface Point {
 /** Date of a day-column key ("2026-06-20"). */
 const keyDate = (key: string) => parseDay(key.slice(0, 10));
 
-function bucketLabel(key: string): string {
+function bucketLabel(key: string, locale: string): string {
   const d = keyDate(key);
-  return `${MONTHS[d.getMonth()] ?? ""} ${d.getDate()}`;
+  return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(d);
 }
 
 interface ScaleProps {
@@ -184,10 +184,11 @@ function CursorLayer({
 }
 
 function ActivityTooltip({ active, payload }: { active?: boolean; payload?: { payload?: Point }[] }) {
+  const { t, i18n } = useTranslation();
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload;
   if (!row) return null;
-  const label = bucketLabel(row.key);
+  const label = bucketLabel(row.key, i18n.resolvedLanguage ?? "en");
   return (
     <div className="min-w-[170px] rounded-xl border border-border/60 bg-popover/95 p-3 shadow-xl backdrop-blur-sm">
       <p className="mb-3 rounded-md border border-border/60 bg-muted/35 px-2.5 py-1 text-sm font-medium text-foreground">
@@ -197,14 +198,14 @@ function ActivityTooltip({ active, payload }: { active?: boolean; payload?: { pa
         <div className="flex items-center justify-between gap-5">
           <span className="flex items-center gap-2 text-muted-foreground">
             <span className="size-1.5 rounded-full" style={{ background: "var(--color-sessions)" }} />
-            Sessions
+            {t("components.charts.sessions")}
           </span>
           <span className="font-semibold text-foreground">{formatInt(row.sessions)}</span>
         </div>
         <div className="flex items-center justify-between gap-5">
           <span className="flex items-center gap-2 text-muted-foreground">
             <span className="size-1.5 rounded-full" style={{ background: "var(--color-tokens)" }} />
-            Tokens
+            {t("components.charts.tokens")}
           </span>
           <span className="font-semibold text-foreground">{formatTokens(row.tokens)}</span>
         </div>
@@ -224,6 +225,7 @@ export function ActivityHeatmap({
   data: DailyRow[];
   granular?: ActivityBucket[];
 }) {
+  const { t, i18n } = useTranslation();
   // One column per day; the AM/PM token split (from the half-day granular buckets)
   // stacks vertically inside that column. Without granular data a day renders as a
   // single AM block.
@@ -257,24 +259,24 @@ export function ActivityHeatmap({
       <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-            Activity
+            {t("components.charts.activity")}
           </p>
           <div className="flex flex-wrap items-end gap-3 pt-1.5">
             <span className="text-4xl leading-none font-semibold text-foreground tabular-nums">
               {formatTokens(totalTokens)}
             </span>
-            <span className="pb-1 text-sm text-muted-foreground">tokens</span>
+            <span className="pb-1 text-sm text-muted-foreground">{t("components.charts.tokensLower")}</span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground lg:justify-end">
           <span className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-primary" aria-hidden />
-            <span className="font-medium text-foreground">Sessions</span>
+            <span className="font-medium text-foreground">{t("components.charts.sessions")}</span>
             <span className="tabular-nums">{formatInt(totalSessions)}</span>
           </span>
           <span className="flex items-center gap-2">
             <span className="size-2 rounded-full" style={{ background: "var(--color-tokens)" }} aria-hidden />
-            <span className="font-medium text-foreground">Tokens</span>
+            <span className="font-medium text-foreground">{t("components.charts.tokens")}</span>
             <span className="tabular-nums">{formatTokens(totalTokens)}</span>
           </span>
         </div>
@@ -297,7 +299,9 @@ export function ActivityHeatmap({
               tickFormatter={(value: string, index: number) => {
                 const d = keyDate(value);
                 // One label per month (range start + each first-of-month).
-                return index === 0 || d.getDate() === 1 ? MONTHS[d.getMonth()] ?? "" : "";
+                return index === 0 || d.getDate() === 1
+                  ? new Intl.DateTimeFormat(i18n.resolvedLanguage, { month: "short" }).format(d)
+                  : "";
               }}
             />
             <YAxis
@@ -324,8 +328,7 @@ export function ActivityHeatmap({
       </div>
 
       <p className="shrink-0 text-[11px] text-muted-foreground">
-        Each column is a day — tokens split lower&nbsp;AM / upper&nbsp;PM (left axis); orange caps =
-        relative session volume.
+        {t("components.charts.activityHeatmapNote")}
       </p>
     </div>
   );

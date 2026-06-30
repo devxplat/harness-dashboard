@@ -46,9 +46,10 @@ export default function WorkspacesPage() {
   const [shortNames, setShortNames] = useState(true);
   const columns = useMemo(() => makeColumns(shortNames, t), [shortNames, t]);
   const { since, until } = useRange();
-  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { queryProviders, settingsLoaded, hasAvailableProviders, hasSelectedProviders } =
+    useProviderFilter();
   const { data, error, loading } = useApi<WorkspaceRow[]>(
-    settingsLoaded && hasAvailableProviders
+    settingsLoaded && hasAvailableProviders && hasSelectedProviders
       ? `/api/workspaces${rangeQuery(since, until, queryProviders)}`
       : null,
   );

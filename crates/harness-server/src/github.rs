@@ -11,6 +11,7 @@
 use crate::api::ScanEvent;
 use harness_core::db::Db;
 use harness_core::github::{self, BackfillWindow, PrScope, RateLimit};
+use harness_core::model::{PullRequestEventRow, PullRequestRow};
 use serde::Serialize;
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
@@ -305,6 +306,163 @@ async fn fetch_resource(
     })
 }
 
+fn merge_pr_detail(pr: &mut PullRequestRow, detail: PullRequestRow) {
+    pr.title = detail.title.or(pr.title.take());
+    pr.state = detail.state.or(pr.state.take());
+    pr.author = detail.author.or(pr.author.take());
+    pr.created_at_utc = detail.created_at_utc.or(pr.created_at_utc.take());
+    pr.merged_at_utc = detail.merged_at_utc.or(pr.merged_at_utc.take());
+    pr.closed_at_utc = detail.closed_at_utc.or(pr.closed_at_utc.take());
+    pr.head_branch = detail.head_branch.or(pr.head_branch.take());
+    pr.base_branch = detail.base_branch.or(pr.base_branch.take());
+    pr.additions = detail.additions;
+    pr.deletions = detail.deletions;
+    pr.changed_files = detail.changed_files;
+    pr.merge_commit_sha = detail.merge_commit_sha.or(pr.merge_commit_sha.take());
+    pr.head_sha = detail.head_sha.or(pr.head_sha.take());
+    pr.html_url = detail.html_url.or(pr.html_url.take());
+}
+
+async fn enrich_pull_requests(
+    client: &reqwest::Client,
+    owner: &str,
+    repo: &str,
+    token: &str,
+    mut prs: Vec<PullRequestRow>,
+) -> (
+    Vec<PullRequestRow>,
+    Vec<PullRequestEventRow>,
+    Vec<harness_core::model::PullRequestFileRow>,
+    RateLimit,
+) {
+    let mut events = Vec::new();
+    let mut files = Vec::new();
+    let mut last_rate = RateLimit::default();
+    for pr in &mut prs {
+        if github::should_stop(&last_rate, RATE_FLOOR) {
+            break;
+        }
+        let number = pr.number;
+        if let Ok(detail) = get(
+            client,
+            &format!("{API}/repos/{owner}/{repo}/pulls/{number}"),
+            token,
+            None,
+        )
+        .await
+        {
+            last_rate = detail.rate.clone();
+            if let Some(body) = detail.body.as_ref() {
+                if let Some(parsed) = github::parse_pull_request(body) {
+                    merge_pr_detail(pr, parsed);
+                }
+            }
+        }
+
+        if let Ok(reviews) = fetch_resource(
+            client,
+            &format!("{API}/repos/{owner}/{repo}/pulls/{number}/reviews?per_page=100"),
+            token,
+            None,
+            false,
+            None,
+            &["submitted_at"],
+            None,
+        )
+        .await
+        {
+            last_rate = reviews.rate.clone();
+            let mut first_review: Option<String> = pr.first_review_at_utc.clone();
+            let mut review_count = 0;
+            for item in reviews.items {
+                if let Some(event) = github::parse_review_event(&item, number) {
+                    if let Some(at) = event.created_at_utc.as_ref() {
+                        if first_review
+                            .as_deref()
+                            .map(|v| at.as_str() < v)
+                            .unwrap_or(true)
+                        {
+                            first_review = Some(at.clone());
+                        }
+                    }
+                    review_count += 1;
+                    events.push(event);
+                }
+            }
+            if review_count > 0 {
+                pr.review_count = review_count;
+                pr.first_review_at_utc = first_review;
+            }
+        }
+
+        if let Ok(changed_files) = fetch_resource(
+            client,
+            &format!("{API}/repos/{owner}/{repo}/pulls/{number}/files?per_page=100"),
+            token,
+            None,
+            false,
+            None,
+            &[],
+            None,
+        )
+        .await
+        {
+            last_rate = changed_files.rate.clone();
+            files.extend(
+                changed_files
+                    .items
+                    .iter()
+                    .filter_map(|item| github::parse_pull_request_file(item, number)),
+            );
+        }
+
+        if let Ok(comments) = fetch_resource(
+            client,
+            &format!("{API}/repos/{owner}/{repo}/issues/{number}/comments?per_page=100"),
+            token,
+            None,
+            false,
+            None,
+            &["created_at"],
+            None,
+        )
+        .await
+        {
+            last_rate = comments.rate.clone();
+            events.extend(
+                comments
+                    .items
+                    .iter()
+                    .filter_map(|item| github::parse_issue_comment_event(item, number)),
+            );
+        }
+
+        if let Some(head_sha) = pr.head_sha.as_deref() {
+            if let Ok(checks) = fetch_resource(
+                client,
+                &format!("{API}/repos/{owner}/{repo}/commits/{head_sha}/check-runs?per_page=100"),
+                token,
+                None,
+                false,
+                None,
+                &["completed_at", "started_at", "created_at"],
+                Some("check_runs"),
+            )
+            .await
+            {
+                last_rate = checks.rate.clone();
+                events.extend(
+                    checks
+                        .items
+                        .iter()
+                        .filter_map(|item| github::parse_check_run_event(item, number)),
+                );
+            }
+        }
+    }
+    (prs, events, files, last_rate)
+}
+
 /// The repo's transcript slugs (for PR↔session correlation).
 fn slugs_of(repo: &harness_core::db::GithubRepo) -> Vec<String> {
     repo.slugs_json
@@ -359,7 +517,14 @@ async fn sync_one(
             .into_iter()
             .filter(|pr| github::pr_in_scope(pr, pr_scope, login))
             .collect();
+        let (kept, events, files, enriched_rate) =
+            enrich_pull_requests(client, o, r, token, kept).await;
+        if enriched_rate.remaining.is_some() || enriched_rate.limit.is_some() {
+            last_rate = enriched_rate;
+        }
         pr_n = db.insert_pull_requests(key, &kept)?;
+        let _ = db.replace_pull_request_events(key, &events)?;
+        let _ = db.replace_pull_request_files(key, &files)?;
         db.set_sync_state(
             key,
             "pulls",

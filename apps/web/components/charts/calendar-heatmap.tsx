@@ -21,12 +21,11 @@ import type { CommitDailyRow, DailyRow, MeetingDay } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 /** The calendar's own metric union — the shared usage metrics plus commits/meetings. */
 type CalMetric = HeatMetric | "commits" | "meetings";
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const LEVELS = 4;
 
 const RAMP: Record<CalMetric, string[]> = {
@@ -50,6 +49,7 @@ export function CalendarHeatmap({
   commits?: CommitDailyRow[];
   meetings?: MeetingDay[];
 }) {
+  const { t, i18n } = useTranslation();
   const [metric, setMetric] = useState<CalMetric>("sessions");
   // Commits / meetings are opt-in metrics; only offer each when its data is present.
   const metrics: CalMetric[] = [
@@ -82,10 +82,19 @@ export function CalendarHeatmap({
         : maxValue(data, metric);
   const cells = monthCells(view.year, view.month);
   const today = new Date();
-  const monthLabel = new Date(view.year, view.month).toLocaleString(undefined, {
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+  const shortDateLocale = locale === "en" ? "en-GB" : locale;
+  const monthLabel = new Date(view.year, view.month).toLocaleString(locale, {
     month: "long",
     year: "numeric",
   });
+  const weekdayLabels = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, day) =>
+        new Date(2024, 0, 7 + day).toLocaleDateString(locale, { weekday: "short" }),
+      ),
+    [locale],
+  );
 
   const valueAt = (d: Date) => {
     const key = isoDay(d);
@@ -116,7 +125,7 @@ export function CalendarHeatmap({
         <div className="flex flex-1 items-center gap-2 rounded-xl bg-muted/35 px-2 py-2">
           <button
             type="button"
-            aria-label="Previous month"
+            aria-label={t("components.charts.previousMonth")}
             onClick={() => shift(-1)}
             className="flex size-6 items-center justify-center rounded-md border border-border/80 bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
@@ -125,14 +134,14 @@ export function CalendarHeatmap({
           <span className="flex-1 text-center text-sm font-medium text-foreground/85">{monthLabel}</span>
           <button
             type="button"
-            aria-label="Next month"
+            aria-label={t("components.charts.nextMonth")}
             onClick={() => shift(1)}
             className="flex size-6 items-center justify-center rounded-md border border-border/80 bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <ChevronRight className="size-3.5" />
           </button>
         </div>
-        <div className="flex gap-1" role="group" aria-label="Heatmap metric">
+        <div className="flex gap-1" role="group" aria-label={t("components.charts.heatmapMetric")}>
           {metrics.map((m) => (
             <Button
               key={m}
@@ -142,7 +151,7 @@ export function CalendarHeatmap({
               onClick={() => setMetric(m)}
               className="capitalize"
             >
-              {m}
+              {t(`enums.heatMetric.${m}`)}
             </Button>
           ))}
         </div>
@@ -150,7 +159,7 @@ export function CalendarHeatmap({
 
       <div className="flex min-h-0 w-full flex-1 flex-col pt-3">
         <div className="grid shrink-0 grid-cols-7 text-center text-[10px] font-medium tracking-[0.04em] text-muted-foreground">
-          {WEEKDAYS.map((w) => (
+          {weekdayLabels.map((w) => (
             <span key={w} className="py-1">
               {w}
             </span>
@@ -193,15 +202,15 @@ export function CalendarHeatmap({
 
         <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 pt-3 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-1.5">
-            <span>Less</span>
+            <span>{t("common.less")}</span>
             {[0, 1, 2, 3, 4].map((l) => (
               <span key={l} className={cn("size-2.5 rounded-[4px]", cellClass(l, metric))} aria-hidden />
             ))}
-            <span>More</span>
+            <span>{t("common.more")}</span>
           </div>
           <span className="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground/80">
             <span className="font-medium text-foreground/85">
-              {active.getDate()} {MONTHS3[active.getMonth()]}
+              {active.toLocaleDateString(shortDateLocale, { day: "numeric", month: "short" })}
             </span>
             <span className="flex items-center gap-1">
               <span className="size-1.5 rounded-full bg-primary" aria-hidden />
@@ -220,7 +229,7 @@ export function CalendarHeatmap({
             {meetings ? (
               <span className="flex items-center gap-1">
                 <span className="size-1.5 rounded-full bg-amber-500" aria-hidden />
-                {formatInt(activeMeetingMin)}m
+                {t("components.charts.minutesShort", { count: formatInt(activeMeetingMin) })}
               </span>
             ) : null}
           </span>

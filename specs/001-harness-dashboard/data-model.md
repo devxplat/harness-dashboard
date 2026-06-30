@@ -63,6 +63,15 @@ Indexes: `session`, `(tool_name, timestamp)`, `target`, `tool_use_id`.
 - `plan(k PK, v)` — selected pricing plan.
 - `settings(k PK, v)` — UI/runtime settings (e.g. claude dir override).
 - `dismissed_tips(tip_key PK, dismissed_at REAL)`.
+- `provider_plan_selections(provider PK, plan_id, updated_at)` — selected plan per provider.
+  `plan_id` is provider-qualified, for example `claude:max-5x`. The legacy `plan` row maps only to
+  Claude for backward compatibility.
+- `session_context_latest(provider, session_id, captured_at, source, model,
+  context_window_size, used_tokens, used_pct, remaining_pct, current_usage_json,
+  components_json; PK(provider,session_id))` — latest sanitized context snapshot or estimate.
+- `provider_plan_usage_latest(provider, account_scope, window_key, captured_at, source, used_pct,
+  resets_at, used_amount, limit_amount, unit, details_json; PK(provider,account_scope,window_key))`
+  — latest sanitized provider usage windows.
 
 ## Invariants
 
@@ -101,3 +110,9 @@ The project slug is the encoded transcript directory name (drive letters, colons
 become hyphens). Reproduce the encoding exactly; do not normalize via path APIs. Workspace
 classification of a file target is a longest-prefix match against the index of observed
 `(cwd, project_slug)` pairs.
+
+### INV-7 — Context and plan usage provenance
+Provider context-window and plan-usage records MUST be latest-only and MUST carry provenance.
+Official provider payloads are stored only as sanitized fields, not raw payloads. Values inferred
+from local messages, model catalogs, or cache files MUST be labeled `estimated`, `computed`, or
+`unavailable` rather than `reported`.

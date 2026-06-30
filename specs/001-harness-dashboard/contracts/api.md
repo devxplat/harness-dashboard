@@ -15,6 +15,7 @@ inclusive, `until` exclusive). Responses are cached in-process with a short TTL,
 | `/api/tools` | `since,until` | `[{ tool_name, calls, result_tokens }]` |
 | `/api/sessions` | `limit, since, until` | `[{ session_id, project_slug, sample_cwd, started, ended, turns, tokens, cost_usd, cost_estimated }]` |
 | `/api/sessions/:id` | — | `[{ uuid, parent_uuid, type, timestamp, model, is_sidechain, agent_id, input_tokens, output_tokens, cache_read_tokens, cache_create_5m_tokens, cache_create_1h_tokens, prompt_text, prompt_chars, tool_calls_json, project_slug, cwd }]` (timestamp order) |
+| `/api/sessions/:id/bundle` | `provider` | `{ session, messages, context_window, plan_usage }` where `context_window` and each plan usage window include `source`, `supported`, and `observed` provenance flags |
 | `/api/daily` | `since,until` | `[{ day, input_tokens, output_tokens, cache_read_tokens, cache_create_tokens }]` |
 | `/api/by-model` | `since,until` | `[{ model, turns, input_tokens, output_tokens, cache_read_tokens, cost_usd, cost_estimated }]` |
 | `/api/skills` | `since,until` | `[{ skill, manual_sessions, tool_invocations, sessions, last_used, total_cost_usd, ... }]` |
@@ -22,7 +23,8 @@ inclusive, `until` exclusive). Responses are cached in-process with a short TTL,
 | `/api/workspaces` | `since,until` | `{ nodes, links, total_calls, self_loop_calls, cross_workspace_calls }` |
 | `/api/cross-workspace-leaks` | `limit, since, until` | `[{ source, target, calls, sessions, top_files }]` |
 | `/api/tips` | — | `[{ key, category, severity, title, body, scope, links, estimated_savings_usd }]` |
-| `/api/plan` | — | `{ plan, pricing }` |
+| `/api/plan` | — | `{ plan, pricing }` (legacy global plan; maps to Claude provider selection) |
+| `/api/provider-plans` | — | `{ catalog, selections, source_checked_at }` |
 | `/api/settings` | — | `{ claude_dir, projects_dir, projects_overridden, claude_dirs }` |
 | `/api/rtk` | — | `{ available, install_url, summary, daily, weekly, monthly }` (`available:false` when no `rtk`) |
 | `/api/scan` | — | `{ messages, tools, files, scan_seconds, summary_seconds }` (blocking rescan) |
@@ -32,6 +34,7 @@ inclusive, `until` exclusive). Responses are cached in-process with a short TTL,
 | Endpoint | Body | Returns |
 | --- | --- | --- |
 | `/api/plan` | `{ plan }` | `{ ok: true }` |
+| `/api/provider-plans` | `{ provider, plan_id }` | `{ ok: true }` |
 | `/api/settings` | `{ plan?, claude_dir?, reset_scan_data? }` | `{ ok: true, ...settings }` |
 | `/api/tips/dismiss` | `{ key }` | `{ ok: true }` |
 | `/api/refresh` | `{}` | `{ ok: true }` (async scan; returns immediately) |
@@ -47,6 +50,9 @@ inclusive, `until` exclusive). Responses are cached in-process with a short TTL,
 ## Limits
 - `limit` clamped to ≤ 1000.
 - POST bodies clamped to ≤ 1 MB.
+- Provider plan IDs must exist in the embedded catalog, be provider-qualified such as
+  `claude:pro` or `codex:plus`, and be selectable; Enterprise entries are non-selectable until
+  API-key/enterprise support is implemented.
 
 ## Dev vs. packaged
 - **Dev:** the web app reads `NEXT_PUBLIC_API_BASE` (e.g. `http://127.0.0.1:8080`) and the server

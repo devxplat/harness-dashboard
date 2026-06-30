@@ -89,11 +89,12 @@ export default function PromptsPage() {
     { id: sort === "recent" ? "timestamp" : "billable_tokens", desc: true },
   ];
   const { since, until } = useRange();
-  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { queryProviders, settingsLoaded, hasAvailableProviders, hasSelectedProviders } =
+    useProviderFilter();
   // Reset to the first page whenever the result set changes underneath us.
   useEffect(() => setPage(0), [sort, since, until, queryProviders]);
   const { data, error, loading } = useApi<Paged<PromptRow>>(
-    settingsLoaded && hasAvailableProviders
+    settingsLoaded && hasAvailableProviders && hasSelectedProviders
       ? withRange(
           `/api/prompts?sort=${sort}&page=${page}&page_size=${pageSize}`,
           since,

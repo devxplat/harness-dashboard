@@ -77,9 +77,10 @@ function AgentTable({
 export default function SubagentsPage() {
   const { t } = useTranslation();
   const { since, until } = useRange();
-  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { queryProviders, settingsLoaded, hasAvailableProviders, hasSelectedProviders } =
+    useProviderFilter();
   const { data, error, loading } = useApi<SubagentsResponse>(
-    settingsLoaded && hasAvailableProviders
+    settingsLoaded && hasAvailableProviders && hasSelectedProviders
       ? `/api/subagents${rangeQuery(since, until, queryProviders)}`
       : null,
   );

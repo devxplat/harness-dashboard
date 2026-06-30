@@ -1,10 +1,12 @@
 //! Pure parsers from GitHub REST API JSON into insertable rows.
 //!
 //! The network fetch lives in `harness-server` (async, opt-in); this module is the
-//! offline, deterministic half — so the field extraction and edge cases are fully
+//! offline, deterministic half â€” so the field extraction and edge cases are fully
 //! `cargo test`-able from fixture JSON without any HTTP.
 
-use crate::model::{DeploymentRow, IncidentRow, PullRequestRow};
+use crate::model::{
+    DeploymentRow, IncidentRow, PullRequestEventRow, PullRequestFileRow, PullRequestRow,
+};
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use serde_json::Value;
 
@@ -16,7 +18,7 @@ fn i(v: &Value, key: &str) -> i64 {
     v.get(key).and_then(Value::as_i64).unwrap_or(0)
 }
 
-/// Best-effort severity from an issue's labels array (`severity:high`, `sev1`, `p1`…).
+/// Best-effort severity from an issue's labels array (`severity:high`, `sev1`, `p1`â€¦).
 fn parse_severity(labels: &Value) -> Option<String> {
     let arr = labels.as_array()?;
     for label in arr {
@@ -38,7 +40,7 @@ fn parse_severity(labels: &Value) -> Option<String> {
 }
 
 /// Parse one item from `GET /repos/{o}/{r}/issues?labels=incident&state=all` into an
-/// incident. The issues endpoint also returns PRs (they carry a `pull_request` key) —
+/// incident. The issues endpoint also returns PRs (they carry a `pull_request` key) â€”
 /// those are skipped. A closed issue is treated as a resolved incident.
 pub fn parse_incident_issue(v: &Value, repo_key: &str) -> Option<IncidentRow> {
     if v.get("pull_request").is_some() {
@@ -100,6 +102,11 @@ pub fn parse_pull_request(v: &Value) -> Option<PullRequestRow> {
         review_count: 0,
         first_review_at_utc: None,
         merge_commit_sha: s(v, "merge_commit_sha"),
+        head_sha: v
+            .get("head")
+            .and_then(|h| h.get("sha"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
         html_url: s(v, "html_url"),
     })
 }
@@ -118,9 +125,84 @@ pub fn parse_release(v: &Value) -> Option<DeploymentRow> {
     })
 }
 
+pub fn parse_review_event(v: &Value, pr_number: i64) -> Option<PullRequestEventRow> {
+    let id = v.get("id").and_then(Value::as_i64)?.to_string();
+    Some(PullRequestEventRow {
+        pr_number,
+        event_type: "review".into(),
+        ext_id: id,
+        title: Some("Review".into()),
+        actor: v
+            .get("user")
+            .and_then(|u| u.get("login"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        body: s(v, "body"),
+        state: s(v, "state"),
+        conclusion: None,
+        created_at_utc: s(v, "submitted_at"),
+        html_url: s(v, "html_url"),
+    })
+}
+
+pub fn parse_issue_comment_event(v: &Value, pr_number: i64) -> Option<PullRequestEventRow> {
+    let id = v.get("id").and_then(Value::as_i64)?.to_string();
+    Some(PullRequestEventRow {
+        pr_number,
+        event_type: "comment".into(),
+        ext_id: id,
+        title: Some("Comment".into()),
+        actor: v
+            .get("user")
+            .and_then(|u| u.get("login"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        body: s(v, "body"),
+        state: None,
+        conclusion: None,
+        created_at_utc: s(v, "created_at"),
+        html_url: s(v, "html_url"),
+    })
+}
+
+pub fn parse_check_run_event(v: &Value, pr_number: i64) -> Option<PullRequestEventRow> {
+    let id = v.get("id").and_then(Value::as_i64)?.to_string();
+    Some(PullRequestEventRow {
+        pr_number,
+        event_type: "check".into(),
+        ext_id: id,
+        title: s(v, "name").or_else(|| Some("Check run".into())),
+        actor: v
+            .get("app")
+            .and_then(|a| a.get("name"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        body: s(v, "details_url"),
+        state: s(v, "status"),
+        conclusion: s(v, "conclusion"),
+        created_at_utc: s(v, "completed_at")
+            .or_else(|| s(v, "started_at"))
+            .or_else(|| s(v, "created_at")),
+        html_url: s(v, "html_url").or_else(|| s(v, "details_url")),
+    })
+}
+
+pub fn parse_pull_request_file(v: &Value, pr_number: i64) -> Option<PullRequestFileRow> {
+    Some(PullRequestFileRow {
+        pr_number,
+        path: s(v, "filename")?,
+        status: s(v, "status"),
+        additions: i(v, "additions"),
+        deletions: i(v, "deletions"),
+        changes: i(v, "changes"),
+        previous_path: s(v, "previous_filename"),
+        blob_url: s(v, "blob_url"),
+    })
+}
+
 /// Parse one item from `GET /repos/{o}/{r}/actions/runs` (`workflow_runs[]`).
-/// Only deploy-ish conclusions are interesting; status maps `success`→success,
-/// everything terminal-but-not-success→failure, in-progress→None.
+/// Only deploy-ish conclusions are interesting; status maps `success`â†’success,
+/// everything terminal-but-not-successâ†’failure, in-progressâ†’None.
 pub fn parse_workflow_run(v: &Value) -> Option<DeploymentRow> {
     let id = v.get("id").and_then(Value::as_i64)?;
     let status = match v.get("conclusion").and_then(Value::as_str) {
@@ -151,7 +233,7 @@ pub enum BackfillWindow {
 }
 
 /// Parse the stored backfill setting (`value` + `unit`) into a window. Weeks/months
-/// normalize to days; unknown units fall back to 90 days; values clamp to ≥ 1.
+/// normalize to days; unknown units fall back to 90 days; values clamp to â‰¥ 1.
 pub fn parse_backfill_window(value: &str, unit: &str) -> BackfillWindow {
     match unit {
         "all" => BackfillWindow::All,
@@ -169,7 +251,7 @@ pub fn parse_backfill_window(value: &str, unit: &str) -> BackfillWindow {
     }
 }
 
-/// RFC3339 "…Z" lower bound for the window, or `None` for All/Recent. `now` is
+/// RFC3339 "â€¦Z" lower bound for the window, or `None` for All/Recent. `now` is
 /// injected so it is deterministic in tests; the cutoff is always UTC.
 pub fn since_timestamp(window: &BackfillWindow, now: DateTime<Utc>) -> Option<String> {
     match window {
@@ -201,8 +283,8 @@ pub struct RateLimit {
     pub retry_after_secs: Option<i64>,
 }
 
-/// Parse rate-limit headers (case-insensitive). `x-ratelimit-reset` (unix secs) →
-/// RFC3339 "…Z"; `retry-after` (secs) preserved.
+/// Parse rate-limit headers (case-insensitive). `x-ratelimit-reset` (unix secs) â†’
+/// RFC3339 "â€¦Z"; `retry-after` (secs) preserved.
 pub fn parse_rate_limit(headers: &[(String, String)]) -> RateLimit {
     let get = |name: &str| {
         headers
@@ -280,7 +362,7 @@ pub enum PrScope {
     Mine,
 }
 
-/// Parse the stored `github_pr_scope` setting; unknown → `All` (the default).
+/// Parse the stored `github_pr_scope` setting; unknown â†’ `All` (the default).
 pub fn parse_pr_scope(s: &str) -> PrScope {
     match s {
         "mine" => PrScope::Mine,
@@ -301,7 +383,7 @@ pub fn pr_in_scope(pr: &PullRequestRow, scope: PrScope, login: Option<&str>) -> 
 }
 
 /// New high-water mark: the max of each PR's created/merged time and the previous
-/// mark. RFC3339 "…Z" sorts lexicographically, so a plain string max is correct.
+/// mark. RFC3339 "â€¦Z" sorts lexicographically, so a plain string max is correct.
 pub fn max_updated_at(prs: &[PullRequestRow], prev_high_water: Option<&str>) -> Option<String> {
     let mut best: Option<String> = prev_high_water.map(str::to_string);
     for pr in prs {
@@ -317,7 +399,7 @@ pub fn max_updated_at(prs: &[PullRequestRow], prev_high_water: Option<&str>) -> 
     best
 }
 
-/// Whether a periodic auto-sync is due. Unset `last_sync` → due; unparseable → not due.
+/// Whether a periodic auto-sync is due. Unset `last_sync` â†’ due; unparseable â†’ not due.
 pub fn autosync_due(last_sync: Option<&str>, interval_min: i64, now: DateTime<Utc>) -> bool {
     match last_sync {
         None => true,
@@ -394,6 +476,28 @@ mod tests {
         let pr = parse_pull_request(&json!({ "number": 1, "state": "open" })).unwrap();
         assert_eq!(pr.state.as_deref(), Some("open"));
         assert!(pr.merged_at_utc.is_none());
+    }
+
+    #[test]
+    fn parses_pull_request_file() {
+        let file = parse_pull_request_file(
+            &json!({
+                "filename": "src/checkout.rs",
+                "status": "renamed",
+                "additions": 12,
+                "deletions": 3,
+                "changes": 15,
+                "previous_filename": "src/payments.rs",
+                "blob_url": "https://github.com/o/r/blob/main/src/checkout.rs"
+            }),
+            42,
+        )
+        .unwrap();
+        assert_eq!(file.pr_number, 42);
+        assert_eq!(file.path, "src/checkout.rs");
+        assert_eq!(file.previous_path.as_deref(), Some("src/payments.rs"));
+        assert_eq!(file.changes, 15);
+        assert!(parse_pull_request_file(&json!({ "status": "modified" }), 42).is_none());
     }
 
     #[test]
@@ -557,6 +661,7 @@ mod tests {
             review_count: 0,
             first_review_at_utc: None,
             merge_commit_sha: None,
+            head_sha: None,
             html_url: None,
         };
         let prs = [
@@ -591,6 +696,7 @@ mod tests {
             review_count: 0,
             first_review_at_utc: None,
             merge_commit_sha: None,
+            head_sha: None,
             html_url: None,
         };
         assert_eq!(parse_pr_scope("mine"), PrScope::Mine);

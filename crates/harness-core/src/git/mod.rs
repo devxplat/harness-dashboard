@@ -249,7 +249,10 @@ fn read_tags(repo: &git2::Repository, cutoff_secs: Option<i64>) -> Vec<Deploymen
         return Vec::new();
     };
     let mut out = Vec::new();
-    for name in names.iter().flatten() {
+    for maybe_name in names.iter().flatten() {
+        let Some(name) = maybe_name else {
+            continue;
+        };
         let Ok(obj) = repo.revparse_single(name) else {
             continue;
         };
@@ -309,7 +312,7 @@ pub fn read_new_commits(
                 .and_then(|h| h.target())
                 .map(|o| o.to_string()),
             head.as_ref()
-                .and_then(|h| h.shorthand())
+                .and_then(|h| h.shorthand().ok())
                 .map(str::to_string),
         )
     };
@@ -317,7 +320,7 @@ pub fn read_new_commits(
     let remote_url = repo
         .find_remote("origin")
         .ok()
-        .and_then(|r| r.url().map(str::to_string));
+        .and_then(|r| r.url().ok().map(str::to_string));
     let (gh_owner, gh_repo) = match remote_url.as_deref().and_then(parse_github_remote) {
         Some((o, r)) => (Some(o), Some(r)),
         None => (None, None),
@@ -381,15 +384,15 @@ pub fn read_new_commits(
             diff_stats(&repo, &commit)
         };
 
-        let message = commit.message().map(str::to_string);
+        let message = commit.message().ok().map(str::to_string);
         let ai_coauthor_trailer = message.as_deref().map(detect_ai_trailer).unwrap_or(false);
         let coauthors = message.as_deref().map(parse_coauthors).unwrap_or_default();
 
         commits.push(CommitRow {
             sha: oid.to_string(),
             project_slug: project_slug.map(str::to_string),
-            author_name: author.name().map(str::to_string),
-            author_email: author.email().map(str::to_string),
+            author_name: author.name().ok().map(str::to_string),
+            author_email: author.email().ok().map(str::to_string),
             authored_at_utc,
             authored_at_local,
             authored_tz_offset_min: when.offset_minutes(),
@@ -398,7 +401,7 @@ pub fn read_new_commits(
             committed_at_utc: Some(committed_at_utc),
             branch: head_branch.clone(),
             message,
-            subject: commit.summary().map(str::to_string),
+            subject: commit.summary().ok().flatten().map(str::to_string),
             is_merge,
             files_changed,
             insertions,

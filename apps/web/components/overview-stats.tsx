@@ -110,7 +110,7 @@ export function OverviewStats({
         </div>
 
         <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Link href="/sessions" aria-label="Browse sessions" className="block h-full">
+          <Link href="/sessions" aria-label={tr("overview.aria.browseSessions")} className="block h-full">
             <StatsCard2
               title={tr("overview.cards.sessions")}
               value={formatInt(t.sessions)}
@@ -122,7 +122,7 @@ export function OverviewStats({
             />
           </Link>
 
-          <Link href="/projects" aria-label="Input tokens by project" className="block h-full">
+          <Link href="/projects" aria-label={tr("overview.aria.inputByProject")} className="block h-full">
             <StatsCard2
               title={tr("overview.cards.input")}
               value={formatTokens(t.input_tokens)}
@@ -134,7 +134,7 @@ export function OverviewStats({
             />
           </Link>
 
-          <Link href="/projects" aria-label="Output tokens by project" className="block h-full">
+          <Link href="/projects" aria-label={tr("overview.aria.outputByProject")} className="block h-full">
             <StatsCard2
               title={tr("overview.cards.output")}
               value={formatTokens(t.output_tokens)}
@@ -146,7 +146,7 @@ export function OverviewStats({
             />
           </Link>
 
-          <Link href="/prompts" aria-label="Most expensive prompts" className="block h-full">
+          <Link href="/prompts" aria-label={tr("overview.aria.expensivePrompts")} className="block h-full">
             <StatsCard1
               title={tr("overview.cards.cost")}
               value={formatUSD(t.cost_usd)}

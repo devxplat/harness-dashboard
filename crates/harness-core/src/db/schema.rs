@@ -122,6 +122,44 @@ CREATE TABLE IF NOT EXISTS plan           (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS settings       (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS dismissed_tips (tip_key TEXT PRIMARY KEY, dismissed_at REAL);
 
+CREATE TABLE IF NOT EXISTS provider_plan_selections (
+    provider   TEXT PRIMARY KEY,
+    plan_id    TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS session_context_latest (
+    provider            TEXT NOT NULL,
+    session_id          TEXT NOT NULL,
+    captured_at         TEXT NOT NULL,
+    source              TEXT NOT NULL,
+    model               TEXT,
+    context_window_size INTEGER,
+    used_tokens         INTEGER,
+    used_pct            REAL,
+    remaining_pct       REAL,
+    current_usage_json  TEXT NOT NULL DEFAULT '{}',
+    components_json     TEXT NOT NULL DEFAULT '[]',
+    PRIMARY KEY (provider, session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_session_context_captured ON session_context_latest(captured_at);
+
+CREATE TABLE IF NOT EXISTS provider_plan_usage_latest (
+    provider      TEXT NOT NULL,
+    account_scope TEXT NOT NULL DEFAULT 'default',
+    window_key    TEXT NOT NULL,
+    captured_at   TEXT NOT NULL,
+    source        TEXT NOT NULL,
+    used_pct      REAL,
+    resets_at     TEXT,
+    used_amount   REAL,
+    limit_amount  REAL,
+    unit          TEXT,
+    details_json  TEXT NOT NULL DEFAULT '{}',
+    PRIMARY KEY (provider, account_scope, window_key)
+);
+CREATE INDEX IF NOT EXISTS idx_plan_usage_provider_captured ON provider_plan_usage_latest(provider, captured_at);
+
 CREATE TABLE IF NOT EXISTS source_items (
     provider    TEXT NOT NULL,
     source_path TEXT NOT NULL,
@@ -222,6 +260,7 @@ CREATE TABLE IF NOT EXISTS pull_requests (
     review_count        INTEGER NOT NULL DEFAULT 0,
     first_review_at_utc TEXT,
     merge_commit_sha    TEXT,
+    head_sha            TEXT,
     html_url            TEXT,
     ai_session_overlap  INTEGER NOT NULL DEFAULT 0, -- opened/merged during a Claude session
     PRIMARY KEY (repo_key, number)
@@ -230,6 +269,80 @@ CREATE INDEX IF NOT EXISTS idx_pr_created ON pull_requests(created_at_utc);
 CREATE INDEX IF NOT EXISTS idx_pr_merged  ON pull_requests(merged_at_utc);
 CREATE INDEX IF NOT EXISTS idx_pr_repo_created ON pull_requests(repo_key, created_at_utc);
 CREATE INDEX IF NOT EXISTS idx_pr_repo_merged  ON pull_requests(repo_key, merged_at_utc);
+
+CREATE TABLE IF NOT EXISTS pull_request_events (
+    repo_key       TEXT NOT NULL,
+    pr_number      INTEGER NOT NULL,
+    event_type     TEXT NOT NULL, -- created | review | comment | check | merged | closed
+    ext_id         TEXT NOT NULL,
+    title          TEXT,
+    actor          TEXT,
+    body           TEXT,
+    state          TEXT,
+    conclusion     TEXT,
+    created_at_utc TEXT,
+    html_url       TEXT,
+    PRIMARY KEY (repo_key, pr_number, event_type, ext_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pr_events_pr_created ON pull_request_events(repo_key, pr_number, created_at_utc);
+
+CREATE TABLE IF NOT EXISTS pull_request_files (
+    repo_key       TEXT NOT NULL,
+    pr_number      INTEGER NOT NULL,
+    path           TEXT NOT NULL,
+    status         TEXT,
+    additions      INTEGER NOT NULL DEFAULT 0,
+    deletions      INTEGER NOT NULL DEFAULT 0,
+    changes        INTEGER NOT NULL DEFAULT 0,
+    previous_path  TEXT,
+    blob_url       TEXT,
+    PRIMARY KEY (repo_key, pr_number, path)
+);
+CREATE INDEX IF NOT EXISTS idx_pr_files_pr ON pull_request_files(repo_key, pr_number);
+
+CREATE TABLE IF NOT EXISTS pull_request_ai_indexes (
+    repo_key             TEXT NOT NULL,
+    pr_number            INTEGER NOT NULL,
+    index_type           TEXT NOT NULL, -- business_value | ai_maturity
+    score                INTEGER NOT NULL,
+    grade                TEXT,
+    category             TEXT,
+    category_scores_json TEXT NOT NULL DEFAULT '{}',
+    summary              TEXT,
+    evidence_json        TEXT NOT NULL DEFAULT '[]',
+    recommendations_json TEXT NOT NULL DEFAULT '[]',
+    confidence           REAL,
+    engine               TEXT,
+    input_hash           TEXT,
+    generated_at_utc     TEXT,
+    PRIMARY KEY (repo_key, pr_number, index_type)
+);
+CREATE INDEX IF NOT EXISTS idx_pr_ai_indexes_type_score ON pull_request_ai_indexes(index_type, score);
+
+CREATE TABLE IF NOT EXISTS pull_request_session_correlations (
+    repo_key               TEXT NOT NULL,
+    pr_number              INTEGER NOT NULL,
+    provider               TEXT NOT NULL,
+    session_id             TEXT NOT NULL,
+    mode                   TEXT NOT NULL, -- deterministic | ai
+    score                  REAL NOT NULL,
+    confidence             REAL NOT NULL,
+    summary                TEXT,
+    reasons_json           TEXT NOT NULL DEFAULT '[]',
+    signals_json           TEXT NOT NULL DEFAULT '{}',
+    session_started_at_utc TEXT,
+    session_ended_at_utc   TEXT,
+    project_slug           TEXT,
+    sample_cwd             TEXT,
+    turns                  INTEGER NOT NULL DEFAULT 0,
+    tokens                 INTEGER NOT NULL DEFAULT 0,
+    engine                 TEXT,
+    input_hash             TEXT,
+    generated_at_utc       TEXT,
+    PRIMARY KEY (repo_key, pr_number, provider, session_id, mode)
+);
+CREATE INDEX IF NOT EXISTS idx_pr_session_corr_pr ON pull_request_session_correlations(repo_key, pr_number, confidence);
+CREATE INDEX IF NOT EXISTS idx_pr_session_corr_session ON pull_request_session_correlations(provider, session_id);
 
 -- A "deployment" abstraction over git tags (local), GitHub releases, and GitHub
 -- Actions workflow runs — whatever sources are configured. `kind` disambiguates.
@@ -357,6 +470,40 @@ pub const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_cal_end ON calendar_events(end_utc)",
     "CREATE INDEX IF NOT EXISTS idx_pr_repo_created ON pull_requests(repo_key, created_at_utc)",
     "CREATE INDEX IF NOT EXISTS idx_pr_repo_merged ON pull_requests(repo_key, merged_at_utc)",
+    "ALTER TABLE pull_requests ADD COLUMN head_sha TEXT",
+    "CREATE TABLE IF NOT EXISTS pull_request_events (
+        repo_key TEXT NOT NULL, pr_number INTEGER NOT NULL, event_type TEXT NOT NULL, ext_id TEXT NOT NULL,
+        title TEXT, actor TEXT, body TEXT, state TEXT, conclusion TEXT, created_at_utc TEXT, html_url TEXT,
+        PRIMARY KEY (repo_key, pr_number, event_type, ext_id)
+    )",
+    "CREATE INDEX IF NOT EXISTS idx_pr_events_pr_created ON pull_request_events(repo_key, pr_number, created_at_utc)",
+    "CREATE TABLE IF NOT EXISTS pull_request_files (
+        repo_key TEXT NOT NULL, pr_number INTEGER NOT NULL, path TEXT NOT NULL, status TEXT,
+        additions INTEGER NOT NULL DEFAULT 0, deletions INTEGER NOT NULL DEFAULT 0,
+        changes INTEGER NOT NULL DEFAULT 0, previous_path TEXT, blob_url TEXT,
+        PRIMARY KEY (repo_key, pr_number, path)
+    )",
+    "CREATE INDEX IF NOT EXISTS idx_pr_files_pr ON pull_request_files(repo_key, pr_number)",
+    "CREATE TABLE IF NOT EXISTS pull_request_ai_indexes (
+        repo_key TEXT NOT NULL, pr_number INTEGER NOT NULL, index_type TEXT NOT NULL,
+        score INTEGER NOT NULL, grade TEXT, category TEXT,
+        category_scores_json TEXT NOT NULL DEFAULT '{}', summary TEXT,
+        evidence_json TEXT NOT NULL DEFAULT '[]', recommendations_json TEXT NOT NULL DEFAULT '[]',
+        confidence REAL, engine TEXT, input_hash TEXT, generated_at_utc TEXT,
+        PRIMARY KEY (repo_key, pr_number, index_type)
+    )",
+    "CREATE INDEX IF NOT EXISTS idx_pr_ai_indexes_type_score ON pull_request_ai_indexes(index_type, score)",
+    "CREATE TABLE IF NOT EXISTS pull_request_session_correlations (
+        repo_key TEXT NOT NULL, pr_number INTEGER NOT NULL, provider TEXT NOT NULL, session_id TEXT NOT NULL,
+        mode TEXT NOT NULL, score REAL NOT NULL, confidence REAL NOT NULL, summary TEXT,
+        reasons_json TEXT NOT NULL DEFAULT '[]', signals_json TEXT NOT NULL DEFAULT '{}',
+        session_started_at_utc TEXT, session_ended_at_utc TEXT, project_slug TEXT, sample_cwd TEXT,
+        turns INTEGER NOT NULL DEFAULT 0, tokens INTEGER NOT NULL DEFAULT 0,
+        engine TEXT, input_hash TEXT, generated_at_utc TEXT,
+        PRIMARY KEY (repo_key, pr_number, provider, session_id, mode)
+    )",
+    "CREATE INDEX IF NOT EXISTS idx_pr_session_corr_pr ON pull_request_session_correlations(repo_key, pr_number, confidence)",
+    "CREATE INDEX IF NOT EXISTS idx_pr_session_corr_session ON pull_request_session_correlations(provider, session_id)",
     "CREATE INDEX IF NOT EXISTS idx_deploy_repo_created ON deployments(repo_key, created_at_utc)",
     "ALTER TABLE git_repos ADD COLUMN remote_url TEXT",
     "ALTER TABLE git_repos ADD COLUMN gh_owner TEXT",
@@ -372,4 +519,39 @@ pub const MIGRATIONS: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_incidents_opened ON incidents(opened_at_utc)",
     "CREATE INDEX IF NOT EXISTS idx_incidents_repo_opened ON incidents(repo_key, opened_at_utc)",
     "CREATE INDEX IF NOT EXISTS idx_incidents_state ON incidents(state)",
+    "CREATE TABLE IF NOT EXISTS provider_plan_selections (
+        provider TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )",
+    "CREATE TABLE IF NOT EXISTS session_context_latest (
+        provider TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        captured_at TEXT NOT NULL,
+        source TEXT NOT NULL,
+        model TEXT,
+        context_window_size INTEGER,
+        used_tokens INTEGER,
+        used_pct REAL,
+        remaining_pct REAL,
+        current_usage_json TEXT NOT NULL DEFAULT '{}',
+        components_json TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY (provider, session_id)
+    )",
+    "CREATE INDEX IF NOT EXISTS idx_session_context_captured ON session_context_latest(captured_at)",
+    "CREATE TABLE IF NOT EXISTS provider_plan_usage_latest (
+        provider TEXT NOT NULL,
+        account_scope TEXT NOT NULL DEFAULT 'default',
+        window_key TEXT NOT NULL,
+        captured_at TEXT NOT NULL,
+        source TEXT NOT NULL,
+        used_pct REAL,
+        resets_at TEXT,
+        used_amount REAL,
+        limit_amount REAL,
+        unit TEXT,
+        details_json TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY (provider, account_scope, window_key)
+    )",
+    "CREATE INDEX IF NOT EXISTS idx_plan_usage_provider_captured ON provider_plan_usage_latest(provider, captured_at)",
 ];

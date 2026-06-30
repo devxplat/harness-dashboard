@@ -2,7 +2,9 @@
 
 import { IngestGate } from "@/components/ingest/ingest-gate";
 import { OnboardingGate } from "@/components/onboarding/onboarding-gate";
+import { ProviderSelectionRequired } from "@/components/provider-selection-required";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { useProviderFilter } from "@/lib/provider-filter";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { AppSidebar } from "./app-sidebar";
@@ -33,6 +35,7 @@ const PROVIDER_SCOPED_ROUTES = new Set([
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
+  const { requiresProviderSelection } = useProviderFilter();
   const [displayName, setDisplayName] = useState("");
   useEffect(() => {
     function readName() {
@@ -84,7 +87,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <div className="flex-1 space-y-6 p-4 md:p-6">
-          {gated ? <IngestGate>{children}</IngestGate> : children}
+          <ProviderSelectionRequired active={providerScoped && requiresProviderSelection}>
+            {gated ? <IngestGate>{children}</IngestGate> : children}
+          </ProviderSelectionRequired>
         </div>
       </SidebarInset>
     </SidebarProvider>

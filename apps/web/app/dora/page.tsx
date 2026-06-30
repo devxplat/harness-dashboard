@@ -84,6 +84,7 @@ function bandFill(b: string): string {
 }
 
 function MetricCard({ m }: { m: DoraMetric }) {
+  const { t } = useTranslation();
   const available = m.value !== null;
   return (
     <Card>
@@ -104,10 +105,10 @@ function MetricCard({ m }: { m: DoraMetric }) {
                 : "border-amber-500/40 text-amber-600 dark:text-amber-400",
             )}
             title={
-              m.exact ? "Computed directly from the source" : "Estimated from available local data"
+              m.exact ? t("pages.dora.exactTitle") : t("pages.dora.estimatedTitle")
             }
           >
-            {m.exact ? "exact" : "approx"}
+            {m.exact ? t("pages.dora.exact") : t("pages.dora.approx")}
           </Badge>
         </div>
       </CardHeader>
@@ -140,7 +141,9 @@ function MetricCard({ m }: { m: DoraMetric }) {
             <p className="pt-1 text-[11px] text-muted-foreground/80">{m.band_target}</p>
           </div>
         ) : null}
-        <p className="pt-1 text-[11px] text-muted-foreground/80">Source: {m.source}</p>
+        <p className="pt-1 text-[11px] text-muted-foreground/80">
+          {t("pages.dora.source", { source: m.source })}
+        </p>
       </CardContent>
     </Card>
   );
@@ -193,7 +196,7 @@ export default function DoraPage() {
 
       <Tabs defaultValue="overview">
         <TabsList className="w-full justify-start overflow-x-auto" variant="line">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="overview">{t("pages.dora.tabs.overview")}</TabsTrigger>
           <TabsTrigger value="trends">{t("pages.dora.trends")}</TabsTrigger>
           <TabsTrigger value="prs">{t("pages.dora.prs")}</TabsTrigger>
           <TabsTrigger value="deployments">{t("pages.dora.deployments")}</TabsTrigger>
@@ -220,10 +223,10 @@ export default function DoraPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t("pages.dora.repo")}</TableHead>
-                      <TableHead className="text-right">Commits</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.commits")}</TableHead>
                       <TableHead className="text-right">{t("pages.dora.deploys")}</TableHead>
                       <TableHead className="text-right">{t("pages.dora.prs")}</TableHead>
-                      <TableHead className="text-right">Lead</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.lead")}</TableHead>
                       <TableHead className="text-right">{t("pages.dora.failureProxy")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -293,9 +296,9 @@ export default function DoraPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t("pages.dora.period")}</TableHead>
-                      <TableHead className="text-right">Commits</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.commits")}</TableHead>
                       <TableHead className="text-right">{t("pages.dora.deploys")}</TableHead>
-                      <TableHead className="text-right">Lead</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.lead")}</TableHead>
                       <TableHead className="text-right">{t("pages.dora.failureProxy")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -399,7 +402,7 @@ export default function DoraPage() {
                       <TableHead>{t("pages.dora.repo")}</TableHead>
                       <TableHead className="text-right">{t("pages.dora.prs")}</TableHead>
                       <TableHead className="text-right">{t("pages.dora.merged")}</TableHead>
-                      <TableHead className="text-right">Lead</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.lead")}</TableHead>
                       <TableHead className="text-right">{t("pages.dora.aiOverlap")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -454,7 +457,7 @@ export default function DoraPage() {
                       <TableHead>{t("pages.dora.repo")}</TableHead>
                       <TableHead className="text-right">{t("pages.dora.deploys")}</TableHead>
                       <TableHead className="text-right">{t("pages.dora.failureProxy")}</TableHead>
-                      <TableHead className="text-right">Commits</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.commits")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

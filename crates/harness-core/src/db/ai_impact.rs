@@ -1,11 +1,11 @@
 //! AI-impact / ROI layer (Phase 5). Turns the raw AI-coding-tool data we already
 //! capture (token/prompt/session + AI-attributed commits/PRs) into the
 //! "AI impact" metrics the market frameworks (DX Core 4, etc.) headline:
-//! line-level % AI-generated, adoption/utilization, ROI, and usage↔delivery
+//! line-level % AI-generated, adoption/utilization, ROI, and usageâ†”delivery
 //! correlation. All computed in Rust over bound queries; one concern per module.
 //!
 //! Attribution is intentionally commit-level ("lines in AI-assisted commits"),
-//! not per-line provenance — labeled as such in the UI. Cost is never recomputed
+//! not per-line provenance â€” labeled as such in the UI. Cost is never recomputed
 //! here; ROI reuses the already-tested `overview_totals_for_providers` costing.
 
 use super::Db;
@@ -33,7 +33,7 @@ const MSG_TIME_BOUND: &str =
 const AI_PREDICATE: &str = "(ai_session_overlap=1 OR ai_coauthor_trailer=1)";
 
 /// Pearson correlation coefficient, or `None` when there are fewer than two
-/// paired points or either series has zero variance. Pure — unit-tested directly.
+/// paired points or either series has zero variance. Pure â€” unit-tested directly.
 /// Shared with `survey.rs` (DevEx sentiment vs hard metrics).
 pub(super) fn pearson(xs: &[f64], ys: &[f64]) -> Option<f64> {
     let n = xs.len();
@@ -78,7 +78,7 @@ fn ratio(num: Option<f64>, denom: f64) -> Option<f64> {
     }
 }
 
-/// A `" AND provider IN (?,?…) "` fragment + the bound provider strings, for the
+/// A `" AND provider IN (?,?â€¦) "` fragment + the bound provider strings, for the
 /// message-based metrics that *are* provider-attributed. Empty (no filter) when all
 /// providers are selected. Mirrors `queries::provider_clause`.
 fn provider_filter(providers: &[ProviderId]) -> (String, Vec<&'static str>) {
@@ -100,7 +100,7 @@ fn provider_filter(providers: &[ProviderId]) -> (String, Vec<&'static str>) {
     (format!(" AND provider IN ({placeholders}) "), vals)
 }
 
-/// Bind `since`, `until`, then the provider strings — the param order for a query that
+/// Bind `since`, `until`, then the provider strings â€” the param order for a query that
 /// uses `MSG_TIME_BOUND` followed by a `provider_filter` clause.
 fn time_provider_params<'a>(
     since: &'a Option<&'a str>,
@@ -160,13 +160,13 @@ pub struct AiAdoptionDayRow {
 
 #[derive(Debug, Serialize)]
 pub struct AiAdoptionBundle {
-    /// Distinct days with ≥1 assistant message.
+    /// Distinct days with â‰¥1 assistant message.
     pub active_days: i64,
     /// Inclusive calendar-day span of the window's activity.
     pub span_days: i64,
     pub sessions: i64,
     pub messages: i64,
-    /// Distinct sidechain agent ids — a subagent/agent-task count (DAU/WAU-style signal).
+    /// Distinct sidechain agent ids â€” a subagent/agent-task count (DAU/WAU-style signal).
     pub agent_tasks: i64,
     /// Share of days in the active span that were active.
     pub pct_active_days: Option<f64>,
@@ -174,7 +174,7 @@ pub struct AiAdoptionBundle {
     pub daily: Vec<AiAdoptionDayRow>,
 }
 
-// ---------- P0#2 AI spend → ROI ----------
+// ---------- P0#2 AI spend â†’ ROI ----------
 
 #[derive(Debug, Serialize)]
 pub struct AiRoiByGroupRow {
@@ -205,13 +205,13 @@ pub struct AiRoiBundle {
     pub cost_per_merged_pr: Option<f64>,
     pub cost_per_commit: Option<f64>,
     pub cost_per_1k_lines: Option<f64>,
-    /// Cost split by provider (delivery counts are global — not provider-attributed).
+    /// Cost split by provider (delivery counts are global â€” not provider-attributed).
     pub by_provider: Vec<AiRoiByGroupRow>,
-    /// Delivery split by project (cost is not attributable per repo → `cost_usd: None`).
+    /// Delivery split by project (cost is not attributable per repo â†’ `cost_usd: None`).
     pub by_project: Vec<AiRoiByGroupRow>,
 }
 
-// ---------- P0#3 usage ↔ delivery correlation ----------
+// ---------- P0#3 usage â†” delivery correlation ----------
 
 #[derive(Debug, Serialize)]
 pub struct AiCorrelationSeriesRow {
@@ -255,7 +255,7 @@ pub struct AiImpactBundle {
 }
 
 impl Db {
-    /// P0#1 — line-level % AI-generated: weight commit (and PR) churn by the AI
+    /// P0#1 â€” line-level % AI-generated: weight commit (and PR) churn by the AI
     /// predicate, daily + summary. Commit-level attribution (see module docs).
     pub fn ai_lines(&self, since: Option<&str>, until: Option<&str>) -> Result<AiLinesBundle> {
         let conn = self.conn.lock().unwrap();
@@ -326,8 +326,8 @@ impl Db {
         })
     }
 
-    /// P0#4 — adoption / utilization trend over assistant activity. "Active day" =
-    /// ≥1 assistant message; sessions/agent-tasks are the DAU/WAU-style signals.
+    /// P0#4 â€” adoption / utilization trend over assistant activity. "Active day" =
+    /// â‰¥1 assistant message; sessions/agent-tasks are the DAU/WAU-style signals.
     pub fn ai_adoption(
         &self,
         since: Option<&str>,
@@ -403,7 +403,7 @@ impl Db {
 }
 
 impl Db {
-    /// P0#2 — AI spend → ROI. Cost reuses the tested `overview_totals_for_providers`
+    /// P0#2 â€” AI spend â†’ ROI. Cost reuses the tested `overview_totals_for_providers`
     /// (and per-provider `by_model`) costing; delivery counts come from commits/PRs.
     /// Cost is provider-attributed; commits/PRs are not, so `by_project` is delivery-only.
     pub fn ai_roi(
@@ -522,7 +522,7 @@ impl Db {
         })
     }
 
-    /// P0#3 — usage ↔ delivery correlation: an aligned daily series (sessions/tokens
+    /// P0#3 â€” usage â†” delivery correlation: an aligned daily series (sessions/tokens
     /// vs commits/merged-PRs/lead) plus Pearson coefficients. The period-over-period
     /// comparison is assembled by the handler (a second call over the prior window).
     pub fn ai_correlation(
@@ -639,7 +639,7 @@ impl Db {
         })
     }
 
-    /// P0#5 — compose the four quadrants. Correlation period-over-period is left to
+    /// P0#5 â€” compose the four quadrants. Correlation period-over-period is left to
     /// the handler (the DX-Core-4 mapping: utilization=adoption, impact=lines+correlation,
     /// cost=roi cost, net value=roi ratios).
     pub fn ai_impact_bundle(
@@ -714,6 +714,7 @@ mod tests {
             review_count: 0,
             first_review_at_utc: None,
             merge_commit_sha: None,
+            head_sha: None,
             html_url: None,
         }
     }
@@ -730,10 +731,10 @@ mod tests {
             (r2 + 1.0).abs() < 1e-9,
             "perfect negative correlation, got {r2}"
         );
-        assert!(pearson(&[1.0], &[2.0]).is_none(), "n<2 → None");
+        assert!(pearson(&[1.0], &[2.0]).is_none(), "n<2 â†’ None");
         assert!(
             pearson(&[1.0, 1.0, 1.0], &[2.0, 4.0, 6.0]).is_none(),
-            "zero variance → None"
+            "zero variance â†’ None"
         );
     }
 
@@ -780,7 +781,7 @@ mod tests {
         assert_eq!(out.active_days, 3);
         assert_eq!(out.sessions, 3);
         assert_eq!(out.messages, 4);
-        // Jan 1 → Jan 5 inclusive = 5 calendar days.
+        // Jan 1 â†’ Jan 5 inclusive = 5 calendar days.
         assert_eq!(out.span_days, 5);
         assert!((out.pct_active_days.unwrap() - 60.0).abs() < 1e-9);
         assert_eq!(out.daily.len(), 3);
@@ -810,11 +811,11 @@ mod tests {
             )
             .unwrap();
         }
-        // No filter → both providers counted.
+        // No filter â†’ both providers counted.
         let all = db.ai_adoption(None, None, &[]).unwrap();
         assert_eq!(all.active_days, 2);
         assert_eq!(all.sessions, 2);
-        // Filtered to Claude → only the Claude day/session/message.
+        // Filtered to Claude â†’ only the Claude day/session/message.
         let claude = db.ai_adoption(None, None, &[ProviderId::Claude]).unwrap();
         assert_eq!(claude.active_days, 1);
         assert_eq!(claude.sessions, 1);
@@ -845,7 +846,7 @@ mod tests {
         assert_eq!(roi.merged_prs, 1);
         assert_eq!(roi.lines_shipped, 24);
         assert_eq!(roi.active_days, 1);
-        // The seeded message carries no model/usage → no cost → ratios are None.
+        // The seeded message carries no model/usage â†’ no cost â†’ ratios are None.
         assert!(roi.cost_usd.is_none());
         assert!(roi.cost_per_merged_pr.is_none());
         assert!(roi.cost_per_1k_lines.is_none());

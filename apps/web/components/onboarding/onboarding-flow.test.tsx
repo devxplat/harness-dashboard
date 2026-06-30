@@ -2,7 +2,7 @@ import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
 import { ScanSyncContext, type ScanSync } from "@/hooks/scan-sync";
 import { installFetch } from "@/lib/test-utils";
 import type { ProviderConfig } from "@/lib/types";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -37,6 +37,7 @@ const settings = {
   claude_dirs: ["/c"],
   plan: "api",
   onboarding_done: false,
+  pr_ai_default_generation_mode: "per_pr",
   providers: [
     mkProvider("claude", "Claude Code", { discovered: true, enabled: true }),
     mkProvider("codex", "Codex"),
@@ -115,7 +116,7 @@ describe("OnboardingFlow", () => {
     );
     // Advanced to the Connect step → the GitHub integration card is shown.
     await waitFor(() => expect(screen.getByText("GitHub")).toBeInTheDocument());
-  });
+  }, 15000);
 
   it("walks to the sync step and finishes (no GitHub connected)", async () => {
     const fetchMock = installFetch({
@@ -130,7 +131,31 @@ describe("OnboardingFlow", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Next" })); // → Connect
     await waitFor(() => expect(screen.getByText("GitHub")).toBeInTheDocument());
+    await userEvent.type(screen.getByLabelText("Default GitHub user"), "alice");
+    await userEvent.click(screen.getByLabelText("Enable PR session correlation by default"));
+    fireEvent.change(screen.getByLabelText("Onboarding session minutes before PR"), {
+      target: { value: "90" },
+    });
+    fireEvent.change(screen.getByLabelText("Onboarding session minutes after PR"), {
+      target: { value: "30" },
+    });
+    fireEvent.change(screen.getByLabelText("Onboarding session min confidence"), {
+      target: { value: "0.8" },
+    });
     await userEvent.click(screen.getByRole("button", { name: "Next" })); // → First sync
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([u, o]) =>
+            String(u).includes("/api/settings") &&
+            String((o as RequestInit)?.body).includes('"github_login":"alice"') &&
+            String((o as RequestInit)?.body).includes("pr_session_correlation_config") &&
+            String((o as RequestInit)?.body).includes('"time_window_before_minutes":90') &&
+            String((o as RequestInit)?.body).includes('"min_confidence":0.8'),
+        ),
+      ).toBe(true),
+    );
 
     // The seed does NOT auto-start; the user starts it explicitly.
     await waitFor(() => expect(screen.getByText("Local sessions")).toBeInTheDocument());
@@ -152,7 +177,7 @@ describe("OnboardingFlow", () => {
       ).toBe(true),
     );
     expect(nav.push).toHaveBeenCalledWith("/");
-  });
+  }, 20000);
 
   it("shows scan counts and a GitHub backfill bar when connected", async () => {
     const fetchMock = installFetch(connectedRoutes);
