@@ -92,18 +92,23 @@ client-rendered Next.js dashboard
 
 Provider adapters map different local artifacts into a shared provider-aware message model.
 
-| Provider       | Source style                    | Usage/cost fidelity                                               |
-| -------------- | ------------------------------- | ----------------------------------------------------------------- |
-| Claude Code    | JSONL projects tree             | Exact usage tokens, estimated API cost.                           |
-| Codex          | JSONL sessions tree             | Exact usage tokens, estimated API cost.                           |
-| Gemini CLI     | JSONL chats                     | Exact usage tokens, estimated API cost.                           |
-| Cursor         | SQLite state database           | Provider-reported usage/cost where present.                       |
-| Antigravity    | Transcript files                | Tool/activity visibility; usage/cost may be unavailable.          |
-| GitHub Copilot | Chat OTel DB and CLI state      | Provider-reported usage where available; cost may be unavailable. |
-| opencode       | Storage and optional JSONL logs | Provider-reported usage/cost where available.                     |
+| Provider       | Source style                    | Usage/cost fidelity                                               | Context window                                    | Plan usage |
+| -------------- | ------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------- | ---------- |
+| Claude Code    | JSONL projects tree + optional Status Line snapshot | Exact usage tokens, estimated API cost. | Official total from Status Line when enabled; deterministic component estimates otherwise. | Official Status Line `rate_limits` windows when enabled. |
+| Codex          | JSONL sessions tree + model cache | Exact usage tokens, estimated API cost.                           | Model cache / catalog fallback.                   | Unavailable unless local quota fields are observed. |
+| Gemini CLI     | JSONL chats                     | Exact usage tokens, estimated API cost.                           | Best-effort from model + local tokens.            | Unavailable unless a local quota source appears. |
+| Cursor         | SQLite state database           | Provider-reported usage/cost where present.                       | Unavailable unless the state DB exposes it.       | Unavailable unless the state DB exposes it. |
+| Antigravity    | Transcript files                | Tool/activity visibility; usage/cost may be unavailable.          | Best-effort from model + local activity.          | Unavailable unless a local quota source appears. |
+| GitHub Copilot | Chat OTel DB and CLI state      | Provider-reported usage where available; cost may be unavailable. | Unavailable unless local telemetry exposes it.    | Unavailable unless local telemetry exposes it. |
+| opencode       | Storage and optional JSONL logs | Provider-reported usage/cost where available.                     | Best-effort from model + local tokens.            | Unavailable unless Go/Zen logs expose it. |
 
 The shared model records provenance with `usage_source` and `cost_source`, so the UI can avoid
 pretending all providers have equal fidelity.
+
+Provider plan selections are stored per provider with provider-qualified `plan_id` values such as
+`claude:max-5x` or `codex:plus`. The legacy global `plan` key is retained for API compatibility and
+maps only to Claude. Context-window and plan-usage snapshots are latest-only rows, not a historical
+log: they support the current session detail and Settings status without growing unbounded.
 
 For streaming snapshot providers, deduplication is load-bearing. Usage totals are not summed across
 snapshot siblings. The keeper is keyed by `(session_id, message_id)`, and tool calls from superseded

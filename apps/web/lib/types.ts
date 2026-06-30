@@ -105,6 +105,98 @@ export interface MessageDetail {
   cwd: string | null;
 }
 
+export interface ProviderPlan {
+  plan_id: string;
+  label: string;
+  audience?: string | null;
+  billing_unit?: string | null;
+  monthly_usd?: number | null;
+  annual_monthly_usd?: number | null;
+  price_note?: string | null;
+  selectable: boolean;
+  source_url?: string | null;
+}
+
+export interface ProviderPlanSelection {
+  provider: string;
+  plan_id: string;
+  updated_at: string;
+}
+
+export interface PlanUsageSnapshotWindow {
+  window_key: string;
+  label: string;
+  captured_at: string | null;
+  used_pct: number | null;
+}
+
+export interface ProviderSnapshotStatus {
+  provider: string;
+  context_observed: boolean;
+  context_captured_at: string | null;
+  plan_usage_observed: boolean;
+  plan_usage_captured_at: string | null;
+  windows: PlanUsageSnapshotWindow[];
+}
+
+export interface ProviderPlansBundle {
+  catalog: Record<string, ProviderPlan[]>;
+  selections: ProviderPlanSelection[];
+  snapshot_status: ProviderSnapshotStatus[];
+  source_checked_at?: string | null;
+}
+
+export interface ContextWindowComponent {
+  key: string;
+  label: string;
+  tokens: number;
+  pct: number | null;
+  source: string;
+  confidence: string;
+}
+
+export interface ContextWindowDetail {
+  provider: string;
+  session_id: string;
+  captured_at: string | null;
+  source: string;
+  model: string | null;
+  context_window_size: number | null;
+  used_tokens: number;
+  used_pct: number | null;
+  remaining_pct: number | null;
+  current_usage: Record<string, unknown>;
+  components: ContextWindowComponent[];
+  supported: boolean;
+  observed: boolean;
+  note: string | null;
+}
+
+export interface PlanUsageWindow {
+  provider: string;
+  account_scope: string;
+  window_key: string;
+  label: string;
+  captured_at: string | null;
+  source: string;
+  used_pct: number | null;
+  resets_at: string | null;
+  used_amount: number | null;
+  limit_amount: number | null;
+  unit: string | null;
+  details: Record<string, unknown>;
+  supported: boolean;
+  observed: boolean;
+  note: string | null;
+}
+
+export interface SessionBundle {
+  session: SessionRow | null;
+  messages: MessageDetail[];
+  context_window: ContextWindowDetail;
+  plan_usage: PlanUsageWindow[];
+}
+
 export interface PromptRow {
   provider: string;
   user_uuid: string;
@@ -310,6 +402,8 @@ export interface SettingsInfo {
   pr_ai_default_generation_mode?: "per_pr" | "all_mine" | "repo" | "org" | "batch" | string;
   pr_business_value_prompt?: string | null;
   pr_ai_maturity_prompt?: string | null;
+  pr_session_correlation_config?: PrSessionCorrelationConfig | null;
+  pr_session_correlation_prompt?: string | null;
   providers: ProviderConfig[];
   /** Whether the first-run onboarding wizard has been completed. */
   onboarding_done?: boolean;
@@ -347,6 +441,9 @@ export interface ProviderConfig {
     tools: boolean;
     costs: boolean;
     prompts: boolean;
+    context_window?: boolean;
+    plan_catalog?: boolean;
+    plan_usage?: boolean;
   };
   supported?: ProviderCapabilitySet;
   observed?: ProviderCapabilitySet;
@@ -366,6 +463,9 @@ export interface ProviderCapabilitySet {
   tools: boolean;
   costs: boolean;
   prompts: boolean;
+  context_window?: boolean;
+  plan_catalog?: boolean;
+  plan_usage?: boolean;
 }
 
 export interface ProviderSourceConfig {
@@ -385,6 +485,9 @@ export interface ProviderSourceConfig {
     costs: boolean;
     tools: boolean;
     prompts: boolean;
+    context_window?: boolean;
+    plan_catalog?: boolean;
+    plan_usage?: boolean;
   };
   supported?: ProviderCapabilitySet;
   observed?: ProviderCapabilitySet;
@@ -803,6 +906,7 @@ export interface PrDashboardRow {
   changed_files: number;
   review_count: number;
   merge_commit_sha: string | null;
+  head_sha: string | null;
   html_url: string | null;
   ai_session_overlap: boolean;
   churn: number;
@@ -811,8 +915,95 @@ export interface PrDashboardRow {
   review_wait_hours: number | null;
   timeline: PrTimelineEvent[];
   files: PrFileRef[];
+  session_correlations: PrSessionCorrelation[];
+  related_commits: PrRelatedCommit[];
+  related_deployments: PrDeploymentRef[];
+  related_incidents: PrIncidentRef[];
   business_value_index: PrAiIndex | null;
   ai_maturity_index: PrAiIndex | null;
+}
+
+export interface PrRelatedCommit {
+  sha: string;
+  authored_at_utc: string | null;
+  author_name: string | null;
+  author_email: string | null;
+  subject: string | null;
+  branch: string | null;
+  files_changed: number;
+  insertions: number;
+  deletions: number;
+  ai_assisted: boolean;
+  match_reason: string;
+}
+
+export interface PrDeploymentRef {
+  kind: string;
+  ext_id: string;
+  name: string | null;
+  created_at_utc: string | null;
+  status: string | null;
+  sha: string | null;
+  html_url: string | null;
+  lead_time_hours: number | null;
+  match_reason: string;
+}
+
+export interface PrIncidentRef {
+  source: string;
+  ext_id: string;
+  title: string | null;
+  severity: string | null;
+  opened_at_utc: string | null;
+  resolved_at_utc: string | null;
+  state: string | null;
+  html_url: string | null;
+  deploy_ext_id: string | null;
+  mttr_hours: number | null;
+  hours_after_merge: number | null;
+  match_reason: string;
+}
+
+export interface PrSessionCorrelationWeights {
+  time_overlap: number;
+  temporal_proximity: number;
+  branch: number;
+  file_touch: number;
+  title_keyword: number;
+}
+
+export interface PrSessionCorrelationConfig {
+  enabled: boolean;
+  time_window_before_minutes: number;
+  time_window_after_minutes: number;
+  min_confidence: number;
+  max_sessions_per_pr: number;
+  use_branch: boolean;
+  use_file_touches: boolean;
+  use_title_keywords: boolean;
+  weights: PrSessionCorrelationWeights;
+}
+
+export interface PrSessionCorrelation {
+  repo_key: string;
+  pr_number: number;
+  provider: string;
+  session_id: string;
+  mode: "deterministic" | "ai" | string;
+  score: number;
+  confidence: number;
+  summary: string | null;
+  reasons: string[];
+  signals: Record<string, number>;
+  session_started_at_utc: string | null;
+  session_ended_at_utc: string | null;
+  project_slug: string | null;
+  sample_cwd: string | null;
+  turns: number;
+  tokens: number;
+  engine: string | null;
+  input_hash: string | null;
+  generated_at_utc: string | null;
 }
 
 export interface PrTimelineEvent {
@@ -910,17 +1101,42 @@ export interface PrInsightRule {
   custom: boolean;
 }
 
+export interface PrPagination {
+  page: number;
+  page_size: number;
+  total_rows: number;
+}
+
+export interface PrFilterOptions {
+  authors: string[];
+  repos: string[];
+  orgs: string[];
+  statuses: string[];
+  insight_categories: string[];
+  insight_severities: string[];
+  insight_scopes: string[];
+}
+
 export interface PrDashboardBundle {
   grain: string;
   active_author: string;
   default_author: string | null;
   authors: PrAuthorOption[];
+  pagination: PrPagination;
+  filter_options: PrFilterOptions;
   summary: PrSummary;
   rows: PrDashboardRow[];
   periods: PrPeriodRow[];
   tiles: PrAnalyticsTile[];
   deterministic_insights: PrInsight[];
   rules: PrInsightRule[];
+  session_correlation_config: PrSessionCorrelationConfig;
+}
+
+export interface PrDeterministicInsightsPage {
+  rows: PrInsight[];
+  pagination: PrPagination;
+  filter_options: PrFilterOptions;
 }
 
 export interface PrAiEngine {
@@ -943,6 +1159,7 @@ export interface PrAiInsightResult {
   summary: string;
   insights: PrAiInsightItem[];
   indexes: PrAiIndex[];
+  session_correlations?: PrSessionCorrelation[];
 }
 
 export interface PrAiInsightJob {
@@ -956,6 +1173,20 @@ export interface PrAiInsightJob {
   input_hash: string;
   result: PrAiInsightResult | null;
   error: string | null;
+  cancel_requested: boolean;
+  request?: {
+    engine: string;
+    analysis_type?: string | null;
+    scope?: string | null;
+    author?: string | null;
+    since?: string | null;
+    until?: string | null;
+    grain?: string | null;
+    repo?: string | null;
+    org?: string | null;
+    prs?: Array<{ repo_key: string; number: number }> | null;
+    custom_prompt?: string | null;
+  } | null;
 }
 
 export interface DeploymentRow {

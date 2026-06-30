@@ -36,10 +36,48 @@ pub struct Plan {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderPlan {
+    pub plan_id: String,
+    pub label: String,
+    #[serde(default)]
+    pub audience: Option<String>,
+    #[serde(default)]
+    pub billing_unit: Option<String>,
+    #[serde(default)]
+    pub monthly_usd: Option<f64>,
+    #[serde(default)]
+    pub annual_monthly_usd: Option<f64>,
+    #[serde(default)]
+    pub price_note: Option<String>,
+    #[serde(default = "default_selectable")]
+    pub selectable: bool,
+    #[serde(default)]
+    pub source_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextWindowSpec {
+    #[serde(default)]
+    pub context_window: Option<i64>,
+    #[serde(default)]
+    pub max_context_window: Option<i64>,
+    #[serde(default)]
+    pub effective_context_window_percent: Option<i64>,
+    #[serde(default)]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pricing {
     pub models: HashMap<String, ModelRate>,
     pub tier_fallback: HashMap<String, Rate>,
     pub plans: HashMap<String, Plan>,
+    #[serde(default)]
+    pub provider_plans: HashMap<String, Vec<ProviderPlan>>,
+    #[serde(default)]
+    pub context_windows: HashMap<String, HashMap<String, ContextWindowSpec>>,
+    #[serde(default)]
+    pub source_checked_at: Option<String>,
 }
 
 /// Result of costing a usage tally against a model.
@@ -50,6 +88,10 @@ pub struct Cost {
 }
 
 const TIERS: [&str; 4] = ["fable", "opus", "sonnet", "haiku"];
+
+fn default_selectable() -> bool {
+    true
+}
 
 impl Pricing {
     pub fn load_default() -> Self {
@@ -157,6 +199,8 @@ mod tests {
         let p = Pricing::load_default();
         assert!(p.models.contains_key("claude-opus-4-8"));
         assert!(p.plans.contains_key("pro"));
+        assert!(p.provider_plans.contains_key("claude"));
+        assert!(p.context_windows.contains_key("codex"));
     }
 
     #[test]

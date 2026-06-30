@@ -13,6 +13,11 @@ expose tokens, prompts, or costs.
 The database records `usage_source` and `cost_source` so the UI can label unavailable, reported,
 and estimated values rather than pretending all providers are equivalent.
 
+Context-window and plan-usage fidelity also varies. Claude Code can expose official current
+context and plan windows through the user-enabled Status Line snapshot command. Most other
+providers do not currently expose equivalent local quota snapshots, so those panels render
+best-effort estimates or explicit unavailable states.
+
 ## Pricing Is Best Effort
 
 Costs are analytics estimates, not billing records. For sources with exact usage but no reported
@@ -21,6 +26,9 @@ tier fallbacks; models without a tier produce `null` cost and render as unavaila
 
 Provider-reported cost is used when present, but provider billing models and subscriptions can
 differ from API-equivalent rates.
+
+The provider plan catalog is embedded in `pricing.json` with a `source_checked_at` date and source
+URLs. It is not a billing-system sync and it does not refresh prices at runtime.
 
 ## Integrations Are Opt-In Network Sources
 

@@ -99,19 +99,19 @@ function SummaryGrid({ summary, t }: { summary: ProductivitySummary; t: TFunctio
         detail={`${formatInt(summary.ai_commits)} ${t("pages.productivity.aiAssisted")} (${aiPct}%)`}
       />
       <StatCard
-        label="Assistant messages"
+        label={t("pages.productivity.assistantMessages")}
         value={formatInt(summary.messages)}
-        detail={`${formatInt(summary.pr_count)} PRs, ${formatInt(summary.merged_pr_count)} merged`}
+        detail={t("pages.productivity.summaryPrs", { prs: formatInt(summary.pr_count), merged: formatInt(summary.merged_pr_count) })}
       />
       <StatCard
-        label="Focus and flow"
+        label={t("pages.productivity.focusAndFlow")}
         value={formatMinutes(summary.focus_minutes)}
         detail={`${formatMinutes(summary.flow_minutes)} estimated flow time`}
         estimated
         estimatedLabel={estimatedLabel}
       />
       <StatCard
-        label="Post-meeting warm-up"
+        label={t("pages.productivity.postMeetingWarmup")}
         value={formatMinutes(summary.avg_warmup_minutes)}
         detail={`${formatMinutes(summary.meeting_minutes)} in busy meetings`}
         estimated
@@ -149,7 +149,7 @@ function FocusBlocksTable({ blocks, t }: { blocks: FocusBlockRow[]; t: TFunction
             <TableCell className="text-right tabular-nums">
               {formatInt(b.events)}{" "}
               <span className="text-xs text-muted-foreground">
-                ({formatInt(b.commits)} commits, {formatInt(b.messages)} messages)
+                ({t("pages.productivity.eventsDetail", { commits: formatInt(b.commits), messages: formatInt(b.messages) })})
               </span>
             </TableCell>
             <TableCell>
@@ -236,7 +236,7 @@ export default function ProductivityPage() {
           title={t("pages.productivity.title")}
           description={t("pages.productivity.description")}
         />
-        <div className="flex gap-1" role="group" aria-label="Productivity grain">
+        <div className="flex gap-1" role="group" aria-label={t("pages.productivity.grain")}>
           {(["day", "week", "month"] as Grain[]).map((g) => (
             <Button
               key={g}
@@ -260,10 +260,10 @@ export default function ProductivityPage() {
 
       <Tabs defaultValue="overview">
         <TabsList className="w-full justify-start overflow-x-auto" variant="line">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="focus">Focus</TabsTrigger>
-          <TabsTrigger value="calendar">Calendar Impact</TabsTrigger>
-          <TabsTrigger value="prs">PR Impact</TabsTrigger>
+          <TabsTrigger value="overview">{t("pages.productivity.tabs.overview")}</TabsTrigger>
+          <TabsTrigger value="focus">{t("pages.productivity.tabs.focus")}</TabsTrigger>
+          <TabsTrigger value="calendar">{t("pages.productivity.tabs.calendarImpact")}</TabsTrigger>
+          <TabsTrigger value="prs">{t("pages.productivity.tabs.prImpact")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -396,10 +396,10 @@ export default function ProductivityPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Period</TableHead>
+                      <TableHead>{t("pages.productivity.period")}</TableHead>
                       <TableHead className="text-right">{t("pages.productivity.meetings")}</TableHead>
                       <TableHead className="text-right">{t("pages.productivity.focus")}</TableHead>
-                      <TableHead className="text-right">Flow</TableHead>
+                      <TableHead className="text-right">{t("pages.productivity.flow")}</TableHead>
                       <TableHead className="text-right">{t("pages.productivity.avgWarmup")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -449,13 +449,13 @@ export default function ProductivityPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Repo</TableHead>
+                      <TableHead>{t("pages.productivity.repo")}</TableHead>
                       <TableHead className="text-right">{t("pages.productivity.pullRequests")}</TableHead>
-                      <TableHead className="text-right">Merged</TableHead>
-                      <TableHead className="text-right">Lead</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.merged")}</TableHead>
+                      <TableHead className="text-right">{t("pages.dora.leadTime")}</TableHead>
                       <TableHead className="text-right">{t("pages.productivity.reviewWait")}</TableHead>
                       <TableHead className="text-right">{t("pages.productivity.churn")}</TableHead>
-                      <TableHead className="text-right">AI overlap</TableHead>
+                      <TableHead className="text-right">{t("pages.pullRequests.row.aiOverlap")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -498,10 +498,10 @@ export default function ProductivityPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>#</TableHead>
-                      <TableHead>Title</TableHead>
+                      <TableHead>{t("pages.productivity.titleColumn")}</TableHead>
                       <TableHead>{t("pages.productivity.status")}</TableHead>
                       <TableHead className="text-right">{t("pages.productivity.lines")}</TableHead>
-                      <TableHead className="text-right">AI</TableHead>
+                      <TableHead className="text-right">{t("enums.sessionMode.ai")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -551,7 +551,7 @@ export default function ProductivityPage() {
                       <TableHead>{t("pages.productivity.name")}</TableHead>
                       <TableHead>{t("pages.productivity.kind")}</TableHead>
                       <TableHead>{t("pages.productivity.status")}</TableHead>
-                      <TableHead>When</TableHead>
+                      <TableHead>{t("pages.productivity.when")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

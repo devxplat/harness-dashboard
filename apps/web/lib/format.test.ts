@@ -18,24 +18,32 @@ describe("formatTokens", () => {
     expect(formatTokens(undefined)).toBe("—");
   });
   it("scales by magnitude", () => {
-    expect(formatTokens(500)).toBe("500");
-    expect(formatTokens(1500)).toBe("1.5K");
-    expect(formatTokens(2_000_000)).toBe("2.00M");
-    expect(formatTokens(3_000_000_000)).toBe("3.00B");
+    expect(formatTokens(500, "en")).toBe("500");
+    expect(formatTokens(1500, "en")).toBe("1.5K");
+    expect(formatTokens(2_000_000, "en")).toBe("2M");
+    expect(formatTokens(3_000_000_000, "en")).toBe("3B");
+  });
+  it("uses locale compact notation", () => {
+    expect(formatTokens(1500, "pt")).toMatch(/1,5/);
+    expect(formatTokens(1500, "de")).toMatch(/1500|1\.500|1,5/);
   });
 });
 
 describe("formatUSD", () => {
   it("formats and handles null", () => {
     expect(formatUSD(null)).toBe("—");
-    expect(formatUSD(12.5)).toBe("$12.50");
-    expect(formatUSD(1234.5)).toBe("$1,234.50");
+    expect(formatUSD(12.5, "en")).toBe("$12.50");
+    expect(formatUSD(1234.5, "en")).toBe("$1,234.50");
+    expect(formatUSD(1234.5, "pt")).toMatch(/US\$\s?1\.234,50/);
   });
 });
 
 describe("formatInt", () => {
   it("groups thousands", () => {
-    expect(formatInt(1234567)).toBe("1,234,567");
+    expect(formatInt(1234567, "en")).toBe("1,234,567");
+    expect(formatInt(1234567, "pt")).toBe("1.234.567");
+    expect(formatInt(1234567, "de")).toBe("1.234.567");
+    expect(formatInt(1234567, "ja")).toBe("1,234,567");
     expect(formatInt(null)).toBe("—");
   });
 });
@@ -67,7 +75,8 @@ describe("formatDateShort", () => {
   it("handles null, passes through invalid, formats valid", () => {
     expect(formatDateShort(null)).toBe("—");
     expect(formatDateShort("nope")).toBe("nope");
-    expect(formatDateShort("2026-06-20T10:00:00Z")).toContain("Jun");
+    expect(formatDateShort("2026-06-20T10:00:00Z", "en")).toContain("Jun");
+    expect(formatDateShort("2026-06-20T10:00:00Z", "pt").toLowerCase()).toContain("jun");
   });
 });
 

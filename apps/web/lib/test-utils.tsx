@@ -13,7 +13,12 @@ export function installFetch(routes: Record<string, unknown>): ReturnType<typeof
   const fn = vi.fn((url: string | URL, _init?: RequestInit) => {
     const path = String(url);
     const key = Object.keys(routes).find((k) => path.includes(k));
-    return Promise.resolve({ ok: true, json: async () => (key ? routes[key] : []) });
+    const value = key ? routes[key] : [];
+    const payload =
+      typeof value === "function"
+        ? (value as (path: string, init?: RequestInit) => unknown)(path, _init)
+        : value;
+    return Promise.resolve({ ok: true, json: async () => payload });
   });
   vi.stubGlobal("fetch", fn);
   return fn;

@@ -47,7 +47,7 @@ export default function AllocationPage() {
           title={t("pages.allocation.title")}
           description={t("pages.allocation.description")}
         />
-        <div className="flex gap-1" role="group" aria-label="Allocation grain">
+        <div className="flex gap-1" role="group" aria-label={t("pages.allocation.grain")}>
           {(["day", "week", "month"] as Grain[]).map((g) => (
             <Button
               key={g}
@@ -106,7 +106,7 @@ export default function AllocationPage() {
                   <TableHead className="text-right">{t("pages.allocation.commits")}</TableHead>
                   <TableHead className="text-right">{t("pages.allocation.share")}</TableHead>
                   <TableHead className="text-right">{t("pages.allocation.ai")}</TableHead>
-                  <TableHead className="text-right">+/− lines</TableHead>
+                  <TableHead className="text-right">{t("pages.allocation.lineDelta")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

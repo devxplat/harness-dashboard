@@ -50,7 +50,7 @@
     "selected": "Rango seleccionado"
   },
   "common": {
-    "loading": "Cargando…",
+    "loading": "Cargando",
     "error": "Algo salió mal.",
     "noProviders": "No se detectaron proveedores de IA. Configura las fuentes en Ajustes.",
     "vsPrev": "vs. ant.",
@@ -74,7 +74,50 @@
     "syncing": "Sincronizando…",
     "lastSynced": "Última sincronización {{date}}",
     "back": "Volver",
-    "connect": "Conectar"
+    "connect": "Conectar",
+    "retry": "Reintentar",
+    "cancel": "Cancelar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "clone": "Clone",
+    "clear": "Limpiar",
+    "create": "Create",
+    "disable": "Desactivar",
+    "enable": "Activar",
+    "disabled": "Disabled",
+    "saving": "Guardando...",
+    "saved": "Saved",
+    "generating": "Generando...",
+    "unknown": "desconocido",
+    "notSelected": "Not selected",
+    "session_one": "{{count}} session",
+    "session_other": "{{count}} sessions",
+    "turn_one": "{{count}} turn",
+    "turn_other": "{{count}} turns",
+    "token_one": "{{count}} token",
+    "token_other": "{{count}} tokens",
+    "source_one": "{{count}} source",
+    "source_other": "{{count}} sources",
+    "file_one": "{{count}} file",
+    "file_other": "{{count}} files",
+    "pullRequest_one": "{{count}} pull request",
+    "pullRequest_other": "{{count}} pull requests",
+    "pageOf": "Page {{page}} of {{total}}",
+    "pageOfTotal": "Page {{page}} of {{total}} - {{count}} total",
+    "selectedCount": "{{count}} selected",
+    "minutes": "minutes",
+    "on": "On",
+    "off": "Off",
+    "less": "Menos",
+    "more": "Más",
+    "peak": "Peak: {{label}}",
+    "noActivity": "No activity in range",
+    "detected": "Detectado",
+    "notDetected": "No detectado",
+    "custom": "custom",
+    "builtIn": "built-in",
+    "sessionLabel_one": "session",
+    "sessionLabel_other": "sessions"
   },
   "overview": {
     "title": "Resumen de uso",
@@ -100,6 +143,12 @@
       "started": "Inicio",
       "turns": "Turnos",
       "tokens": "Tokens"
+    },
+    "aria": {
+      "browseSessions": "Abrir sesiones",
+      "inputByProject": "Tokens de entrada por proyecto",
+      "outputByProject": "Tokens de salida por proyecto",
+      "expensivePrompts": "Prompts mas caros"
     }
   },
   "pages": {
@@ -135,10 +184,23 @@
       "in": "entrada",
       "out": "salida",
       "noSessions": "Aún no hay sesiones.",
-      "noMatch": "Ninguna sesión coincide."
+      "noMatch": "Ninguna sesión coincide.",
+      "footerTotals": "Totales {{turns}} turns · {{tokens}} tokens · {{cost}}"
     },
     "sessionDetail": {
-      "title": "Sesión"
+      "title": "Sesión",
+      "contextWindow": "Context window",
+      "unknownModel": "Unknown model",
+      "officialSnapshot": "official snapshot",
+      "breakdown": "Breakdown",
+      "usedFree": "{{used}} used / {{free}} free",
+      "turns": "turns",
+      "tokens": "tokens",
+      "apiCost": "API cost",
+      "started": "started",
+      "planUsage": "Plan usage",
+      "noPlanUsageSource": "No local plan-usage source is available.",
+      "resetsAt": "resets {{date}} · {{pct}}"
     },
     "projects": {
       "title": "Proyectos",
@@ -244,11 +306,202 @@
       "kind": "Tipo",
       "status": "Estado",
       "noSyncedDeployments": "No hay deployments sincronizados en el rango.",
-      "focusNote": "El foco, flujo, impacto de reuniones y calentamiento son estimaciones basadas en marcas de tiempo locales. Las métricas DORA y de PRs usan campos respaldados por la fuente cuando están disponibles."
+      "focusNote": "El foco, flujo, impacto de reuniones y calentamiento son estimaciones basadas en marcas de tiempo locales. Las métricas DORA y de PRs usan campos respaldados por la fuente cuando están disponibles.",
+      "assistantMessages": "Assistant messages",
+      "focusAndFlow": "Focus and flow",
+      "postMeetingWarmup": "Post-meeting warm-up",
+      "tabs": {
+        "overview": "Resumen",
+        "focus": "Foco",
+        "calendarImpact": "Impacto del calendario",
+        "prImpact": "Impacto de PR"
+      },
+      "period": "Period",
+      "repo": "Repo",
+      "titleColumn": "Title",
+      "when": "When",
+      "summaryPrs": "{{prs}} PRs, {{merged}} merged",
+      "eventsDetail": "{{commits}} commits, {{messages}} messages",
+      "messages": "messages",
+      "ofTotal": "{{value}} of {{total}}",
+      "grain": "Granularidad de productividad",
+      "flow": "Flujo"
     },
     "pullRequests": {
       "title": "Pull Requests",
-      "description": "Review queue health, deterministic rules, and opt-in AI insights for synced pull requests."
+      "description": "Review queue health, deterministic rules, and opt-in AI insights for synced pull requests.",
+      "tabs": {
+        "overview": "Vista de PRs",
+        "insights": "Insights de IA de PRs"
+      },
+      "filters": {
+        "author": "PR author",
+        "authorPlaceholder": "Author",
+        "searchLabel": "Search pull requests",
+        "searchPlaceholder": "Search PRs",
+        "status": "PR status",
+        "selectVisible": "Select visible pull requests",
+        "allAuthorsDescription": "Show every synced PR author"
+      },
+      "summary": {
+        "aiAssisted": "AI-assisted",
+        "open": "Open",
+        "awaitingReview": "Awaiting review",
+        "awaitingMerge": "Awaiting merge",
+        "highReviewTime": "High review time",
+        "merged": "Merged",
+        "closed": "Closed",
+        "noAiSignal": "No AI signal"
+      },
+      "queue": {
+        "title": "Pull request queue",
+        "description": "{{count}} PRs in the selected date range",
+        "noFilterMatch": "No pull requests match the selected filters.",
+        "noRangeData": "No pull requests were synced for this date range."
+      },
+      "columns": {
+        "number": "Number",
+        "pullRequest": "Pull request",
+        "sessions": "Sessions",
+        "businessValue": "Business Value",
+        "aiMaturity": "AI Maturity",
+        "author": "Author",
+        "size": "Size",
+        "reviewWait": "Review wait",
+        "created": "Created",
+        "status": "Status"
+      },
+      "row": {
+        "open": "Open PR {{number}}",
+        "select": "Select PR {{number}}",
+        "sessionCount": "{{count}} {{label}} - {{mode}}",
+        "aiOverlap": "AI overlap"
+      },
+      "detail": {
+        "untitledPr": "Untitled pull request",
+        "loading": "Loading synchronized PR details...",
+        "retry": "Retry details",
+        "size": "Size",
+        "filesReviews": "Files / reviews",
+        "cycleTime": "Cycle time",
+        "reviewWait": "Review wait",
+        "notGenerated": "Not generated yet",
+        "branches": "Branches",
+        "into": "into",
+        "correlatedSessions": "Correlated sessions",
+        "started": "Started {{date}}",
+        "turnsTokens": "{{turns}} turns - {{tokens}} tokens",
+        "noCorrelations": "No PR-session correlation has been found for this PR yet.",
+        "relatedCommits": "Related commits",
+        "untitledCommit": "Untitled commit",
+        "noCommits": "No related local commits were found for this PR.",
+        "deployments": "Deployments",
+        "afterMerge": "{{duration}} after merge",
+        "noDeployments": "No deployment signal matched this PR yet.",
+        "incidents": "Incidentes post-merge",
+        "noIncidents": "No incident was opened near this PR merge.",
+        "changedFiles": "Changed files",
+        "noFiles": "No changed-file list was synced for this PR yet.",
+        "timeline": "Timeline",
+        "noTimeline": "No comments, checks, or reviews were synced for this PR yet.",
+        "confidence": "Confidence {{value}}%",
+        "evidence": "Evidence",
+        "recommendations": "Recommendations",
+        "review": "Review",
+        "comment": "Comment",
+        "check": "Check",
+        "by": "by {{actor}}",
+        "openOnGithub": "Open on GitHub",
+        "incidentFallback": "incidente"
+      },
+      "deterministic": {
+        "title": "Deterministic rules",
+        "description": "{{count}} insights from local, configurable rules.",
+        "loading": "Loading deterministic insights...",
+        "retry": "Retry insights",
+        "empty": "No deterministic PR insights match the selected filters.",
+        "filters": {
+          "org": "Insight org",
+          "repo": "Insight repo",
+          "type": "Insight type",
+          "severity": "Insight severity",
+          "scope": "Insight scope"
+        },
+        "valueThreshold": "{{value}} vs threshold {{threshold}}",
+        "allOrgs": "All orgs",
+        "allRepos": "All repos",
+        "allTypes": "All types",
+        "allSeverities": "All severities",
+        "allScopes": "All scopes"
+      },
+      "aiIndexes": {
+        "title": "PR AI indexes",
+        "description": "Generate Business Value or AI Maturity scores with your local CLI.",
+        "engine": "PR AI engine",
+        "enginePlaceholder": "Select engine",
+        "type": "PR AI index type",
+        "scope": "PR AI index scope",
+        "repo": "PR AI index repo",
+        "org": "PR AI index org",
+        "generate": "Generate {{name}}",
+        "autoEngine": "Auto-detect available CLI",
+        "autoEngineDescription": "Use the first installed local AI CLI.",
+        "notInstalled": "{{name}} (not installed)",
+        "success": "AI index generated",
+        "chooseRepo": "Choose repo",
+        "chooseOrg": "Choose org",
+        "inputHash": "input_hash: {{hash}}"
+      },
+      "sessionsPanel": {
+        "title": "PR <-> Sessions",
+        "description": "{{prs}} PRs correlated - {{matches}} AI-confirmed matches",
+        "enableDeterministic": "Enable deterministic correlation",
+        "minutesBefore": "Minutes before PR",
+        "minutesAfter": "Minutes after PR",
+        "minConfidence": "Min confidence",
+        "maxSessions": "Max sessions / PR",
+        "signalWeights": "Signal weights",
+        "saveConfig": "Save deterministic config",
+        "saving": "Saving...",
+        "saved": "PR-session correlation config saved",
+        "generateAi": "Generate AI correlation",
+        "correlating": "Correlating...",
+        "generated": "AI session correlation generated",
+        "weightAria": "{{label}} weight",
+        "minutesBeforeAria": "Minutos de sesion antes del PR",
+        "minutesAfterAria": "Minutos de sesion despues del PR",
+        "minConfidenceAria": "Confianza minima de sesion",
+        "maxSessionsAria": "Maximo de sesiones por PR"
+      },
+      "agentInsights": {
+        "title": "AI Agent Insights",
+        "description": "Runs on demand for {{author}} using the selected date range.",
+        "engine": "Engine:",
+        "changeEngine": "Change it in PR AI indexes above.",
+        "generate": "Generate AI Insights",
+        "generating": "Generating...",
+        "generated": "AI insights generated"
+      },
+      "ruleManagement": {
+        "title": "Rule management",
+        "description": "Rules are managed in Settings so they can be reused and audited.",
+        "openSettings": "Open PR Rules settings"
+      },
+      "toast": {
+        "settingsSaved": "PR-session correlation config saved",
+        "aiCorrelationGenerated": "AI session correlation generated",
+        "aiInsightsGenerated": "AI insights generated",
+        "aiIndexGenerated": "AI index generated",
+        "aiJobRetried": "AI job retried successfully",
+        "aiJobCancelled": "AI job cancelled",
+        "aiIndexGeneratedForPr": "{{name}} generated for PR #{{number}}",
+        "aiIndexBatchGenerated": "{{name}} batch generated"
+      },
+      "allContributors": "Todos los contribuidores",
+      "jobs": {
+        "created": "Creado {{date}}",
+        "finished": "Finalizado {{date}}"
+      }
     },
     "aiImpact": {
       "title": "Impacto de la IA",
@@ -328,7 +581,17 @@
       "state": "Estado",
       "mttr": "MTTR",
       "noIncidents": "Sin incidents en el rango. Etiqueta los issues de GitHub como \"incident\" para obtener el MTTR exacto y la tasa de fallos de cambio.",
-      "incidentNote": "Los reverts/hotfixes y los deploys fallidos son proxies; conecta GitHub y etiqueta los issues de incident como \"incident\" para obtener el MTTR exacto y la tasa de fallos de cambio."
+      "incidentNote": "Los reverts/hotfixes y los deploys fallidos son proxies; conecta GitHub y etiqueta los issues de incident como \"incident\" para obtener el MTTR exacto y la tasa de fallos de cambio.",
+      "tabs": {
+        "overview": "Overview"
+      },
+      "source": "Fuente: {{source}}",
+      "commits": "Commits",
+      "lead": "Lead time",
+      "exactTitle": "Calculado directamente desde la fuente",
+      "estimatedTitle": "Estimado a partir de datos locales disponibles",
+      "exact": "exacto",
+      "approx": "aprox."
     },
     "allocation": {
       "title": "Asignación",
@@ -341,7 +604,9 @@
       "commits": "Commits",
       "share": "Proporción",
       "ai": "IA",
-      "categoryNote": "Las categorías provienen de los prefijos de conventional commits; los commits sin un tipo reconocido caen en \"Otro\"."
+      "categoryNote": "Las categorías provienen de los prefijos de conventional commits; los commits sin un tipo reconocido caen en \"Otro\".",
+      "grain": "Granularidad de asignacion",
+      "lineDelta": "+/- lineas"
     },
     "devex": {
       "title": "DevEx",
@@ -378,7 +643,9 @@
       "perAuthorDora": "DORA-lite por autor",
       "throughput": "Throughput / semana",
       "changeFailureProxy": "Proxy de fallos de cambio",
-      "changeFailureNote": "El fallo de cambio es un proxy de revert/hotfix basado en los mensajes de commit; el lead time y la frecuencia de deploy por autor requieren datos del autor del PR (aún no disponibles)."
+      "changeFailureNote": "El fallo de cambio es un proxy de revert/hotfix basado en los mensajes de commit; el lead time y la frecuencia de deploy por autor requieren datos del autor del PR (aún no disponibles).",
+      "noAuthoredCommits": "No authored commits in range.",
+      "commits": "Commits"
     },
     "tips": {
       "title": "Consejos",
@@ -393,7 +660,8 @@
     },
     "settings": {
       "title": "Ajustes",
-      "description": "Integraciones, fuentes de IA, plan y ubicaciones de escaneo."
+      "description": "Integraciones, fuentes de IA, plan y ubicaciones de escaneo.",
+      "sections": "Secciones de configuracion"
     }
   },
   "settings": {
@@ -407,7 +675,13 @@
       "general": "General",
       "generalDesc": "Plan de precios y ubicaciones de escaneo.",
       "onboarding": "Configuración inicial",
-      "onboardingDesc": "Volver a ejecutar el asistente de configuración."
+      "onboardingDesc": "Volver a ejecutar el asistente de configuración.",
+      "rules": "PR Rules",
+      "rulesDesc": "Create, override, disable, and remove deterministic pull request rules.",
+      "aiFeatures": "AI Features",
+      "aiFeaturesDesc": "Configure PR AI indexes, local CLI execution, and prompt overrides.",
+      "plansUsage": "Plans & Usage",
+      "plansUsageDesc": "Provider plans, prices, and usage snapshot setup."
     },
     "profile": {
       "displayName": "Nombre para mostrar",
@@ -423,12 +697,18 @@
       "defaultRange": "Rango de fechas predeterminado",
       "defaultRangeHint": "Rango de inicio al abrir la aplicación.",
       "save": "Guardar",
-      "saved": "Preferencias guardadas"
+      "saved": "Preferencias guardadas",
+      "defaultGithubUser": "Default GitHub user",
+      "defaultGithubUserHint": "Pull Requests opens on this author by default. Leave blank to start with all contributors.",
+      "githubLoginPlaceholder": "github-login",
+      "githubUserSaveError": "Could not save GitHub default user"
     },
     "general": {
       "pricingPlan": "Plan de precios",
       "claudeDir": "Directorio de Claude",
-      "projectsDir": "Directorio de proyectos"
+      "projectsDir": "Directorio de proyectos",
+      "planSet": "Plan set to {{plan}}",
+      "planError": "Could not update plan"
     },
     "onboarding": {
       "title": "Asistente de configuración",
@@ -447,7 +727,11 @@
       "active": "Activo:",
       "notConfigured": "no configurado",
       "setPath": "Establecer ruta",
-      "noSources": "No se detectaron fuentes de IA aún."
+      "noSources": "No se detectaron fuentes de IA aún.",
+      "settingsSaved": "{{provider}} settings saved",
+      "saveError": "Could not save {{provider}}",
+      "status": "{{messages}} messages - {{sessions}} sessions",
+      "sourcePath": "{{source}} path"
     },
     "capability": {
       "exactTokens": "tokens exactos",
@@ -458,6 +742,92 @@
       "reportedCost": "costo reportado",
       "missingCost": "costo faltante",
       "prompts": "prompts"
+    },
+    "rules": {
+      "title": "Deterministic PR Rules",
+      "totalRules": "{{count}} total rules",
+      "customOverrides": "{{count}} custom overrides",
+      "removed": "Rule removed",
+      "overrideRemoved": "Rule override removed",
+      "disable": "Disable",
+      "enable": "Enable",
+      "edit": "Edit",
+      "clone": "Clone {{id}}",
+      "delete": "Delete {{id}}",
+      "copySuffix": "{{title}} copy",
+      "editTitle": "Edit rule",
+      "createTitle": "Create rule",
+      "id": "Rule id",
+      "idHint": "Lowercase letters, digits and hyphens. Use an existing built-in id to override it.",
+      "titleField": "Titulo de la regla",
+      "category": "Category",
+      "severity": "Severity",
+      "scope": "Scope",
+      "metric": "Metric",
+      "operator": "Operator",
+      "threshold": "Threshold",
+      "enabled": "Enabled",
+      "description": "Description",
+      "recommendation": "Recomendacion de la regla",
+      "save": "Save rule",
+      "clear": "Clear",
+      "placeholders": {
+        "id": "large-pr-custom",
+        "title": "Large PR risk"
+      },
+      "idRequired": "Rule id is required",
+      "titleRecommendationRequired": "Title and recommendation are required",
+      "saved": "Deterministic rule saved"
+    },
+    "aiFeatures": {
+      "title": "PR AI generation",
+      "defaultEngine": "Default engine",
+      "defaultEngineHint": "Used first on Pull Requests when the CLI is installed.",
+      "defaultEngineLabel": "Default PR AI engine",
+      "defaultMode": "Default generation mode",
+      "defaultModeHint": "Pull Requests still lets you override this per run.",
+      "defaultModeLabel": "Default PR AI generation mode",
+      "correlationTitle": "PR-session deterministic correlation",
+      "correlationDescription": "Used by Pull Requests to map PRs to local AI coding sessions.",
+      "beforeMinutes": "Before minutes",
+      "afterMinutes": "After minutes",
+      "minConfidence": "Min confidence",
+      "maxSessions": "Max sessions / PR",
+      "localOnlyNote": "CLI execution stays local. LiteLLM, OpenRouter, or another OpenAI-compatible provider can be added later behind the reserved engine without changing these prompts.",
+      "save": "Save AI settings",
+      "saved": "AI feature settings saved",
+      "promptsTitle": "Index prompts",
+      "businessPrompt": "Business Value Index prompt",
+      "businessPromptHint": "The backend always adds the deterministic PR payload and strict JSON schema.",
+      "maturityPrompt": "AI Maturity prompt",
+      "maturityPromptHint": "Use this to tune what good AI-assisted delivery means for your team.",
+      "sessionPrompt": "PR-session correlation prompt",
+      "sessionPromptHint": "The backend supplies PR metadata and deterministic session candidates.",
+      "beforeMinutesAria": "Minutos predeterminados de sesion antes del PR",
+      "afterMinutesAria": "Minutos predeterminados de sesion despues del PR",
+      "minConfidenceAria": "Confianza minima predeterminada de sesion",
+      "maxSessionsAria": "Maximo predeterminado de sesiones por PR"
+    },
+    "plans": {
+      "sourceChecked": "Plan catalog checked {{date}}. Runtime price refresh is not automatic.",
+      "saved": "Plan saved",
+      "saveError": "Could not save plan",
+      "currentPlan": "Current plan",
+      "noSelectable": "No selectable plan",
+      "audienceFallback": "plan",
+      "unknownDate": "unknown",
+      "claudeSnapshot": "Claude Status Line snapshot",
+      "claudeSnapshotBody": "Manual opt-in capture for Claude context window and plan usage.",
+      "claudeSnapshotCommand": "harness-dashboard statusline-snapshot",
+      "copyCommand": "Copy Status Line command",
+      "commandCopied": "Status Line command copied",
+      "commandCopyError": "Could not copy command",
+      "snapshotObserved": "snapshot observed",
+      "snapshotMissing": "snapshot missing",
+      "snapshotStale": "snapshot stale",
+      "annualMonthly": "{{price}}/mo annual",
+      "monthly": "{{price}}/mo",
+      "seeSource": "See source"
     }
   },
   "components": {
@@ -466,7 +836,9 @@
       "toggleColumns": "Mostrar u ocultar columnas",
       "rowsPerPage": "Filas por página",
       "previous": "Anterior",
-      "next": "Siguiente"
+      "next": "Siguiente",
+      "sortedAscending": "orden ascendente",
+      "sortedDescending": "orden descendente"
     },
     "commitsTable": {
       "projectPlaceholder": "Proyecto…",
@@ -481,7 +853,12 @@
       "author": "Autor",
       "lines": "Líneas",
       "ai": "IA",
-      "noMatch": "Ningún commit coincide."
+      "noMatch": "Ningún commit coincide.",
+      "filterByAi": "Filtrar por IA",
+      "filteredCount": "{{count}} de {{total}}",
+      "searchAria": "Buscar commits",
+      "filterByProject": "Filtrar por proyecto",
+      "filterByAuthor": "Filtrar por autor"
     },
     "integrations": {
       "validating": "Validando token…",
@@ -510,7 +887,10 @@
       "github": "GitHub",
       "googleCalendar": "Google Calendar",
       "githubDesc": "Pull requests, releases y ejecuciones de CI de tus repos.",
-      "calendarDesc": "Superpón las reuniones sobre tu actividad y mide su impacto."
+      "calendarDesc": "Superpón las reuniones sobre tu actividad y mide su impacto.",
+      "apiBudget": "Presupuesto de API",
+      "allConnected": "Todas las integraciones disponibles ya estan conectadas.",
+      "connectNamed": "Conectar {{name}}"
     },
     "googleConnect": {
       "finishSignIn": "Termina el inicio de sesión en la pestaña abierta y luego haz clic en Sincronizar.",
@@ -556,6 +936,145 @@
       "fullPaths": "Rutas completas",
       "showingShort": "Mostrando nombres de carpeta",
       "showingFull": "Mostrando rutas completas"
+    },
+    "onboarding": {
+      "skip": "Omitir configuración",
+      "progress": "Setup progress",
+      "step": "Step {{step}} of {{total}}",
+      "steps": {
+        "copilots": {
+          "title": "Your copilots",
+          "blurb": "Which AI coding tools do you use?"
+        },
+        "connect": {
+          "title": "Connect",
+          "blurb": "Link GitHub and your calendar (optional)."
+        },
+        "sync": {
+          "title": "First sync",
+          "blurb": "Scan your local history and backfill."
+        }
+      },
+      "defaultGithubUser": "Default GitHub user",
+      "defaultGithubUserHint": "Pull Requests opens on this author by default. Leave blank to start with all contributors.",
+      "prAiMode": "PR AI index generation",
+      "prAiModeHint": "You can tune prompts and engines later in Settings, AI Features.",
+      "enablePrSessionCorrelation": "Activar correlacion PR-sesion por defecto",
+      "sessionCorrelationHint": "Uses local AI coding sessions to connect PRs back to the work that produced them. Advanced signal weights stay in Settings, AI Features.",
+      "minutesBeforePr": "Minutes before PR",
+      "minutesAfterPr": "Minutes after PR",
+      "minConfidence": "Min confidence",
+      "back": "Atrás",
+      "next": "Siguiente",
+      "finish": "Finalizar",
+      "detected": "Detected",
+      "notDetected": "Not detected",
+      "localSessions": "Local sessions",
+      "localSessionsSummary": "Index transcripts from your {{count}} selected {{label}}.",
+      "noSourcesSelected": "No sources selected - go back to step 1 to pick at least one.",
+      "githubBackfill": "GitHub backfill",
+      "githubBackfillDescription": "Choose how far back to pull pull requests, releases and CI runs, and whether to keep auto-syncing.",
+      "connectGithubForBackfill": "Connect GitHub in the previous step to also backfill pull requests and CI runs.",
+      "initialScan": "Initial scan",
+      "indexingHistory": "Indexing your history...",
+      "waitingResults": "Waiting for the first results...",
+      "backgroundScan": "Scanning continues in the background - you can finish setup any time.",
+      "startInitialScan": "Start initial scan",
+      "starting": "Starting...",
+      "startingScan": "Starting initial scan...",
+      "scanStarted": "Scan started - indexing your local history",
+      "scanError": "Could not start the scan",
+      "messages": "Messages",
+      "files": "Files",
+      "toolCalls": "Tool calls",
+      "title": "Set up your dashboard",
+      "subtitle": "A minute now, then it runs on its own.",
+      "savingCopilots": "Saving your copilots...",
+      "copilotsSaved": "Copilots saved",
+      "copilotsSaveError": "Could not save - you can change this later in Settings",
+      "savingGithubUser": "Saving GitHub default user...",
+      "githubUserSaved": "GitHub default user saved",
+      "githubUserSaveError": "Could not save GitHub user - you can change this later in Settings",
+      "minutesBeforePrAria": "Minutos de sesion antes del PR en onboarding",
+      "minutesAfterPrAria": "Minutos de sesion despues del PR en onboarding",
+      "minConfidenceAria": "Confianza minima de sesion en onboarding"
+    },
+    "charts": {
+      "previousMonth": "Previous month",
+      "nextMonth": "Next month",
+      "heatmapMetric": "Heatmap metric",
+      "productivityMetric": "Productivity metric",
+      "productiveHours": "Productive hours",
+      "productiveHoursSummary": "{{commits}} commits - {{messages}} Claude messages",
+      "peak": "Peak: {{day}} {{hour}} ({{value}})",
+      "noActivity": "No activity in range",
+      "sessions": "Sesiones",
+      "tokens": "Tokens",
+      "tokensLower": "tokens",
+      "activity": "Actividad",
+      "activityHeatmapNote": "Cada columna es un dia - tokens divididos en AM abajo / PM arriba (eje izquierdo); marcas naranjas = volumen relativo de sesiones.",
+      "minutesShort": "{{count}}min"
+    },
+    "githubSync": {
+      "progress": "GitHub sync progress",
+      "syncing": "Syncing {{current}}/{{total}}{{repo}}",
+      "repoSuffix": " - {{repo}}",
+      "summary": "{{prs}} PRs · {{deploys}} despliegues",
+      "apiBudget": "API budget",
+      "backfillWindow": "Backfill window",
+      "backfillAmount": "Backfill amount",
+      "backfillUnit": "Backfill unit",
+      "backfillHint": "Deepening the window re-backfills the selected repos; a shallower one keeps existing data.",
+      "prsToImport": "Pull requests to import",
+      "allRepoPrs": "All repo PRs",
+      "onlyMine": "Only mine",
+      "prScopeHint": "All repo PRs gives team baselines for DORA & productivity comparisons; \"Only mine\" stores just your own.",
+      "autoSync": "Auto-sync",
+      "every": "every",
+      "interval": "Auto-sync interval (minutes)",
+      "save": "Save sync settings",
+      "loading": "Loading settings...",
+      "loadError": "Could not load settings: {{error}}",
+      "saving": "Saving sync settings...",
+      "saved": "Sync settings saved",
+      "saveError": "Could not save settings"
+    },
+    "githubRepos": {
+      "updating": "Updating...",
+      "enabled": "Repo enabled for sync",
+      "disabled": "Repo disabled",
+      "updateError": "Could not update repo",
+      "loadError": "Could not load repos: {{error}}",
+      "loading": "Loading repos...",
+      "empty": "No GitHub repos discovered yet - use a supported AI coding provider in a repo with a GitHub origin, then rescan.",
+      "summary": "{{enabled}} of {{total}} repos enabled for sync",
+      "enableAll": "Enable all",
+      "disableAll": "Disable all",
+      "synced": "synced {{date}}",
+      "toggleRepo": "{{action}} {{repo}}"
+    },
+    "shell": {
+      "toggleTheme": "Cambiar tema",
+      "switchLight": "Switch to light theme",
+      "switchDark": "Switch to dark theme",
+      "refreshFailed": "Refresh failed",
+      "rescan": "Rescan transcripts",
+      "scanning": "Scanning...",
+      "refresh": "Actualizar",
+      "scanningLocal": "Scanning local transcripts",
+      "rescanLocal": "Rescan local transcripts",
+      "customRange": "Custom range",
+      "selectCustomRange": "Select a custom date range",
+      "customRangeTooltip": "Custom range: {{range}}. Click to change",
+      "pickCustomRange": "Pick a custom date range",
+      "productName": "Harness Dashboard",
+      "productTagline": "Plataforma DevX",
+      "localData": "Datos locales",
+      "local": "Local",
+      "localPathHint": "~/.claude/projects"
+    },
+    "kpi": {
+      "vsPrev": "vs prev"
     }
   },
   "language": {
@@ -566,5 +1085,78 @@
     "nl": "Nederlands",
     "zh": "中文",
     "ja": "日本語"
+  },
+  "enums": {
+    "prStatus": {
+      "all": "All statuses",
+      "awaiting_review": "Awaiting review",
+      "awaiting_merge": "Awaiting merge",
+      "merged": "Merged",
+      "closed": "Closed",
+      "open": "Open"
+    },
+    "severity": {
+      "info": "info",
+      "warning": "warning",
+      "critical": "critical"
+    },
+    "ruleScope": {
+      "pr": "PR",
+      "aggregate": "aggregate"
+    },
+    "operator": {
+      "gt": "greater than",
+      "gte": "greater than or equal",
+      "lt": "less than",
+      "lte": "less than or equal",
+      "eq": "equals"
+    },
+    "indexType": {
+      "business_value": "Business Value Index",
+      "ai_maturity": "AI Maturity"
+    },
+    "indexTypeShort": {
+      "business_value": "Business Value",
+      "ai_maturity": "AI Maturity"
+    },
+    "batchScope": {
+      "current_author": "Current author",
+      "selected_prs": "Selected PRs",
+      "repo": "Repository",
+      "org": "Organization"
+    },
+    "generationMode": {
+      "per_pr": "Per PR button",
+      "all_mine": "All PRs from default author",
+      "repo": "All PRs in a repo",
+      "org": "All PRs in an org",
+      "batch": "Selected PR batch"
+    },
+    "jobStatus": {
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "sessionMode": {
+      "ai": "AI",
+      "deterministic": "Deterministic"
+    },
+    "correlationSignal": {
+      "branch": "Branch",
+      "file_touch": "File touch",
+      "time_overlap": "Time overlap",
+      "temporal_proximity": "Temporal proximity",
+      "title_keyword": "Title keyword"
+    },
+    "heatMetric": {
+      "sessions": "sessions",
+      "tokens": "tokens",
+      "commits": "commits",
+      "meetings": "meetings",
+      "messages": "messages",
+      "both": "both"
+    }
   }
 }

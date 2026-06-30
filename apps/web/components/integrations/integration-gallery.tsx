@@ -7,6 +7,7 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface GalleryItem {
   id: string;
@@ -23,10 +24,11 @@ export function IntegrationGallery({
   items: GalleryItem[];
   className?: string;
 }) {
+  const { t } = useTranslation();
   if (items.length === 0) {
     return (
       <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-        Every available integration is already connected.
+        {t("components.integrations.allConnected")}
       </p>
     );
   }
@@ -49,11 +51,11 @@ export function IntegrationGallery({
           <Button
             variant="outline"
             size="sm"
-            aria-label={`Connect ${it.name}`}
+            aria-label={t("components.integrations.connectNamed", { name: it.name })}
             onClick={it.onConnect}
             className="w-full sm:w-auto"
           >
-            Connect
+            {t("components.integrations.connect")}
           </Button>
         </div>
       ))}

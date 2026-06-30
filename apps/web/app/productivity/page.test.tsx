@@ -209,7 +209,7 @@ describe("ProductivityPage", () => {
     expect(screen.getByText("Deployments")).toBeInTheDocument();
     expect(screen.getByText("My PR")).toBeInTheDocument();
     expect(screen.getByText("v1.0.0")).toBeInTheDocument();
-    expect(screen.getByText("r")).toBeInTheDocument();
+    expect(screen.getByTitle("r")).toBeInTheDocument();
   });
 
   it("shows calendar impact when a calendar is synced", async () => {

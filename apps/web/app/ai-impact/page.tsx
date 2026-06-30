@@ -105,9 +105,10 @@ function RoiTable({ rows, t }: { rows: AiRoiByGroupRow[]; t: TFunction }) {
 export default function AiImpactPage() {
   const { t } = useTranslation();
   const { since, until } = useRange();
-  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { queryProviders, settingsLoaded, hasAvailableProviders, hasSelectedProviders } =
+    useProviderFilter();
   const { data, error, loading } = useApi<AiImpactBundle>(
-    settingsLoaded && hasAvailableProviders
+    settingsLoaded && hasAvailableProviders && hasSelectedProviders
       ? withRange("/api/ai/impact-bundle", since, until, queryProviders)
       : null,
   );

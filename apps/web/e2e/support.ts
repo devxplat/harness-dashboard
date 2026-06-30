@@ -18,7 +18,11 @@ export async function seedConfiguredFixture(request: APIRequestContext) {
   if (seeded) return;
 
   const headers = await authHeaders(request);
-  await request.post("/api/settings", { headers, data: { onboarding_done: true } });
+  const settings = await request.post("/api/settings", {
+    headers,
+    data: { onboarding_done: true },
+  });
+  expect(settings.ok()).toBe(true);
   const scan = await request.get("/api/scan", { headers });
   expect(scan.ok()).toBe(true);
 

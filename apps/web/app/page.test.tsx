@@ -1,4 +1,5 @@
 import OverviewPage from "@/app/page";
+import * as providerFilter from "@/lib/provider-filter";
 import { installFailingFetch, installFetch, renderWithRange } from "@/lib/test-utils";
 import { screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -88,6 +89,32 @@ describe("OverviewPage", () => {
     // Daily tokens, Activity and Calendar all surface the empty message.
     await waitFor(() =>
       expect(screen.getAllByText("No activity in range.").length).toBeGreaterThan(0),
+    );
+  });
+
+  it("does not fetch provider data when every vendor is deselected", async () => {
+    vi.spyOn(providerFilter, "useProviderFilter").mockReturnValue({
+      selected: [],
+      available: ["claude"],
+      queryProviders: ["__none"],
+      settingsLoaded: true,
+      hasAvailableProviders: true,
+      hasSelectedProviders: false,
+      requiresProviderSelection: true,
+      toggle: vi.fn(),
+      setSelected: vi.fn(),
+      reset: vi.fn(),
+    });
+    const fetchMock = installFetch({
+      "/api/overview-bundle": bundle,
+      "/api/overview": bundle.totals,
+    });
+    renderWithRange(<OverviewPage />);
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([url]) => String(url).includes("/api/overview")),
+      ).toBe(false),
     );
   });
 

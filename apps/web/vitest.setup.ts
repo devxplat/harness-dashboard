@@ -17,8 +17,50 @@ if (!window.matchMedia) {
   })) as unknown as typeof window.matchMedia;
 }
 
+const TEST_WIDTH = 1024;
+const TEST_HEIGHT = 768;
+
+const testRect = () =>
+  ({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    bottom: TEST_HEIGHT,
+    right: TEST_WIDTH,
+    width: TEST_WIDTH,
+    height: TEST_HEIGHT,
+    toJSON: () => ({}),
+  }) as DOMRect;
+
+Object.defineProperties(HTMLElement.prototype, {
+  clientHeight: { configurable: true, get: () => TEST_HEIGHT },
+  clientWidth: { configurable: true, get: () => TEST_WIDTH },
+  offsetHeight: { configurable: true, get: () => TEST_HEIGHT },
+  offsetWidth: { configurable: true, get: () => TEST_WIDTH },
+});
+
+HTMLElement.prototype.getBoundingClientRect = testRect;
+SVGElement.prototype.getBoundingClientRect = testRect;
+
 class ResizeObserverStub {
-  observe() {}
+  private callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+
+  observe(target: Element) {
+    this.callback(
+      [
+        {
+          target,
+          contentRect: testRect(),
+        } as ResizeObserverEntry,
+      ],
+      this,
+    );
+  }
   unobserve() {}
   disconnect() {}
 }

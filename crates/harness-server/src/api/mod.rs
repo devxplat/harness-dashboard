@@ -12,7 +12,10 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use harness_core::db::{Db, Grain, PrAiIndex, PrDashboardBundle, PrGrain, PrInsightRule};
+use harness_core::db::{
+    Db, Grain, PrAiIndex, PrDashboardBundle, PrDashboardQuery, PrGrain, PrInsightRule,
+    PrSessionCandidateGroup, PrSessionCorrelation, PrSessionCorrelationConfig,
+};
 use harness_core::model::ProviderId;
 use harness_core::pricing::Pricing;
 use harness_core::scan::{self, ScanStats};
@@ -101,6 +104,14 @@ pub struct RangeParams {
     pub providers: Option<String>,
     pub grain: Option<String>,
     pub author: Option<String>,
+    pub query: Option<String>,
+    pub status: Option<String>,
+    pub repo: Option<String>,
+    pub org: Option<String>,
+    pub direction: Option<String>,
+    pub category: Option<String>,
+    pub severity: Option<String>,
+    pub scope: Option<String>,
     /// 0-based page index for server-side pagination (sessions/projects/prompts).
     pub page: Option<i64>,
     /// Rows per page for server-side pagination.
@@ -316,6 +327,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/projects", get(projects))
         .route("/api/tools", get(tools))
         .route("/api/sessions", get(sessions))
+        .route("/api/sessions/{id}/bundle", get(session_bundle))
         .route("/api/sessions/{id}", get(session_detail))
         .route("/api/daily", get(daily))
         .route("/api/commits", get(commits))
@@ -347,6 +359,11 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/pull-requests", get(pull_requests))
         .route("/api/pull-requests/bundle", get(pull_requests_bundle))
+        .route("/api/pull-requests/detail", get(pull_request_detail))
+        .route(
+            "/api/pull-requests/deterministic-insights",
+            get(pull_request_deterministic_insights),
+        )
         .route(
             "/api/pull-requests/insight-rules",
             get(pull_request_rules).post(set_pull_request_rules),
@@ -362,6 +379,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/pull-requests/ai-insights/jobs/{id}",
             get(get_pull_request_ai_job),
+        )
+        .route(
+            "/api/pull-requests/ai-insights/jobs/{id}/retry",
+            post(retry_pull_request_ai_job),
+        )
+        .route(
+            "/api/pull-requests/ai-insights/jobs/{id}/cancel",
+            post(cancel_pull_request_ai_job),
         )
         .route("/api/deployments", get(deployments))
         .route("/api/meetings/impact", get(meeting_impact))
@@ -386,6 +411,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/tips", get(tips))
         .route("/api/rtk", get(rtk))
         .route("/api/plan", get(get_plan).post(set_plan))
+        .route(
+            "/api/provider-plans",
+            get(provider_plans).post(set_provider_plan),
+        )
         .route("/api/settings", get(get_settings).post(post_settings))
         .route("/api/scan", get(scan_blocking))
         .route("/api/ingest", get(ingest_status))
@@ -695,7 +724,7 @@ async fn projects(State(s): State<AppState>, Query(q): Query<RangeParams>) -> Ap
     let since = q.since().map(str::to_owned);
     let until = q.until().map(str::to_owned);
     let providers = q.providers();
-    read_json(&s, move |db, _| {
+    read_json(&s, move |db, _pr| {
         db.projects_for_providers(since.as_deref(), until.as_deref(), &providers)
     })
     .await
@@ -708,7 +737,7 @@ async fn tools(State(s): State<AppState>, Query(q): Query<RangeParams>) -> ApiRe
     let since = q.since().map(str::to_owned);
     let until = q.until().map(str::to_owned);
     let providers = q.providers();
-    read_json(&s, move |db, _| {
+    read_json(&s, move |db, _pr| {
         db.tools_for_providers(since.as_deref(), until.as_deref(), &providers)
     })
     .await
@@ -752,8 +781,24 @@ async fn session_detail(
     Query(q): Query<SessionDetailParams>,
 ) -> ApiResult {
     let provider = q.provider.as_deref().and_then(|p| p.parse().ok());
-    read_json(&s, move |db, _| {
+    read_json(&s, move |db, _pr| {
         db.session_detail_for_provider(&id, provider)
+    })
+    .await
+}
+
+async fn session_bundle(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<SessionDetailParams>,
+) -> ApiResult {
+    let provider = q
+        .provider
+        .as_deref()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(ProviderId::Claude);
+    read_json(&s, move |db, pr| {
+        db.session_bundle_for_provider(pr, &id, provider)
     })
     .await
 }
@@ -1148,9 +1193,94 @@ async fn pull_requests_bundle(
     let since = q.since().map(str::to_owned);
     let until = q.until().map(str::to_owned);
     let author = q.author.clone();
+    let text = q.query.clone();
+    let status = q.status.clone();
+    let repo = q.repo.clone();
+    let org = q.org.clone();
+    let sort = q.sort.clone();
+    let direction = q.direction.clone();
+    let page = q.page();
+    let page_size = q.page_size(25);
     let grain = PrGrain::parse(q.grain.as_deref());
     read_json(&s, move |db, _| {
-        db.pr_dashboard_bundle(grain, author.as_deref(), since.as_deref(), until.as_deref())
+        let query = PrDashboardQuery {
+            grain,
+            author: author.as_deref(),
+            since: since.as_deref(),
+            until: until.as_deref(),
+            page,
+            page_size,
+            query: text.as_deref(),
+            status: status.as_deref(),
+            repo: repo.as_deref(),
+            org: org.as_deref(),
+            sort: sort.as_deref(),
+            direction: direction.as_deref(),
+        };
+        db.pr_dashboard_bundle_query(&query, false)
+    })
+    .await
+}
+
+#[derive(Debug, Deserialize)]
+struct PrDetailParams {
+    repo_key: String,
+    number: i64,
+}
+
+async fn pull_request_detail(
+    State(s): State<AppState>,
+    Query(q): Query<PrDetailParams>,
+) -> ApiResult {
+    let repo_key = q.repo_key;
+    let number = q.number;
+    read_json(&s, move |db, _| {
+        db.pr_dashboard_detail(&repo_key, number)?
+            .ok_or_else(|| harness_core::error::CoreError::Other("pull request not found".into()))
+    })
+    .await
+}
+
+async fn pull_request_deterministic_insights(
+    State(s): State<AppState>,
+    Query(q): Query<RangeParams>,
+) -> ApiResult {
+    let since = q.since().map(str::to_owned);
+    let until = q.until().map(str::to_owned);
+    let author = q.author.clone();
+    let text = q.query.clone();
+    let status = q.status.clone();
+    let repo = q.repo.clone();
+    let org = q.org.clone();
+    let sort = q.sort.clone();
+    let direction = q.direction.clone();
+    let category = q.category.clone();
+    let severity = q.severity.clone();
+    let scope = q.scope.clone();
+    let page = q.page();
+    let page_size = q.page_size(8);
+    let grain = PrGrain::parse(q.grain.as_deref());
+    read_json(&s, move |db, _| {
+        let query = PrDashboardQuery {
+            grain,
+            author: author.as_deref(),
+            since: since.as_deref(),
+            until: until.as_deref(),
+            page,
+            page_size,
+            query: text.as_deref(),
+            status: status.as_deref(),
+            repo: repo.as_deref(),
+            org: org.as_deref(),
+            sort: sort.as_deref(),
+            direction: direction.as_deref(),
+        };
+        db.pr_deterministic_insights_page(
+            &query,
+            category.as_deref(),
+            severity.as_deref(),
+            scope.as_deref(),
+        )
     })
     .await
 }
@@ -1226,6 +1356,8 @@ pub struct PrAiInsightJob {
     pub input_hash: String,
     pub result: Option<PrAiInsightResult>,
     pub error: Option<String>,
+    pub cancel_requested: bool,
+    pub request: Option<PrAiJobBody>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1235,6 +1367,8 @@ pub struct PrAiInsightResult {
     pub insights: Vec<PrAiInsightItem>,
     #[serde(default)]
     pub indexes: Vec<PrAiIndex>,
+    #[serde(default)]
+    pub session_correlations: Vec<PrSessionCorrelation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1247,8 +1381,8 @@ pub struct PrAiInsightItem {
     pub affected_prs: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct PrAiJobBody {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrAiJobBody {
     engine: String,
     analysis_type: Option<String>,
     scope: Option<String>,
@@ -1262,7 +1396,7 @@ struct PrAiJobBody {
     custom_prompt: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct PrAiJobTarget {
     repo_key: String,
     number: i64,
@@ -1272,6 +1406,12 @@ const MAX_PR_AI_JOB_PRS: usize = 100;
 const MAX_PR_AI_PAYLOAD_BYTES: usize = 768 * 1024;
 const MAX_PR_AI_CUSTOM_PROMPT_CHARS: usize = 6000;
 const MAX_SETTING_TEXT_CHARS: usize = 4096;
+
+struct PrAiJobOutcome {
+    input_hash: String,
+    result: PrAiInsightResult,
+    targets: Vec<(String, i64)>,
+}
 
 async fn pull_request_ai_engines() -> ApiResult {
     Ok(Json(json!(ai_engines())))
@@ -1329,12 +1469,14 @@ async fn create_pull_request_ai_job(
         engine: engine.clone(),
         analysis_type: analysis_type.clone(),
         scope: scope.clone(),
-        status: "running".into(),
+        status: "queued".into(),
         created_at_utc: now,
         finished_at_utc: None,
         input_hash: String::new(),
         result: None,
         error: None,
+        cancel_requested: false,
+        request: Some(body.clone()),
     };
     {
         let mut jobs = s.pr_ai_jobs.lock().unwrap();
@@ -1350,6 +1492,38 @@ async fn create_pull_request_ai_job(
     Ok(Json(serde_json::to_value(job)?))
 }
 
+async fn retry_pull_request_ai_job(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult {
+    let request = {
+        let jobs = s.pr_ai_jobs.lock().unwrap();
+        let Some(job) = jobs.get(&id) else {
+            return Err(not_found("AI insight job not found"));
+        };
+        job.request
+            .clone()
+            .ok_or_else(|| bad_request("AI insight job cannot be retried"))?
+    };
+    create_pull_request_ai_job(State(s), Json(request)).await
+}
+
+async fn cancel_pull_request_ai_job(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult {
+    let mut jobs = s.pr_ai_jobs.lock().unwrap();
+    let Some(job) = jobs.get_mut(&id) else {
+        return Err(not_found("AI insight job not found"));
+    };
+    job.cancel_requested = true;
+    if job.status == "queued" || job.status == "running" {
+        job.status = "cancelled".into();
+        if job.finished_at_utc.is_none() {
+            job.finished_at_utc =
+                Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
+        }
+    }
+    Ok(Json(serde_json::to_value(job)?))
+}
+
 async fn run_pr_ai_job(
     s: AppState,
     id: String,
@@ -1359,18 +1533,47 @@ async fn run_pr_ai_job(
     scope: String,
 ) {
     let engine = engine_info.id.clone();
+    {
+        let mut jobs = s.pr_ai_jobs.lock().unwrap();
+        let Some(job) = jobs.get_mut(&id) else {
+            return;
+        };
+        if job.cancel_requested || job.status == "cancelled" {
+            job.status = "cancelled".into();
+            job.finished_at_utc =
+                Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
+            return;
+        }
+        job.status = "running".into();
+    }
     let outcome = run_pr_ai_job_inner(&s, &engine_info, body, &analysis_type, &scope).await;
     let finished_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    if outcome.is_ok() && pr_ai_job_cancelled(&s, &id) {
+        mark_pr_ai_job_cancelled(&s, &id, finished_at);
+        return;
+    }
+    let outcome = match outcome {
+        Ok(outcome) => match persist_pr_ai_job_result(&s, &analysis_type, &outcome) {
+            Ok(()) => Ok(outcome),
+            Err(e) => Err(e),
+        },
+        Err(e) => Err(e),
+    };
     let mut jobs = s.pr_ai_jobs.lock().unwrap();
     let Some(job) = jobs.get_mut(&id) else {
         return;
     };
+    if job.cancel_requested || job.status == "cancelled" {
+        job.status = "cancelled".into();
+        job.finished_at_utc = Some(finished_at);
+        return;
+    }
     job.finished_at_utc = Some(finished_at);
     match outcome {
-        Ok((input_hash, result)) => {
+        Ok(outcome) => {
             job.status = "succeeded".into();
-            job.input_hash = input_hash;
-            job.result = Some(result);
+            job.input_hash = outcome.input_hash;
+            job.result = Some(outcome.result);
             job.error = None;
         }
         Err(e) => {
@@ -1382,13 +1585,46 @@ async fn run_pr_ai_job(
     }
 }
 
+fn pr_ai_job_cancelled(s: &AppState, id: &str) -> bool {
+    let jobs = s.pr_ai_jobs.lock().unwrap();
+    jobs.get(id)
+        .is_some_and(|job| job.cancel_requested || job.status == "cancelled")
+}
+
+fn mark_pr_ai_job_cancelled(s: &AppState, id: &str, finished_at: String) {
+    let mut jobs = s.pr_ai_jobs.lock().unwrap();
+    if let Some(job) = jobs.get_mut(id) {
+        job.status = "cancelled".into();
+        job.cancel_requested = true;
+        job.finished_at_utc = Some(finished_at);
+    }
+}
+
+fn persist_pr_ai_job_result(
+    s: &AppState,
+    analysis_type: &str,
+    outcome: &PrAiJobOutcome,
+) -> anyhow::Result<()> {
+    if analysis_type == "business_value" || analysis_type == "ai_maturity" {
+        s.db.upsert_pr_ai_indexes(&outcome.result.indexes)?;
+    }
+    if analysis_type == "session_correlation" {
+        s.db.replace_pr_session_correlations(
+            "ai",
+            &outcome.targets,
+            &outcome.result.session_correlations,
+        )?;
+    }
+    Ok(())
+}
+
 async fn run_pr_ai_job_inner(
     s: &AppState,
     engine_info: &PrAiEngine,
     body: PrAiJobBody,
     analysis_type: &str,
     scope: &str,
-) -> anyhow::Result<(String, PrAiInsightResult)> {
+) -> anyhow::Result<PrAiJobOutcome> {
     if !engine_info.available {
         anyhow::bail!("AI insight engine is not available on PATH");
     }
@@ -1421,6 +1657,7 @@ async fn run_pr_ai_job_inner(
     let setting_prompt = match analysis_type {
         "business_value" => s.db.get_setting("pr_business_value_prompt")?,
         "ai_maturity" => s.db.get_setting("pr_ai_maturity_prompt")?,
+        "session_correlation" => s.db.get_setting("pr_session_correlation_prompt")?,
         _ => None,
     };
     let custom_prompt = body
@@ -1440,24 +1677,56 @@ async fn run_pr_ai_job_inner(
         .map(|row| row.repo_key.clone())
         .collect::<Vec<_>>();
     let repo_roots = s.db.pr_repo_roots(&repo_keys)?;
-    let payload = ai_payload(&bundle, analysis_type, scope, custom_prompt, &repo_roots)?;
+    let session_candidates =
+        if analysis_type == "session_correlation" || analysis_type == "ai_maturity" {
+            let session_config = s.db.pr_session_correlation_config()?;
+            Some(s.db.pr_session_correlation_candidates(&bundle.rows, &session_config)?)
+        } else {
+            None
+        };
+    let payload = ai_payload(
+        &bundle,
+        analysis_type,
+        scope,
+        custom_prompt,
+        &repo_roots,
+        session_candidates.as_ref(),
+    )?;
     if payload.len() > MAX_PR_AI_PAYLOAD_BYTES {
         anyhow::bail!("AI insight payload is too large");
     }
     let input_hash = sha256_hex(&payload);
     let mut result = run_ai_engine(&engine_info.id, &payload, analysis_type).await?;
     retain_allowed_pr_ai_indexes(&mut result.indexes, &bundle, analysis_type);
+    retain_allowed_pr_session_correlations(
+        &mut result.session_correlations,
+        &bundle,
+        session_candidates.as_deref().unwrap_or(&[]),
+        analysis_type,
+    );
     validate_pr_ai_index_result(&mut result, &bundle, analysis_type)?;
+    validate_pr_session_correlation_result(&mut result, &bundle, analysis_type)?;
     enrich_pr_ai_indexes(
         &mut result.indexes,
         analysis_type,
         &engine_info.id,
         &input_hash,
     );
-    if analysis_type == "business_value" || analysis_type == "ai_maturity" {
-        s.db.upsert_pr_ai_indexes(&result.indexes)?;
-    }
-    Ok((input_hash, result))
+    enrich_pr_session_correlations(
+        &mut result.session_correlations,
+        &engine_info.id,
+        &input_hash,
+    );
+    let targets = bundle
+        .rows
+        .iter()
+        .map(|row| (row.repo_key.clone(), row.number))
+        .collect();
+    Ok(PrAiJobOutcome {
+        input_hash,
+        result,
+        targets,
+    })
 }
 
 fn prune_pr_ai_jobs(jobs: &mut std::collections::HashMap<String, PrAiInsightJob>) {
@@ -1546,6 +1815,9 @@ fn normalize_pr_ai_analysis_type(value: Option<&str>) -> String {
     {
         "business_value" | "business_value_index" => "business_value".into(),
         "ai_maturity" | "ai_maturity_index" => "ai_maturity".into(),
+        "session_correlation" | "pr_session_correlation" | "sessions" => {
+            "session_correlation".into()
+        }
         _ => "general_insights".into(),
     }
 }
@@ -1573,6 +1845,7 @@ fn filter_pr_ai_bundle(
     match scope {
         "single_pr" | "selected_prs" => {
             if targets.is_empty() {
+                bundle.rows.clear();
                 return;
             }
             bundle.rows.retain(|row| {
@@ -1582,20 +1855,24 @@ fn filter_pr_ai_bundle(
             });
         }
         "repo" => {
-            if let Some(repo) = repo.map(str::trim).filter(|r| !r.is_empty()) {
-                bundle.rows.retain(|row| {
-                    row.repo_key == repo || row.repo_full_name.eq_ignore_ascii_case(repo)
-                });
-            }
+            let Some(repo) = repo.map(str::trim).filter(|r| !r.is_empty()) else {
+                bundle.rows.clear();
+                return;
+            };
+            bundle.rows.retain(|row| {
+                row.repo_key == repo || row.repo_full_name.eq_ignore_ascii_case(repo)
+            });
         }
         "org" => {
-            if let Some(org) = org.map(str::trim).filter(|o| !o.is_empty()) {
-                bundle.rows.retain(|row| {
-                    row.repo_owner
-                        .as_deref()
-                        .is_some_and(|owner| owner.eq_ignore_ascii_case(org))
-                });
-            }
+            let Some(org) = org.map(str::trim).filter(|o| !o.is_empty()) else {
+                bundle.rows.clear();
+                return;
+            };
+            bundle.rows.retain(|row| {
+                row.repo_owner
+                    .as_deref()
+                    .is_some_and(|owner| owner.eq_ignore_ascii_case(org))
+            });
         }
         _ => {}
     }
@@ -1646,6 +1923,66 @@ fn retain_allowed_pr_ai_indexes(
     });
 }
 
+fn retain_allowed_pr_session_correlations(
+    correlations: &mut Vec<PrSessionCorrelation>,
+    bundle: &PrDashboardBundle,
+    candidates: &[PrSessionCandidateGroup],
+    analysis_type: &str,
+) {
+    if analysis_type != "session_correlation" {
+        correlations.clear();
+        return;
+    }
+    let allowed_prs: HashSet<(String, i64)> = bundle
+        .rows
+        .iter()
+        .map(|row| (row.repo_key.clone(), row.number))
+        .collect();
+    let allowed_sessions: HashSet<(String, i64, String, String)> = candidates
+        .iter()
+        .flat_map(|group| {
+            group.candidates.iter().map(|candidate| {
+                (
+                    group.repo_key.clone(),
+                    group.pr_number,
+                    candidate.provider.clone(),
+                    candidate.session_id.clone(),
+                )
+            })
+        })
+        .collect();
+    correlations.retain(|correlation| {
+        allowed_prs.contains(&(correlation.repo_key.clone(), correlation.pr_number))
+            && allowed_sessions.contains(&(
+                correlation.repo_key.clone(),
+                correlation.pr_number,
+                correlation.provider.clone(),
+                correlation.session_id.clone(),
+            ))
+            && !correlation.provider.trim().is_empty()
+            && !correlation.session_id.trim().is_empty()
+    });
+}
+
+fn enrich_pr_session_correlations(
+    correlations: &mut [PrSessionCorrelation],
+    engine: &str,
+    input_hash: &str,
+) {
+    let generated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    for correlation in correlations {
+        correlation.mode = "ai".into();
+        correlation.confidence = correlation.confidence.clamp(0.0, 1.0);
+        if correlation.score <= 0.0 {
+            correlation.score = (correlation.confidence * 100.0).round();
+        }
+        correlation.score = correlation.score.clamp(0.0, 100.0);
+        correlation.engine = Some(engine.to_string());
+        correlation.input_hash = Some(input_hash.to_string());
+        correlation.generated_at_utc = Some(generated_at.clone());
+    }
+}
+
 fn validate_pr_ai_index_result(
     result: &mut PrAiInsightResult,
     bundle: &PrDashboardBundle,
@@ -1680,12 +2017,51 @@ fn validate_pr_ai_index_result(
     Ok(())
 }
 
+fn validate_pr_session_correlation_result(
+    result: &mut PrAiInsightResult,
+    bundle: &PrDashboardBundle,
+    analysis_type: &str,
+) -> anyhow::Result<()> {
+    if analysis_type != "session_correlation" {
+        return Ok(());
+    }
+    if result.session_correlations.is_empty() {
+        anyhow::bail!("AI insight engine did not return valid PR-session correlations");
+    }
+    let correlated_prs: HashSet<(String, i64)> = result
+        .session_correlations
+        .iter()
+        .map(|correlation| (correlation.repo_key.clone(), correlation.pr_number))
+        .collect();
+    if correlated_prs.len() < bundle.rows.len() {
+        result.insights.push(PrAiInsightItem {
+            title: "Partial PR-session correlation".into(),
+            severity: "warning".into(),
+            evidence: format!(
+                "The AI engine correlated sessions for {} of {} selected PRs.",
+                correlated_prs.len(),
+                bundle.rows.len()
+            ),
+            recommendation:
+                "Run a smaller batch or loosen deterministic candidate windows before regenerating."
+                    .into(),
+            affected_prs: bundle
+                .rows
+                .iter()
+                .map(|row| format!("{}#{}", row.repo_full_name, row.number))
+                .collect(),
+        });
+    }
+    Ok(())
+}
+
 fn ai_payload(
     bundle: &harness_core::db::PrDashboardBundle,
     analysis_type: &str,
     scope: &str,
     custom_prompt: Option<&str>,
     repo_roots: &BTreeMap<String, String>,
+    session_candidates: Option<&Vec<PrSessionCandidateGroup>>,
 ) -> anyhow::Result<String> {
     let rows: Vec<_> = bundle.rows.iter().take(MAX_PR_AI_JOB_PRS).collect();
     let (instruction, schema, rubric) = ai_analysis_contract(analysis_type);
@@ -1703,6 +2079,7 @@ fn ai_payload(
         "analytics_tiles": bundle.tiles,
         "deterministic_insights": bundle.deterministic_insights,
         "repo_ai_context": repo_ai_context,
+        "session_candidates": session_candidates,
         "pull_requests": rows,
     }))?)
 }
@@ -1715,12 +2092,12 @@ fn pr_ai_context(bundle: &PrDashboardBundle, repo_roots: &BTreeMap<String, Strin
         .map(|row| {
             let changed_paths: Vec<&str> =
                 row.files.iter().map(|file| file.path.as_str()).collect();
-            let repo_guidance = local_repo_guidance_files(
-                repo_roots
-                    .get(&row.repo_key)
-                    .map(String::as_str)
-                    .unwrap_or(&row.repo_key),
-            );
+            let repo_root = repo_roots
+                .get(&row.repo_key)
+                .map(String::as_str)
+                .unwrap_or(&row.repo_key);
+            let repo_guidance = local_repo_guidance_files(repo_root);
+            let repo_guidance_snippets = local_repo_guidance_snippets(repo_root);
             let changed_guidance: Vec<&str> = changed_paths
                 .iter()
                 .copied()
@@ -1775,6 +2152,7 @@ fn pr_ai_context(bundle: &PrDashboardBundle, repo_roots: &BTreeMap<String, Strin
                 "ai_session_overlap": row.ai_session_overlap,
                 "changed_file_count": row.changed_files,
                 "repo_guidance_files_present": repo_guidance,
+                "repo_guidance_snippets": repo_guidance_snippets,
                 "changed_guidance_files": changed_guidance,
                 "changed_automation_files": changed_automation,
                 "changed_test_files": changed_tests,
@@ -1795,6 +2173,7 @@ fn local_repo_guidance_files(repo_root: &str) -> Vec<&'static str> {
         "GEMINI.md",
         ".cursorrules",
         ".cursor/rules",
+        ".github/copilot-instructions.md",
         ".codex/skills",
         ".agents/skills",
         "specs",
@@ -1802,6 +2181,43 @@ fn local_repo_guidance_files(repo_root: &str) -> Vec<&'static str> {
     .into_iter()
     .filter(|relative| root.join(relative).exists())
     .collect()
+}
+
+fn local_repo_guidance_snippets(repo_root: &str) -> Vec<Value> {
+    const MAX_FILE_BYTES: usize = 1200;
+    const MAX_TOTAL_BYTES: usize = 4800;
+    let root = std::path::Path::new(repo_root);
+    let mut total = 0usize;
+    let mut snippets = Vec::new();
+    for relative in [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "GEMINI.md",
+        ".cursorrules",
+        ".github/copilot-instructions.md",
+    ] {
+        if total >= MAX_TOTAL_BYTES {
+            break;
+        }
+        let path = root.join(relative);
+        if !path.is_file() {
+            continue;
+        }
+        let Ok(mut text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        text = text.replace('\0', " ");
+        if text.len() > MAX_FILE_BYTES {
+            text.truncate(MAX_FILE_BYTES);
+        }
+        total += text.len();
+        snippets.push(json!({
+            "path": relative,
+            "bytes": text.len(),
+            "excerpt": text,
+        }));
+    }
+    snippets
 }
 
 fn normalized_path(path: &str) -> String {
@@ -1815,6 +2231,7 @@ fn is_guidance_path(path: &str) -> bool {
         || path.ends_with("gemini.md")
         || path.ends_with(".cursorrules")
         || path.contains(".cursor/rules")
+        || path.ends_with(".github/copilot-instructions.md")
 }
 
 fn is_automation_path(path: &str) -> bool {
@@ -1936,12 +2353,54 @@ fn ai_analysis_contract(analysis_type: &str) -> (&'static str, Value, Value) {
                 }
             }),
         ),
+        "session_correlation" => (
+            "Correlate selected pull requests with the most likely local AI coding sessions. Return strict JSON only.",
+            json!({
+                "summary": "string",
+                "insights": [base_insight.clone()],
+                "indexes": [],
+                "session_correlations": [{
+                    "repo_key": "string",
+                    "pr_number": 123,
+                    "provider": "claude|codex|gemini|cursor|copilot|opencode|antigravity",
+                    "session_id": "string",
+                    "mode": "ai",
+                    "score": 82,
+                    "confidence": 0.82,
+                    "summary": "string",
+                    "reasons": ["string"],
+                    "signals": {
+                        "time": 0.4,
+                        "branch": 0.25,
+                        "file_touch": 0.25,
+                        "title_keyword": 0.1
+                    },
+                    "session_started_at_utc": "2026-06-24T10:00:00Z",
+                    "session_ended_at_utc": "2026-06-24T12:00:00Z",
+                    "project_slug": "string",
+                    "sample_cwd": "string",
+                    "turns": 12,
+                    "tokens": 24000
+                }]
+            }),
+            json!({
+                "goal": "Help users understand which local AI sessions likely produced or supported each PR.",
+                "scoring": "Use only supplied pull_requests and session_candidates. Never invent session_id, provider, repo_key, or PR number. Prefer sessions with overlapping time, matching branch, touched files, and prompt terms related to the PR title. Lower confidence when evidence is only temporal.",
+                "confidence": {
+                    "0.85_to_1.0": "Multiple strong signals such as time overlap plus branch or file touch.",
+                    "0.60_to_0.84": "Good evidence with at least one non-time signal.",
+                    "0.40_to_0.59": "Weak but plausible deterministic candidate.",
+                    "below_0.40": "Do not return the correlation."
+                }
+            }),
+        ),
         _ => (
             "Analyze these pull request metrics. Return strict JSON only.",
             json!({
                 "summary": "string",
                 "insights": [base_insight],
-                "indexes": []
+                "indexes": [],
+                "session_correlations": []
             }),
             json!({
                 "goal": "Find useful review, flow, quality and delivery insights across the selected PRs."
@@ -1977,10 +2436,13 @@ fn ai_prompt(analysis_type: &str) -> String {
         "ai_maturity" => {
             " For AI Maturity, return one indexes item per selected pull request using index_type ai_maturity."
         }
+        "session_correlation" => {
+            " For PR-session correlation, return indexes as an empty array and put validated matches in session_correlations."
+        }
         _ => " Return indexes as an empty array unless explicitly scoring a PR index.",
     };
     format!(
-        "You are analyzing pull request analytics for a local-first dashboard. Use only the JSON payload provided on stdin. Do not request repository files, do not run tools, and do not include markdown. Return exactly one JSON object with keys summary, insights, and indexes. Each insight must include title, severity, evidence, recommendation, and affected_prs.{extra}"
+        "You are analyzing pull request analytics for a local-first dashboard. Use only the JSON payload provided on stdin. Do not request repository files, do not run tools, and do not include markdown. Return exactly one JSON object with keys summary, insights, indexes, and session_correlations. Each insight must include title, severity, evidence, recommendation, and affected_prs.{extra}"
     )
 }
 
@@ -2009,6 +2471,9 @@ fn public_ai_job_error(e: &anyhow::Error) -> &'static str {
     }
     if msg.contains("did not return valid indexes") {
         return "AI insight engine did not return valid indexes for the selected pull requests";
+    }
+    if msg.contains("valid PR-session correlations") {
+        return "AI insight engine did not return valid PR-session correlations for the selected pull requests";
     }
     "AI insight engine failed. Check the CLI installation and local authentication, then retry."
 }
@@ -2158,8 +2623,8 @@ async fn google_access_token(s: &AppState) -> anyhow::Result<String> {
 
 async fn google_start(State(s): State<AppState>) -> ApiResult {
     let (client_id, _secret) = google_creds()?;
-    let (verifier, challenge) = crate::calendar::pkce_pair();
-    let state = crate::calendar::oauth_state();
+    let (verifier, challenge) = crate::calendar::pkce_pair()?;
+    let state = crate::calendar::oauth_state()?;
     s.db.set_setting("google_pkce_verifier", &verifier)?;
     s.db.set_setting("google_oauth_state", &state)?;
     let url =
@@ -2593,6 +3058,54 @@ async fn set_plan(State(s): State<AppState>, Json(b): Json<PlanBody>) -> ApiResu
     Ok(Json(json!({ "ok": true })))
 }
 
+async fn provider_plans(State(s): State<AppState>) -> ApiResult {
+    read_json(&s, move |db, pr| {
+        Ok(json!({
+            "catalog": pr.provider_plans,
+            "selections": db.provider_plan_selections()?,
+            "snapshot_status": db.provider_snapshot_statuses()?,
+            "source_checked_at": pr.source_checked_at,
+        }))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+struct ProviderPlanBody {
+    provider: String,
+    plan_id: String,
+}
+
+async fn set_provider_plan(
+    State(s): State<AppState>,
+    Json(b): Json<ProviderPlanBody>,
+) -> ApiResult {
+    let provider = b
+        .provider
+        .parse::<ProviderId>()
+        .map_err(|_| bad_request("invalid provider"))?;
+    let plan_id = b.plan_id.trim();
+    if plan_id.is_empty() || plan_id.chars().count() > 80 || plan_id.contains('\0') {
+        return Err(bad_request("invalid plan"));
+    }
+    let provider_key = provider.as_str();
+    let valid = s
+        .pricing
+        .provider_plans
+        .get(provider_key)
+        .map(|plans| {
+            plans
+                .iter()
+                .any(|plan| plan.plan_id == plan_id && plan.selectable)
+        })
+        .unwrap_or(false);
+    if !valid {
+        return Err(bad_request("invalid plan"));
+    }
+    s.db.set_provider_plan(provider, plan_id)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
 #[derive(Clone)]
 struct ProviderSourceConfig {
     key: &'static str,
@@ -2780,7 +3293,7 @@ async fn get_settings(State(s): State<AppState>) -> ApiResult {
     let projects = s.projects_dir.display().to_string();
     let overridden = std::env::var("CLAUDE_PROJECTS_DIR").is_ok();
     let claude_root = (*s.projects_dir).clone();
-    read_json(&s, move |db, _| {
+    read_json(&s, move |db, pr| {
         let mut providers = Vec::new();
         let observed = db.provider_observed_stats()?;
         for provider in ProviderId::ALL {
@@ -2791,6 +3304,16 @@ async fn get_settings(State(s): State<AppState>) -> ApiResult {
                 harness_core::provider_adapters::provider_path(db, provider, &claude_root)?;
             let stats = observed.get(provider.as_str());
             let source_defs = provider_sources(provider, &claude_root);
+            let supports_context_window = matches!(
+                provider,
+                ProviderId::Claude
+                    | ProviderId::Codex
+                    | ProviderId::Gemini
+                    | ProviderId::Antigravity
+                    | ProviderId::Opencode
+            );
+            let supports_plan_usage = provider == ProviderId::Claude;
+            let has_plan_catalog = pr.provider_plans.contains_key(provider.as_str());
             let supported = json!({
                 "usage": supported_usage_label(&source_defs),
                 "tokens": source_defs.iter().any(|s| s.usage != "missing"),
@@ -2798,6 +3321,9 @@ async fn get_settings(State(s): State<AppState>) -> ApiResult {
                 "costs": source_defs.iter().any(|s| s.costs != "missing"),
                 "tools": source_defs.iter().any(|s| s.tools),
                 "prompts": source_defs.iter().any(|s| s.prompts),
+                "context_window": supports_context_window,
+                "plan_catalog": has_plan_catalog,
+                "plan_usage": supports_plan_usage,
             });
             let observed_caps = json!({
                 "usage": observed_usage_label(stats),
@@ -2806,6 +3332,9 @@ async fn get_settings(State(s): State<AppState>) -> ApiResult {
                 "costs": stats.is_some_and(|s| s.cost_estimated || s.cost_reported),
                 "tools": stats.is_some_and(|s| s.tools > 0),
                 "prompts": stats.is_some_and(|s| s.prompts > 0),
+                "context_window": supports_context_window && stats.is_some_and(|s| s.messages > 0),
+                "plan_catalog": has_plan_catalog,
+                "plan_usage": false,
             });
             let single_source = source_defs.len() == 1;
             let mut source_values = Vec::new();
@@ -2852,6 +3381,9 @@ async fn get_settings(State(s): State<AppState>) -> ApiResult {
                         "costs": source.costs != "missing",
                         "tools": source.tools,
                         "prompts": source.prompts,
+                        "context_window": supports_context_window,
+                        "plan_catalog": has_plan_catalog,
+                        "plan_usage": supports_plan_usage,
                     },
                     "supported": {
                         "usage": source.usage,
@@ -2860,6 +3392,9 @@ async fn get_settings(State(s): State<AppState>) -> ApiResult {
                         "costs": source.costs != "missing",
                         "tools": source.tools,
                         "prompts": source.prompts,
+                        "context_window": supports_context_window,
+                        "plan_catalog": has_plan_catalog,
+                        "plan_usage": supports_plan_usage,
                     },
                     "observed": observed_caps.clone(),
                 }));
@@ -2902,6 +3437,10 @@ async fn get_settings(State(s): State<AppState>) -> ApiResult {
             "pr_ai_maturity_prompt": db
                 .get_setting("pr_ai_maturity_prompt")?
                 .unwrap_or_else(default_ai_maturity_prompt),
+            "pr_session_correlation_config": db.pr_session_correlation_config()?,
+            "pr_session_correlation_prompt": db
+                .get_setting("pr_session_correlation_prompt")?
+                .unwrap_or_else(default_session_correlation_prompt),
             "providers": providers,
             "onboarding_done": db.get_setting("onboarding_done")?.as_deref() == Some("true"),
             "onboarding_step": db
@@ -2921,6 +3460,8 @@ struct SettingsBody {
     pr_ai_default_generation_mode: Option<String>,
     pr_business_value_prompt: Option<String>,
     pr_ai_maturity_prompt: Option<String>,
+    pr_session_correlation_config: Option<PrSessionCorrelationConfig>,
+    pr_session_correlation_prompt: Option<String>,
     providers: Option<Vec<ProviderSettingsBody>>,
     onboarding_done: Option<bool>,
     onboarding_step: Option<i64>,
@@ -2968,6 +3509,11 @@ fn default_business_value_prompt() -> String {
 
 fn default_ai_maturity_prompt() -> String {
     "Evaluate how mature the AI-assisted delivery practice appears for this PR using only the provided facts. Consider context quality, review loop efficiency, repo AI readiness, automation, checks and evidence quality. Score 0-100; do not reward AI usage without delivery discipline."
+        .into()
+}
+
+fn default_session_correlation_prompt() -> String {
+    "Correlate each selected PR with the most likely local AI coding sessions using only supplied PR metadata and session candidates. Prefer time overlap plus branch/file/prompt evidence, return low confidence for temporal-only matches, and never invent session ids."
         .into()
 }
 
@@ -3020,6 +3566,18 @@ async fn post_settings(State(s): State<AppState>, Json(b): Json<SettingsBody>) -
             "pr_ai_maturity_prompt",
             &prompt,
             &default_ai_maturity_prompt(),
+        )?;
+    }
+    if let Some(config) = b.pr_session_correlation_config {
+        s.db.set_pr_session_correlation_config(&config)?;
+    }
+    if let Some(prompt) = b.pr_session_correlation_prompt {
+        validate_ai_prompt_setting(&prompt)?;
+        save_prompt_setting(
+            &s.db,
+            "pr_session_correlation_prompt",
+            &prompt,
+            &default_session_correlation_prompt(),
         )?;
     }
     if let Some(providers) = b.providers {

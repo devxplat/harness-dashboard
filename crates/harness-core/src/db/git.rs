@@ -672,6 +672,7 @@ impl Db {
             "commits",
             "deployments",
             "pull_request_ai_indexes",
+            "pull_request_session_correlations",
             "pull_request_events",
             "pull_request_files",
             "pull_requests",

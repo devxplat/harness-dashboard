@@ -49,7 +49,7 @@ export default function TeamPage() {
       />
 
       {authors.length === 0 ? (
-        <EmptyBlock message="No authored commits in range." />
+        <EmptyBlock message={t("pages.team.noAuthoredCommits")} />
       ) : authors.length === 1 ? (
         <p className="text-xs text-muted-foreground">
           {t("pages.team.singleAuthorNote")}
@@ -66,7 +66,7 @@ export default function TeamPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("pages.team.author")}</TableHead>
-                  <TableHead className="text-right">Commits</TableHead>
+                  <TableHead className="text-right">{t("pages.team.commits")}</TableHead>
                   <TableHead className="text-right">{t("pages.team.aiShare")}</TableHead>
                   <TableHead className="text-right">{t("pages.team.activeDays")}</TableHead>
                   <TableHead className="text-right">{t("pages.team.lines")}</TableHead>

@@ -51,6 +51,46 @@ const engines = [
     notes: "Uses codex exec in a read-only sandbox.",
   },
 ];
+const providerPlans = {
+  catalog: {
+    claude: [
+      {
+        plan_id: "claude:api",
+        label: "API / pay-per-token",
+        audience: "individual",
+        billing_unit: "usage",
+        monthly_usd: 0,
+        annual_monthly_usd: null,
+        price_note: null,
+        selectable: true,
+        source_url: "https://claude.com/pricing",
+      },
+      {
+        plan_id: "claude:pro",
+        label: "Pro",
+        audience: "individual",
+        billing_unit: "user_month",
+        monthly_usd: 20,
+        annual_monthly_usd: 17,
+        price_note: null,
+        selectable: true,
+        source_url: "https://claude.com/pricing",
+      },
+    ],
+  },
+  selections: [{ provider: "claude", plan_id: "claude:api", updated_at: "2026-06-29T00:00:00Z" }],
+  snapshot_status: [
+    {
+      provider: "claude",
+      context_observed: false,
+      context_captured_at: null,
+      plan_usage_observed: false,
+      plan_usage_captured_at: null,
+      windows: [],
+    },
+  ],
+  source_checked_at: "2026-06-29",
+};
 
 describe("SettingsPage", () => {
   it("shows Profile by default and switches sections", async () => {
@@ -164,6 +204,15 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByLabelText("Business Value Index prompt"), {
       target: { value: "Score revenue, reliability, and NPS impact." },
     });
+    fireEvent.change(screen.getByLabelText("Default session minutes before PR"), {
+      target: { value: "180" },
+    });
+    fireEvent.change(screen.getByLabelText("Default session min confidence"), {
+      target: { value: "0.55" },
+    });
+    fireEvent.change(screen.getByLabelText("PR-session correlation prompt"), {
+      target: { value: "Match PRs to the strongest local coding sessions." },
+    });
     await userEvent.click(screen.getByRole("button", { name: "Save AI settings" }));
 
     await waitFor(() =>
@@ -174,11 +223,80 @@ describe("SettingsPage", () => {
             (init as RequestInit)?.method === "POST" &&
             String((init as RequestInit)?.body).includes("pr_ai_default_generation_mode") &&
             String((init as RequestInit)?.body).includes("batch") &&
-            String((init as RequestInit)?.body).includes("Score revenue"),
+            String((init as RequestInit)?.body).includes("Score revenue") &&
+            String((init as RequestInit)?.body).includes("pr_session_correlation_config") &&
+            String((init as RequestInit)?.body).includes("Match PRs"),
         ),
       ).toBe(true),
     );
   }, 15000);
+
+  it("renders Plans & Usage and saves a provider plan", async () => {
+    const fetchMock = installFetch({
+      "/api/settings": settings,
+      "/api/integrations": integrations,
+      "/api/provider-plans": (path: string, init?: RequestInit) =>
+        init?.method === "POST" ? { ok: true } : providerPlans,
+    });
+    renderWithRange(<SettingsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Plans & Usage/ })).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /Plans & Usage/ }));
+    expect(await screen.findByText(/Plan catalog checked 2026-06-29/)).toBeInTheDocument();
+    expect(screen.getByText("snapshot missing")).toBeInTheDocument();
+    expect(document.querySelector('a[href="https://claude.com/pricing"]')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole("combobox", { name: "Current plan" }));
+    await userEvent.click(screen.getByRole("option", { name: "Pro" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).includes("/api/provider-plans") &&
+            (init as RequestInit)?.method === "POST" &&
+            String((init as RequestInit)?.body).includes("claude:pro"),
+        ),
+      ).toBe(true),
+    );
+  }, 15000);
+
+  it("shows observed Claude snapshot windows in Plans & Usage", async () => {
+    installFetch({
+      "/api/settings": settings,
+      "/api/integrations": integrations,
+      "/api/provider-plans": {
+        ...providerPlans,
+        snapshot_status: [
+          {
+            provider: "claude",
+            context_observed: true,
+            context_captured_at: new Date().toISOString(),
+            plan_usage_observed: true,
+            plan_usage_captured_at: new Date().toISOString(),
+            windows: [
+              {
+                window_key: "five_hour",
+                label: "5-hour limit",
+                captured_at: new Date().toISOString(),
+                used_pct: 40,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    renderWithRange(<SettingsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Plans & Usage/ })).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /Plans & Usage/ }));
+    expect(await screen.findByText("snapshot observed")).toBeInTheDocument();
+    expect(screen.getByText(/5-hour limit/)).toBeInTheDocument();
+  });
 
   it("renders the error state", async () => {
     installFailingFetch();

@@ -52,9 +52,10 @@ export default function SkillsPage() {
   const { t } = useTranslation();
   const columns = useMemo(() => makeColumns(t), [t]);
   const { since, until } = useRange();
-  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { queryProviders, settingsLoaded, hasAvailableProviders, hasSelectedProviders } =
+    useProviderFilter();
   const { data, error, loading } = useApi<SkillRow[]>(
-    settingsLoaded && hasAvailableProviders
+    settingsLoaded && hasAvailableProviders && hasSelectedProviders
       ? `/api/skills${rangeQuery(since, until, queryProviders)}`
       : null,
   );

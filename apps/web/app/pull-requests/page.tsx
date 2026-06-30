@@ -7,12 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  SearchableSelect,
+  type SearchableOption,
+  useDebouncedValue,
+} from "@/components/ui/searchable-select";
 import {
   Sheet,
   SheetContent,
@@ -32,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApi } from "@/hooks/use-api";
 import { apiGet, apiPost, withRange } from "@/lib/api";
 import { formatDateShort, formatInt } from "@/lib/format";
+import { normalizePrSessionCorrelationConfig } from "@/lib/pr-session-correlation";
 import { useRange } from "@/lib/range";
 import { cn } from "@/lib/utils";
 import type {
@@ -40,7 +39,10 @@ import type {
   PrAiInsightJob,
   PrDashboardBundle,
   PrDashboardRow,
+  PrDeterministicInsightsPage,
   PrInsight,
+  PrSessionCorrelation,
+  PrSessionCorrelationConfig,
   PrTimelineEvent,
   SettingsInfo,
 } from "@/lib/types";
@@ -53,13 +55,18 @@ import {
   Filter,
   GitBranch,
   GitPullRequest,
+  Link2,
+  Save,
   Search,
   SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import type { TFunction } from "i18next";
+import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 type StatusFilter = "all" | "awaiting_review" | "awaiting_merge" | "merged" | "closed";
 type PrIndexType = "business_value" | "ai_maturity";
@@ -69,6 +76,34 @@ const ALL_VALUE = "__all";
 const INSIGHTS_PAGE_SIZE = 8;
 const JOB_POLL_MS = process.env.NODE_ENV === "test" ? 1 : 1000;
 const JOB_POLL_LIMIT = 120;
+const CORRELATION_BOOLEAN_OPTIONS: Array<
+  [string, "use_branch" | "use_file_touches" | "use_title_keywords"]
+> = [
+  ["branch", "use_branch"],
+  ["file_touch", "use_file_touches"],
+  ["title_keyword", "use_title_keywords"],
+];
+const CORRELATION_WEIGHT_OPTIONS: Array<[string, keyof PrSessionCorrelationConfig["weights"]]> = [
+  ["time_overlap", "time_overlap"],
+  ["temporal_proximity", "temporal_proximity"],
+  ["branch", "branch"],
+  ["file_touch", "file_touch"],
+  ["title_keyword", "title_keyword"],
+];
+
+function statusOptions(t: TFunction): SearchableOption[] {
+  return ["all", "awaiting_review", "awaiting_merge", "merged", "closed"].map((value) => ({
+    value,
+    label: t(`enums.prStatus.${value}`),
+  }));
+}
+
+function indexTypeOptions(t: TFunction): SearchableOption[] {
+  return ["business_value", "ai_maturity"].map((value) => ({
+    value,
+    label: t(`enums.indexType.${value}`),
+  }));
+}
 
 function prKey(row: Pick<PrDashboardRow, "repo_key" | "number">): string {
   return `${row.repo_key}#${row.number}`;
@@ -76,6 +111,15 @@ function prKey(row: Pick<PrDashboardRow, "repo_key" | "number">): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function toOptions(values: string[], allLabel?: string): SearchableOption[] {
+  const options = values.map((value) => ({ value, label: value }));
+  return allLabel ? [{ value: ALL_VALUE, label: allLabel }, ...options] : options;
 }
 
 function normalizeEngineId(value: string | null | undefined): string {
@@ -99,13 +143,17 @@ function normalizeEngineId(value: string | null | undefined): string {
 
 async function waitForAiJob(initial: PrAiInsightJob): Promise<PrAiInsightJob> {
   let current = initial;
-  for (let i = 0; i < JOB_POLL_LIMIT && current.status === "running"; i += 1) {
+  for (
+    let i = 0;
+    i < JOB_POLL_LIMIT && (current.status === "queued" || current.status === "running");
+    i += 1
+  ) {
     await sleep(JOB_POLL_MS);
     current = await apiGet<PrAiInsightJob>(
       `/api/pull-requests/ai-insights/jobs/${encodeURIComponent(initial.id)}`,
     );
   }
-  if (current.status === "running") {
+  if (current.status === "queued" || current.status === "running") {
     throw new Error("AI insight job did not finish in time. Check the CLI and try again.");
   }
   return current;
@@ -121,19 +169,8 @@ function fmtDate(value: string | null | undefined): string {
   return value ? formatDateShort(value) : "-";
 }
 
-function statusLabel(status: string): string {
-  switch (status) {
-    case "awaiting_review":
-      return "Awaiting review";
-    case "awaiting_merge":
-      return "Awaiting merge";
-    case "merged":
-      return "Merged";
-    case "closed":
-      return "Closed";
-    default:
-      return status;
-  }
+function statusLabel(status: string, t: TFunction): string {
+  return t(`enums.prStatus.${status}`, { defaultValue: status });
 }
 
 function statusClass(status: string): string {
@@ -168,20 +205,55 @@ function scoreClass(score: number): string {
   return "border-red-500/40 text-red-600 dark:text-red-300";
 }
 
-function indexTitle(type: PrIndexType): string {
-  return type === "business_value" ? "Business Value Index" : "AI Maturity";
+function indexTitle(type: PrIndexType, t: TFunction): string {
+  return t(`enums.indexType.${type}`);
 }
 
-function indexShortTitle(type: PrIndexType): string {
-  return type === "business_value" ? "Business Value" : "AI Maturity";
+function indexShortTitle(type: PrIndexType, t: TFunction): string {
+  return t(`enums.indexTypeShort.${type}`);
 }
 
-function authorLabel(login: string): string {
-  return login === ALL_VALUE ? "All contributors" : login;
+function authorLabel(login: string, t: TFunction): string {
+  return login === ALL_VALUE ? t("pages.pullRequests.allContributors") : login;
 }
 
 function repoLabel(row: Pick<PrDashboardRow, "repo_full_name" | "repo_key">): string {
   return row.repo_full_name || row.repo_key;
+}
+
+function confidencePct(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function sessionModeLabel(mode: string, t: TFunction): string {
+  return mode === "ai" ? t("enums.sessionMode.ai") : t("enums.sessionMode.deterministic");
+}
+
+function topSessionCorrelation(row: PrDashboardRow): PrSessionCorrelation | null {
+  return row.session_correlations?.[0] ?? null;
+}
+
+function shortSha(value: string | null | undefined): string {
+  return value ? value.slice(0, 7) : "-";
+}
+
+function deployStatusClass(status: string | null | undefined): string {
+  switch ((status ?? "").toLowerCase()) {
+    case "success":
+      return "border-emerald-500/40 text-emerald-600 dark:text-emerald-300";
+    case "failure":
+    case "failed":
+      return "border-red-500/40 text-red-600 dark:text-red-300";
+    default:
+      return "border-muted text-muted-foreground";
+  }
+}
+
+function cloneCorrelationConfig(config: PrSessionCorrelationConfig): PrSessionCorrelationConfig {
+  return {
+    ...config,
+    weights: { ...config.weights },
+  };
 }
 
 function IndexBadge({ index }: { index: PrAiIndex }) {
@@ -200,6 +272,78 @@ function IndexBadge({ index }: { index: PrAiIndex }) {
   );
 }
 
+function IndexExplainability({ index }: { index: PrAiIndex }) {
+  const { t } = useTranslation();
+  const scores = Object.entries(index.category_scores ?? {}).sort((a, b) => b[1] - a[1]);
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="flex flex-wrap gap-2 text-xs">
+        {index.confidence != null ? (
+          <Badge variant="outline">
+            {t("pages.pullRequests.detail.confidence", {
+              defaultValue: "Confidence {{value}}%",
+              value: Math.round(index.confidence * 100),
+            })}
+          </Badge>
+        ) : null}
+        {index.engine ? <Badge variant="outline">{index.engine}</Badge> : null}
+        {index.generated_at_utc ? (
+          <Badge variant="outline">{fmtDate(index.generated_at_utc)}</Badge>
+        ) : null}
+      </div>
+      {scores.length ? (
+        <div className="space-y-2">
+          {scores.slice(0, 7).map(([name, value]) => (
+            <div key={name} className="space-y-1">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="truncate text-muted-foreground">{name.replaceAll("_", " ")}</span>
+                <span className="tabular-nums">{Math.round(value)}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {index.evidence.length ? (
+        <div className="space-y-1">
+          <p className="text-xs font-medium">
+            {t("pages.pullRequests.detail.evidence", { defaultValue: "Evidence" })}
+          </p>
+          <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+            {index.evidence.slice(0, 4).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {index.recommendations.length ? (
+        <div className="space-y-1">
+          <p className="text-xs font-medium">
+            {t("pages.pullRequests.detail.recommendations", {
+              defaultValue: "Recommendations",
+            })}
+          </p>
+          <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+            {index.recommendations.slice(0, 4).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {index.input_hash ? (
+        <p className="truncate font-mono text-[11px] text-muted-foreground">
+          {t("pages.pullRequests.aiIndexes.inputHash", { hash: index.input_hash })}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function IndexCell({
   type,
   index,
@@ -213,6 +357,8 @@ function IndexCell({
   disabled: boolean;
   onGenerate: () => void;
 }) {
+  const { t } = useTranslation();
+  const label = indexTitle(type, t);
   return (
     <div className="flex min-w-32 items-center gap-2">
       {index ? (
@@ -229,44 +375,32 @@ function IndexCell({
           onGenerate();
         }}
         disabled={disabled || loading}
-        aria-label={`Generate ${indexTitle(type)}`}
+        aria-label={t("pages.pullRequests.aiIndexes.generate", { name: label })}
       >
         <Sparkles className="size-3.5" />
-        {loading ? "..." : index ? "Refresh" : "Generate"}
+        {loading ? "..." : index ? t("common.retry") : t("pages.pullRequests.aiIndexes.generate", { name: "" }).trim()}
       </Button>
     </div>
   );
 }
 
-function eventLabel(event: PrTimelineEvent): string {
+function eventLabel(event: PrTimelineEvent, t: TFunction): string {
   switch (event.event_type) {
     case "created":
-      return "Opened";
+      return t("enums.prStatus.open");
     case "review":
-      return "Review";
+      return t("pages.pullRequests.detail.review", { defaultValue: "Review" });
     case "comment":
-      return "Comment";
+      return t("pages.pullRequests.detail.comment", { defaultValue: "Comment" });
     case "check":
-      return "Check";
+      return t("pages.pullRequests.detail.check", { defaultValue: "Check" });
     case "merged":
-      return "Merged";
+      return t("enums.prStatus.merged");
     case "closed":
-      return "Closed";
+      return t("enums.prStatus.closed");
     default:
       return event.event_type;
   }
-}
-
-function findAuthor(input: string, data: PrDashboardBundle): string {
-  const value = input.trim();
-  if (!value) return "";
-  if (value.toLowerCase() === "all contributors" || value === ALL_VALUE) return ALL_VALUE;
-  const match = data.authors.find(
-    (author) =>
-      author.login.toLowerCase() === value.toLowerCase() ||
-      authorLabel(author.login).toLowerCase() === value.toLowerCase(),
-  );
-  return match?.login ?? value;
 }
 
 function StatTile({
@@ -297,7 +431,7 @@ function StatTile({
 }
 
 function DetailSheet({
-  pr,
+  pr: summaryPr,
   open,
   onOpenChange,
 }: {
@@ -305,6 +439,19 @@ function DetailSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslation();
+  const detailPath =
+    open && summaryPr
+      ? `/api/pull-requests/detail?repo_key=${encodeURIComponent(summaryPr.repo_key)}&number=${summaryPr.number}`
+      : null;
+  const detail = useApi<PrDashboardRow>(detailPath);
+  const detailMatches =
+    detail.data &&
+    summaryPr &&
+    detail.data.repo_key === summaryPr.repo_key &&
+    detail.data.number === summaryPr.number;
+  const pr = detailMatches ? detail.data : summaryPr;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-[92vw] overflow-y-auto sm:max-w-2xl">
@@ -312,21 +459,38 @@ function DetailSheet({
           <>
             <SheetHeader className="border-b">
               <SheetTitle className="pr-8 leading-snug">
-                #{pr.number} {pr.title ?? "Untitled pull request"}
+                #{pr.number} {pr.title ?? t("pages.pullRequests.detail.untitledPr")}
               </SheetTitle>
               <SheetDescription className="flex flex-wrap items-center gap-2">
                 <span>{repoLabel(pr)}</span>
                 <Badge variant="outline" className={statusClass(pr.status_bucket)}>
-                  {statusLabel(pr.status_bucket)}
+                  {statusLabel(pr.status_bucket, t)}
                 </Badge>
-                {pr.ai_session_overlap ? <Badge>AI overlap</Badge> : null}
+                {pr.ai_session_overlap ? (
+                  <Badge>{t("pages.pullRequests.row.aiOverlap")}</Badge>
+                ) : null}
               </SheetDescription>
             </SheetHeader>
 
             <div className="space-y-5 px-4 pb-6">
+              {detail.loading && !detailMatches ? (
+                <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                  {t("pages.pullRequests.detail.loading")}
+                </div>
+              ) : null}
+              {detail.error ? (
+                <div className="rounded-lg border border-destructive/40 p-4">
+                  <ErrorBlock error={detail.error} />
+                  <Button className="mt-3" variant="outline" onClick={() => detail.refetch()}>
+                    {t("pages.pullRequests.detail.retry")}
+                  </Button>
+                </div>
+              ) : null}
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Size</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("pages.pullRequests.detail.size")}
+                  </p>
                   <p className="text-lg font-semibold tabular-nums">{formatInt(pr.size)}</p>
                   <p className="pt-1 text-xs">
                     <span className="text-emerald-600 dark:text-emerald-300">
@@ -338,17 +502,23 @@ function DetailSheet({
                   </p>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Files / reviews</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("pages.pullRequests.detail.filesReviews")}
+                  </p>
                   <p className="text-lg font-semibold tabular-nums">
                     {formatInt(pr.changed_files)} / {formatInt(pr.review_count)}
                   </p>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Cycle time</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("pages.pullRequests.detail.cycleTime")}
+                  </p>
                   <p className="text-lg font-semibold tabular-nums">{fmtHours(pr.cycle_hours)}</p>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">Review wait</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("pages.pullRequests.detail.reviewWait")}
+                  </p>
                   <p className="text-lg font-semibold tabular-nums">
                     {fmtHours(pr.review_wait_hours)}
                   </p>
@@ -357,8 +527,8 @@ function DetailSheet({
 
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
-                  ["Business Value Index", pr.business_value_index],
-                  ["AI Maturity", pr.ai_maturity_index],
+                  [t("enums.indexType.business_value"), pr.business_value_index],
+                  [t("enums.indexType.ai_maturity"), pr.ai_maturity_index],
                 ].map(([label, index]) => (
                   <div key={label as string} className="rounded-lg border p-3">
                     <p className="text-xs text-muted-foreground">{label as string}</p>
@@ -370,31 +540,211 @@ function DetailSheet({
                             {(index as PrAiIndex).summary}
                           </p>
                         ) : null}
+                        <IndexExplainability index={index as PrAiIndex} />
                       </div>
                     ) : (
-                      <p className="pt-1 text-sm text-muted-foreground">Not generated yet</p>
+                      <p className="pt-1 text-sm text-muted-foreground">
+                        {t("pages.pullRequests.detail.notGenerated")}
+                      </p>
                     )}
                   </div>
                 ))}
               </div>
 
               <div className="space-y-2">
-                <h3 className="text-sm font-medium">Branches</h3>
+                <h3 className="text-sm font-medium">{t("pages.pullRequests.detail.branches")}</h3>
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <GitBranch className="size-4 text-muted-foreground" />
-                  <Badge variant="outline">{pr.head_branch ?? "unknown"}</Badge>
-                  <span className="text-muted-foreground">into</span>
-                  <Badge variant="outline">{pr.base_branch ?? "unknown"}</Badge>
+                  <Badge variant="outline">{pr.head_branch ?? t("common.unknown")}</Badge>
+                  <span className="text-muted-foreground">
+                    {t("pages.pullRequests.detail.into")}
+                  </span>
+                  <Badge variant="outline">{pr.base_branch ?? t("common.unknown")}</Badge>
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium">
+                  {t("pages.pullRequests.detail.correlatedSessions")}
+                </h3>
+                {pr.session_correlations?.length ? (
+                  <div className="space-y-2">
+                    {pr.session_correlations.slice(0, 8).map((correlation) => (
+                      <div
+                        key={`${correlation.mode}:${correlation.provider}:${correlation.session_id}`}
+                        className="rounded-lg border p-3 text-sm"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Link2 className="size-4 text-muted-foreground" />
+                            <Link
+                              className="truncate font-mono text-xs hover:underline"
+                              href={`/sessions/?id=${encodeURIComponent(correlation.session_id)}&provider=${encodeURIComponent(correlation.provider)}`}
+                            >
+                              {correlation.provider}:{correlation.session_id}
+                            </Link>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge variant="outline">
+                              {sessionModeLabel(correlation.mode, t)}
+                            </Badge>
+                            <Badge variant="outline" className={scoreClass(correlation.score)}>
+                              {confidencePct(correlation.confidence)}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+                          <span>
+                            {t("pages.pullRequests.detail.started", {
+                              date: fmtDate(correlation.session_started_at_utc),
+                            })}
+                          </span>
+                          <span>
+                            {t("pages.pullRequests.detail.turnsTokens", {
+                              turns: formatInt(correlation.turns),
+                              tokens: formatInt(correlation.tokens),
+                            })}
+                          </span>
+                        </div>
+                        {correlation.summary ? (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            {correlation.summary}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyBlock message={t("pages.pullRequests.detail.noCorrelations")} />
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium">
+                  {t("pages.pullRequests.detail.relatedCommits")}
+                </h3>
+                {pr.related_commits?.length ? (
+                  <div className="max-h-64 overflow-y-auto rounded-lg border">
+                    {pr.related_commits.slice(0, 20).map((commit) => (
+                      <div
+                        key={commit.sha}
+                        className="grid grid-cols-[88px_1fr_auto] gap-3 border-b p-2 text-xs last:border-b-0"
+                      >
+                        <span className="font-mono">{shortSha(commit.sha)}</span>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium" title={commit.subject ?? ""}>
+                            {commit.subject ?? t("pages.pullRequests.detail.untitledCommit")}
+                          </p>
+                          <p className="truncate text-muted-foreground">
+                            {commit.author_name ?? commit.author_email ?? "-"} ·{" "}
+                            {commit.match_reason.replaceAll("_", " ")}
+                          </p>
+                        </div>
+                        <div className="text-right tabular-nums text-muted-foreground">
+                          <div>
+                            +{formatInt(commit.insertions)} -{formatInt(commit.deletions)}
+                          </div>
+                          {commit.ai_assisted ? (
+                            <Badge variant="outline">{t("enums.sessionMode.ai")}</Badge>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyBlock message={t("pages.pullRequests.detail.noCommits")} />
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium">
+                  {t("pages.pullRequests.detail.deployments")}
+                </h3>
+                {pr.related_deployments?.length ? (
+                  <div className="space-y-2">
+                    {pr.related_deployments.slice(0, 8).map((deployment) => (
+                      <div
+                        key={`${deployment.kind}:${deployment.ext_id}`}
+                        className="rounded-lg border p-3 text-sm"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">
+                              {deployment.name ?? deployment.ext_id}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {deployment.kind} · {deployment.match_reason.replaceAll("_", " ")}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className={deployStatusClass(deployment.status)}>
+                            {deployment.status ?? t("common.unknown")}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                          <span>{fmtDate(deployment.created_at_utc)}</span>
+                          <span>
+                            {t("pages.pullRequests.detail.afterMerge", {
+                              duration: fmtHours(deployment.lead_time_hours),
+                            })}
+                          </span>
+                          <span className="font-mono">{shortSha(deployment.sha)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyBlock message={t("pages.pullRequests.detail.noDeployments")} />
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium">{t("pages.pullRequests.detail.incidents")}</h3>
+                {pr.related_incidents?.length ? (
+                  <div className="space-y-2">
+                    {pr.related_incidents.slice(0, 8).map((incident) => (
+                      <div
+                        key={`${incident.source}:${incident.ext_id}`}
+                        className="rounded-lg border p-3 text-sm"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="min-w-0 truncate font-medium">
+                            {incident.title ?? incident.ext_id}
+                          </p>
+                          <Badge variant="outline" className={severityClass("critical")}>
+                            {incident.severity ?? incident.state ?? t("pages.pullRequests.detail.incidentFallback")}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                          <span>{incident.source}</span>
+                          <span>{fmtDate(incident.opened_at_utc)}</span>
+                          <span>
+                            {t("pages.pullRequests.detail.afterMerge", {
+                              duration: fmtHours(incident.hours_after_merge),
+                            })}
+                          </span>
+                          {incident.mttr_hours != null ? (
+                            <span>MTTR {fmtHours(incident.mttr_hours)}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyBlock message={t("pages.pullRequests.detail.noIncidents")} />
+                )}
               </div>
 
               <div className="grid gap-2 text-sm">
                 <div className="grid grid-cols-[120px_1fr] gap-3">
-                  <span className="text-muted-foreground">Author</span>
+                  <span className="text-muted-foreground">
+                    {t("pages.pullRequests.columns.author")}
+                  </span>
                   <span>{pr.author ?? "-"}</span>
                 </div>
                 <div className="grid grid-cols-[120px_1fr] gap-3">
-                  <span className="text-muted-foreground">Created</span>
+                  <span className="text-muted-foreground">
+                    {t("pages.pullRequests.columns.created")}
+                  </span>
                   <span>{fmtDate(pr.created_at_utc)}</span>
                 </div>
                 <div className="grid grid-cols-[120px_1fr] gap-3">
@@ -404,7 +754,9 @@ function DetailSheet({
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-sm font-medium">Changed files</h3>
+                <h3 className="text-sm font-medium">
+                  {t("pages.pullRequests.detail.changedFiles")}
+                </h3>
                 {pr.files.length ? (
                   <div className="max-h-64 overflow-y-auto rounded-lg border">
                     {pr.files.slice(0, 80).map((file) => (
@@ -422,12 +774,12 @@ function DetailSheet({
                     ))}
                   </div>
                 ) : (
-                  <EmptyBlock message="No changed-file list was synced for this PR yet." />
+                  <EmptyBlock message={t("pages.pullRequests.detail.noFiles")} />
                 )}
               </div>
 
               <div className="space-y-3">
-                <h3 className="text-sm font-medium">Timeline</h3>
+                <h3 className="text-sm font-medium">{t("pages.pullRequests.detail.timeline")}</h3>
                 {pr.timeline.length ? (
                   <div className="space-y-3">
                     {pr.timeline.map((event, index) => (
@@ -440,15 +792,20 @@ function DetailSheet({
                         </div>
                         <div className="min-w-0 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline">{eventLabel(event)}</Badge>
+                            <Badge variant="outline">{eventLabel(event, t)}</Badge>
                             {event.state ? <Badge variant="secondary">{event.state}</Badge> : null}
                             {event.conclusion ? (
                               <Badge variant="secondary">{event.conclusion}</Badge>
                             ) : null}
                           </div>
-                          <p className="font-medium">{event.title ?? eventLabel(event)}</p>
+                          <p className="font-medium">{event.title ?? eventLabel(event, t)}</p>
                           {event.actor ? (
-                            <p className="text-xs text-muted-foreground">by {event.actor}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {t("pages.pullRequests.detail.by", {
+                                defaultValue: "by {{actor}}",
+                                actor: event.actor,
+                              })}
+                            </p>
                           ) : null}
                           {event.body ? (
                             <p className="max-h-24 overflow-hidden whitespace-pre-wrap text-xs text-muted-foreground">
@@ -460,7 +817,7 @@ function DetailSheet({
                     ))}
                   </div>
                 ) : (
-                  <EmptyBlock message="No comments, checks, or reviews were synced for this PR yet." />
+                  <EmptyBlock message={t("pages.pullRequests.detail.noTimeline")} />
                 )}
               </div>
 
@@ -468,7 +825,9 @@ function DetailSheet({
                 <Button asChild variant="outline">
                   <a href={pr.html_url} target="_blank" rel="noreferrer">
                     <ExternalLink className="size-4" />
-                    Open on GitHub
+                    {t("pages.pullRequests.detail.openOnGithub", {
+                      defaultValue: "Open on GitHub",
+                    })}
                   </a>
                 </Button>
               ) : null}
@@ -481,6 +840,7 @@ function DetailSheet({
 }
 
 function DeterministicInsight({ insight }: { insight: PrInsight }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="rounded-lg border">
@@ -490,13 +850,17 @@ function DeterministicInsight({ insight }: { insight: PrInsight }) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{insight.title}</span>
               <Badge variant="outline" className={severityClass(insight.severity)}>
-                {insight.severity}
+                {t(`enums.severity.${insight.severity}`, { defaultValue: insight.severity })}
               </Badge>
               <Badge variant="secondary">{insight.category}</Badge>
               <Badge variant="outline">{insight.metric}</Badge>
             </div>
             <p className="pt-1 text-sm text-muted-foreground">
-              {insight.value.toFixed(1)} vs threshold {insight.threshold.toFixed(1)}
+              {t("pages.pullRequests.deterministic.valueThreshold", {
+                defaultValue: "{{value}} vs threshold {{threshold}}",
+                value: insight.value.toFixed(1),
+                threshold: insight.threshold.toFixed(1),
+              })}
             </p>
           </div>
           <ChevronDown
@@ -520,14 +884,67 @@ function DeterministicInsight({ insight }: { insight: PrInsight }) {
   );
 }
 
+function JobStatusPanel({
+  job,
+  onRetry,
+  onCancel,
+}: {
+  job: PrAiInsightJob | null;
+  onRetry: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  if (!job) return null;
+  const active = job.status === "queued" || job.status === "running";
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline">
+            {t(`enums.jobStatus.${job.status}`, { defaultValue: job.status })}
+          </Badge>
+          <Badge variant="outline">{job.engine}</Badge>
+          <span className="text-muted-foreground">{job.analysis_type}</span>
+        </div>
+        <div className="flex gap-2">
+          {active ? (
+            <Button size="sm" variant="outline" onClick={onCancel}>
+              {t("common.cancel")}
+            </Button>
+          ) : null}
+          <Button size="sm" variant="outline" onClick={onRetry} disabled={active}>
+            {t("common.retry")}
+          </Button>
+        </div>
+      </div>
+      <div className="mt-2 grid gap-1 text-muted-foreground">
+        <span>{t("pages.pullRequests.jobs.created", { date: fmtDate(job.created_at_utc) })}</span>
+        {job.finished_at_utc ? (
+          <span>{t("pages.pullRequests.jobs.finished", { date: fmtDate(job.finished_at_utc) })}</span>
+        ) : null}
+        {job.input_hash ? (
+          <span className="truncate font-mono">
+            {t("pages.pullRequests.aiIndexes.inputHash", { hash: job.input_hash })}
+          </span>
+        ) : null}
+        {job.error ? <span className="text-destructive">{job.error}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 export default function PullRequestsPage() {
   const { t } = useTranslation();
   const { since, until } = useRange();
   const [author, setAuthor] = useState("");
-  const [authorDraft, setAuthorDraft] = useState("");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [selected, setSelected] = useState<PrDashboardRow | null>(null);
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(25);
+  const [sort, setSort] = useState("created");
+  const [direction, setDirection] = useState<"asc" | "desc">("desc");
+  const [activeTab, setActiveTab] = useState("overview");
   const [engineId, setEngineId] = useState("");
   const [job, setJob] = useState<PrAiInsightJob | null>(null);
   const [jobError, setJobError] = useState<string | null>(null);
@@ -540,29 +957,73 @@ export default function PullRequestsPage() {
   const [batchScope, setBatchScope] = useState<PrAiBatchScope>("selected_prs");
   const [batchRepo, setBatchRepo] = useState(ALL_VALUE);
   const [batchOrg, setBatchOrg] = useState(ALL_VALUE);
+  const [correlationConfig, setCorrelationConfig] = useState<PrSessionCorrelationConfig>(() =>
+    normalizePrSessionCorrelationConfig(null),
+  );
+  const [savingCorrelationConfig, setSavingCorrelationConfig] = useState(false);
+  const [correlationJob, setCorrelationJob] = useState<PrAiInsightJob | null>(null);
+  const [correlationError, setCorrelationError] = useState<string | null>(null);
+  const [generatingCorrelation, setGeneratingCorrelation] = useState(false);
   const [insightRepo, setInsightRepo] = useState(ALL_VALUE);
   const [insightOrg, setInsightOrg] = useState(ALL_VALUE);
   const [insightCategory, setInsightCategory] = useState(ALL_VALUE);
   const [insightSeverity, setInsightSeverity] = useState(ALL_VALUE);
   const [insightScope, setInsightScope] = useState(ALL_VALUE);
   const [insightPage, setInsightPage] = useState(0);
+  const debouncedQuery = useDebouncedValue(query);
 
   const bundlePath = useMemo(() => {
-    let url = "/api/pull-requests/bundle?grain=week";
-    if (author) url += `&author=${encodeURIComponent(author)}`;
-    return withRange(url, since, until);
-  }, [author, since, until]);
+    const params = new URLSearchParams({
+      grain: "week",
+      page: String(page),
+      page_size: String(pageSize),
+      sort,
+      direction,
+    });
+    if (author) params.set("author", author);
+    if (debouncedQuery.trim()) params.set("query", debouncedQuery.trim());
+    if (status !== "all") params.set("status", status);
+    return withRange(`/api/pull-requests/bundle?${params.toString()}`, since, until);
+  }, [author, debouncedQuery, direction, page, pageSize, since, sort, status, until]);
+  const deterministicInsightsPath = useMemo(() => {
+    const params = new URLSearchParams({
+      grain: "week",
+      page: String(insightPage),
+      page_size: String(INSIGHTS_PAGE_SIZE),
+    });
+    if (author) params.set("author", author);
+    if (debouncedQuery.trim()) params.set("query", debouncedQuery.trim());
+    if (status !== "all") params.set("status", status);
+    if (insightRepo !== ALL_VALUE) params.set("repo", insightRepo);
+    if (insightOrg !== ALL_VALUE) params.set("org", insightOrg);
+    if (insightCategory !== ALL_VALUE) params.set("category", insightCategory);
+    if (insightSeverity !== ALL_VALUE) params.set("severity", insightSeverity);
+    if (insightScope !== ALL_VALUE) params.set("scope", insightScope);
+    return withRange(
+      `/api/pull-requests/deterministic-insights?${params.toString()}`,
+      since,
+      until,
+    );
+  }, [
+    author,
+    debouncedQuery,
+    insightCategory,
+    insightOrg,
+    insightPage,
+    insightRepo,
+    insightScope,
+    insightSeverity,
+    since,
+    status,
+    until,
+  ]);
   const bundle = useApi<PrDashboardBundle>(bundlePath);
+  const deterministicInsights = useApi<PrDeterministicInsightsPage>(deterministicInsightsPath);
   const engines = useApi<PrAiEngine[]>("/api/pull-requests/ai-engines");
   const settings = useApi<SettingsInfo>("/api/settings");
 
   const data = bundle.data && !Array.isArray(bundle.data) ? bundle.data : null;
   const availableEngines = Array.isArray(engines.data) ? engines.data : [];
-
-  useEffect(() => {
-    if (!data) return;
-    setAuthorDraft(authorLabel(data.active_author));
-  }, [data?.active_author]);
 
   useEffect(() => {
     if (engineId || !availableEngines.length) return;
@@ -589,110 +1050,174 @@ export default function PullRequestsPage() {
   }, [settings.data?.pr_ai_default_generation_mode]);
 
   useEffect(() => {
-    setInsightPage(0);
-  }, [insightRepo, insightOrg, insightCategory, insightSeverity, insightScope]);
+    setCorrelationConfig(
+      cloneCorrelationConfig(
+        normalizePrSessionCorrelationConfig(
+          settings.data?.pr_session_correlation_config ?? data?.session_correlation_config,
+        ),
+      ),
+    );
+  }, [data?.session_correlation_config, settings.data?.pr_session_correlation_config]);
 
-  const filteredRows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return (data?.rows ?? []).filter((row) => {
-      if (status !== "all" && row.status_bucket !== status) return false;
-      if (!q) return true;
-      return [
-        row.repo_key,
-        repoLabel(row),
-        row.title ?? "",
-        row.author ?? "",
-        String(row.number),
-        row.head_branch ?? "",
-        row.base_branch ?? "",
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(q);
-    });
-  }, [data?.rows, query, status]);
+  useEffect(() => {
+    setInsightPage(0);
+  }, [
+    author,
+    debouncedQuery,
+    insightRepo,
+    insightOrg,
+    insightCategory,
+    insightSeverity,
+    insightScope,
+    status,
+  ]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [author, debouncedQuery, status]);
+
+  const rows = data?.rows ?? [];
+  const totalRows = data?.pagination?.total_rows ?? rows.length;
+  const pageCount = Math.max(1, Math.ceil(totalRows / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+
+  useEffect(() => {
+    if (page !== currentPage) setPage(currentPage);
+  }, [currentPage, page]);
 
   const selectedRows = useMemo(() => {
     return (data?.rows ?? []).filter((row) => selectedPrKeys.has(prKey(row)));
   }, [data?.rows, selectedPrKeys]);
 
   const prOptions = useMemo(() => {
-    const repos = new Set<string>();
-    const orgs = new Set<string>();
-    for (const row of data?.rows ?? []) {
-      if (row.repo_full_name) repos.add(row.repo_full_name);
-      if (row.repo_owner) orgs.add(row.repo_owner);
-    }
     return {
-      repos: Array.from(repos).sort(),
-      orgs: Array.from(orgs).sort(),
+      repos: data?.filter_options?.repos ?? [],
+      orgs: data?.filter_options?.orgs ?? [],
     };
-  }, [data?.rows]);
+  }, [data?.filter_options?.orgs, data?.filter_options?.repos]);
 
-  const insightOptions = useMemo(() => {
-    const repos = new Set<string>();
-    const orgs = new Set<string>();
-    const categories = new Set<string>();
-    const severities = new Set<string>();
-    const scopes = new Set<string>();
-    for (const insight of data?.deterministic_insights ?? []) {
-      categories.add(insight.category);
-      severities.add(insight.severity);
-      scopes.add(insight.scope);
-      for (const pr of insight.affected_prs) {
-        if (pr.repo_full_name) repos.add(pr.repo_full_name);
-        if (pr.repo_owner) orgs.add(pr.repo_owner);
-      }
-    }
-    return {
-      repos: Array.from(repos).sort(),
-      orgs: Array.from(orgs).sort(),
-      categories: Array.from(categories).sort(),
-      severities: Array.from(severities).sort(),
-      scopes: Array.from(scopes).sort(),
-    };
-  }, [data?.deterministic_insights]);
-
-  const filteredInsights = useMemo(() => {
-    return (data?.deterministic_insights ?? []).filter((insight) => {
-      if (insightCategory !== ALL_VALUE && insight.category !== insightCategory) return false;
-      if (insightSeverity !== ALL_VALUE && insight.severity !== insightSeverity) return false;
-      if (insightScope !== ALL_VALUE && insight.scope !== insightScope) return false;
-      if (
-        insightRepo !== ALL_VALUE &&
-        !insight.affected_prs.some((pr) => pr.repo_full_name === insightRepo)
-      ) {
-        return false;
-      }
-      if (
-        insightOrg !== ALL_VALUE &&
-        !insight.affected_prs.some((pr) => pr.repo_owner === insightOrg)
-      ) {
-        return false;
-      }
-      return true;
-    });
-  }, [
-    data?.deterministic_insights,
-    insightCategory,
-    insightOrg,
-    insightRepo,
-    insightScope,
-    insightSeverity,
-  ]);
-
-  const insightPageCount = Math.max(1, Math.ceil(filteredInsights.length / INSIGHTS_PAGE_SIZE));
-  const currentInsightPage = Math.min(insightPage, insightPageCount - 1);
-  const pagedInsights = filteredInsights.slice(
-    currentInsightPage * INSIGHTS_PAGE_SIZE,
-    currentInsightPage * INSIGHTS_PAGE_SIZE + INSIGHTS_PAGE_SIZE,
+  const authorOptions = useMemo(
+    () =>
+      (data?.authors ?? []).map((authorOption) => ({
+        value: authorOption.login,
+        label: `${authorLabel(authorOption.login, t)} (${formatInt(authorOption.pull_requests)})`,
+        description:
+          authorOption.login === ALL_VALUE
+            ? t("pages.pullRequests.filters.allAuthorsDescription", {
+                defaultValue: "Show every synced PR author",
+              })
+            : authorOption.login,
+      })),
+    [data?.authors, t],
   );
 
-  function applyAuthor() {
-    if (!data) return;
-    const nextAuthor = findAuthor(authorDraft, data);
-    setAuthor(nextAuthor);
-  }
+  const engineOptions = useMemo(
+    () =>
+      availableEngines.map((engine) => ({
+        value: engine.id,
+        label: engine.available
+          ? engine.label
+          : t("pages.pullRequests.aiIndexes.notInstalled", { name: engine.label }),
+        description: engine.notes,
+      })),
+    [availableEngines, t],
+  );
+
+  const batchScopeOptions = useMemo(
+    () => [
+      {
+        value: "selected_prs",
+        label: `${t("enums.batchScope.selected_prs")} (${formatInt(selectedRows.length)})`,
+      },
+      {
+        value: "current_author",
+        label: `${t("enums.batchScope.current_author")} (${authorLabel(
+          data?.active_author ?? ALL_VALUE,
+          t,
+        )})`,
+      },
+      { value: "repo", label: t("enums.batchScope.repo") },
+      { value: "org", label: t("enums.batchScope.org") },
+    ],
+    [data?.active_author, selectedRows.length, t],
+  );
+
+  const insightOptions = useMemo(() => {
+    const options = deterministicInsights.data?.filter_options ?? data?.filter_options;
+    return {
+      repos: options?.repos ?? [],
+      orgs: options?.orgs ?? [],
+      categories: options?.insight_categories ?? [],
+      severities: options?.insight_severities ?? [],
+      scopes: options?.insight_scopes ?? [],
+    };
+  }, [data?.filter_options, deterministicInsights.data?.filter_options]);
+
+  const insightOrgOptions = useMemo(
+    () =>
+      toOptions(
+        insightOptions.orgs,
+        t("pages.pullRequests.deterministic.allOrgs", { defaultValue: "All orgs" }),
+      ),
+    [insightOptions.orgs, t],
+  );
+  const insightRepoOptions = useMemo(
+    () =>
+      toOptions(
+        insightOptions.repos,
+        t("pages.pullRequests.deterministic.allRepos", { defaultValue: "All repos" }),
+      ),
+    [insightOptions.repos, t],
+  );
+  const insightCategoryOptions = useMemo(
+    () =>
+      toOptions(
+        insightOptions.categories,
+        t("pages.pullRequests.deterministic.allTypes", { defaultValue: "All types" }),
+      ),
+    [insightOptions.categories, t],
+  );
+  const insightSeverityOptions = useMemo(
+    () =>
+      toOptions(
+        insightOptions.severities,
+        t("pages.pullRequests.deterministic.allSeverities", { defaultValue: "All severities" }),
+      ),
+    [insightOptions.severities, t],
+  );
+  const insightScopeOptions = useMemo(
+    () =>
+      toOptions(
+        insightOptions.scopes,
+        t("pages.pullRequests.deterministic.allScopes", { defaultValue: "All scopes" }),
+      ),
+    [insightOptions.scopes, t],
+  );
+  const batchRepoOptions = useMemo(
+    () =>
+      toOptions(
+        prOptions.repos,
+        t("pages.pullRequests.aiIndexes.chooseRepo", { defaultValue: "Choose repo" }),
+      ),
+    [prOptions.repos, t],
+  );
+  const batchOrgOptions = useMemo(
+    () =>
+      toOptions(
+        prOptions.orgs,
+        t("pages.pullRequests.aiIndexes.chooseOrg", { defaultValue: "Choose org" }),
+      ),
+    [prOptions.orgs, t],
+  );
+
+  const pagedInsights = deterministicInsights.data?.rows ?? [];
+  const insightTotalRows = deterministicInsights.data?.pagination?.total_rows ?? pagedInsights.length;
+  const insightPageCount = Math.max(1, Math.ceil(insightTotalRows / INSIGHTS_PAGE_SIZE));
+  const currentInsightPage = Math.min(insightPage, insightPageCount - 1);
+
+  useEffect(() => {
+    if (insightPage !== currentInsightPage) setInsightPage(currentInsightPage);
+  }, [currentInsightPage, insightPage]);
 
   async function generateAiInsights() {
     setGenerating(true);
@@ -709,11 +1234,77 @@ export default function PullRequestsPage() {
       setJob(result);
       const finalJob = await waitForAiJob(result);
       setJob(finalJob);
-      if (finalJob.error) setJobError(finalJob.error);
+      if (finalJob.error) {
+        setJobError(finalJob.error);
+        toast.error(finalJob.error);
+      } else {
+        toast.success(t("pages.pullRequests.toast.aiInsightsGenerated"));
+      }
     } catch (e) {
-      setJobError(String(e));
+      const message = errorText(e);
+      setJobError(message);
+      toast.error(message);
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function retryAiJob(
+    current: PrAiInsightJob | null,
+    setCurrent: Dispatch<SetStateAction<PrAiInsightJob | null>>,
+    setError: Dispatch<SetStateAction<string | null>>,
+  ) {
+    if (!current) return;
+    setError(null);
+    try {
+      const restarted = await apiPost<PrAiInsightJob>(
+        `/api/pull-requests/ai-insights/jobs/${encodeURIComponent(current.id)}/retry`,
+        {},
+      );
+      setCurrent(restarted);
+      const finalJob = await waitForAiJob(restarted);
+      setCurrent(finalJob);
+      if (finalJob.error) {
+        setError(finalJob.error);
+        toast.error(finalJob.error);
+      } else {
+        toast.success(
+          t("pages.pullRequests.toast.aiJobRetried", {
+            defaultValue: "AI job retried successfully",
+          }),
+        );
+        bundle.refetch();
+        deterministicInsights.refetch();
+      }
+    } catch (e) {
+      const message = errorText(e);
+      setError(message);
+      toast.error(message);
+    }
+  }
+
+  async function cancelAiJob(
+    current: PrAiInsightJob | null,
+    setCurrent: Dispatch<SetStateAction<PrAiInsightJob | null>>,
+    setError: Dispatch<SetStateAction<string | null>>,
+  ) {
+    if (!current) return;
+    setError(null);
+    try {
+      const cancelled = await apiPost<PrAiInsightJob>(
+        `/api/pull-requests/ai-insights/jobs/${encodeURIComponent(current.id)}/cancel`,
+        {},
+      );
+      setCurrent(cancelled);
+      toast.success(
+        t("pages.pullRequests.toast.aiJobCancelled", {
+          defaultValue: "AI job cancelled",
+        }),
+      );
+    } catch (e) {
+      const message = errorText(e);
+      setError(message);
+      toast.error(message);
     }
   }
 
@@ -730,13 +1321,28 @@ export default function PullRequestsPage() {
   function selectVisibleRows(checked: boolean) {
     setSelectedPrKeys((current) => {
       const next = new Set(current);
-      for (const row of filteredRows) {
+      for (const row of rows) {
         const key = prKey(row);
         if (checked) next.add(key);
         else next.delete(key);
       }
       return next;
     });
+  }
+
+  function toggleSort(nextSort: string) {
+    setPage(0);
+    if (sort === nextSort) {
+      setDirection((current) => (current === "asc" ? "desc" : "asc"));
+    } else {
+      setSort(nextSort);
+      setDirection(nextSort === "created" ? "desc" : "asc");
+    }
+  }
+
+  function sortLabel(key: string): string {
+    if (sort !== key) return "";
+    return direction === "asc" ? " ascending" : " descending";
   }
 
   async function generatePrIndex(type: PrIndexType, row: PrDashboardRow) {
@@ -758,10 +1364,23 @@ export default function PullRequestsPage() {
       setIndexJob(result);
       const finalJob = await waitForAiJob(result);
       setIndexJob(finalJob);
-      if (finalJob.error) setIndexError(finalJob.error);
-      else await bundle.refetch();
+      if (finalJob.error) {
+        setIndexError(finalJob.error);
+        toast.error(finalJob.error);
+      } else {
+        await bundle.refetch();
+        toast.success(
+          t("pages.pullRequests.toast.aiIndexGeneratedForPr", {
+            defaultValue: "{{name}} generated for PR #{{number}}",
+            name: indexTitle(type, t),
+            number: row.number,
+          }),
+        );
+      }
     } catch (e) {
-      setIndexError(String(e));
+      const message = errorText(e);
+      setIndexError(message);
+      toast.error(message);
     } finally {
       setGeneratingIndexKey(null);
     }
@@ -791,12 +1410,92 @@ export default function PullRequestsPage() {
       setIndexJob(result);
       const finalJob = await waitForAiJob(result);
       setIndexJob(finalJob);
-      if (finalJob.error) setIndexError(finalJob.error);
-      else await bundle.refetch();
+      if (finalJob.error) {
+        setIndexError(finalJob.error);
+        toast.error(finalJob.error);
+      } else {
+        await bundle.refetch();
+        toast.success(
+          t("pages.pullRequests.toast.aiIndexBatchGenerated", {
+            defaultValue: "{{name}} batch generated",
+            name: indexShortTitle(batchType, t),
+          }),
+        );
+      }
     } catch (e) {
-      setIndexError(String(e));
+      const message = errorText(e);
+      setIndexError(message);
+      toast.error(message);
     } finally {
       setGeneratingIndexKey(null);
+    }
+  }
+
+  function patchCorrelationConfig(patch: Partial<PrSessionCorrelationConfig>) {
+    setCorrelationConfig((current) => cloneCorrelationConfig({ ...current, ...patch }));
+  }
+
+  function patchCorrelationWeights(patch: Partial<PrSessionCorrelationConfig["weights"]>) {
+    setCorrelationConfig((current) => ({
+      ...current,
+      weights: { ...current.weights, ...patch },
+    }));
+  }
+
+  async function saveCorrelationConfig() {
+    setSavingCorrelationConfig(true);
+    setCorrelationError(null);
+    try {
+      await apiPost("/api/settings", { pr_session_correlation_config: correlationConfig });
+      await settings.refetch();
+      await bundle.refetch();
+      toast.success(t("pages.pullRequests.sessionsPanel.saved"));
+    } catch (e) {
+      const message = errorText(e);
+      setCorrelationError(message);
+      toast.error(message);
+    } finally {
+      setSavingCorrelationConfig(false);
+    }
+  }
+
+  async function generateSessionCorrelation() {
+    const payload: Record<string, unknown> = {
+      engine: engineId,
+      analysis_type: "session_correlation",
+      scope: batchScope,
+      author: author || data?.active_author,
+      since,
+      until,
+      grain: "week",
+    };
+    if (batchScope === "selected_prs") {
+      payload.prs = selectedRows.map((row) => ({ repo_key: row.repo_key, number: row.number }));
+    }
+    if (batchScope === "repo" && batchRepo !== ALL_VALUE) payload.repo = batchRepo;
+    if (batchScope === "org" && batchOrg !== ALL_VALUE) payload.org = batchOrg;
+
+    setGeneratingCorrelation(true);
+    setCorrelationError(null);
+    setCorrelationJob(null);
+    try {
+      const result = await apiPost<PrAiInsightJob>("/api/pull-requests/ai-insights/jobs", payload);
+      setCorrelationJob(result);
+      const finalJob = await waitForAiJob(result);
+      setCorrelationJob(finalJob);
+      if (finalJob.error) {
+        setCorrelationError(finalJob.error);
+        toast.error(finalJob.error);
+      } else {
+        await bundle.refetch();
+        toast.success(t("pages.pullRequests.sessionsPanel.generated"));
+      }
+    } catch (e) {
+      const message = errorText(e);
+      setCorrelationError(message);
+      toast.error(message);
+    } finally {
+      setGeneratingCorrelation(false);
     }
   }
 
@@ -805,8 +1504,14 @@ export default function PullRequestsPage() {
 
   const selectedEngine = availableEngines.find((e) => e.id === engineId);
   const allVisibleSelected =
-    filteredRows.length > 0 && filteredRows.every((row) => selectedPrKeys.has(prKey(row)));
+    rows.length > 0 && rows.every((row) => selectedPrKeys.has(prKey(row)));
   const canGenerateIndex = Boolean(selectedEngine?.available && engineId);
+  const correlatedPrCount = data.rows.filter((row) => row.session_correlations?.length).length;
+  const aiSessionMatchCount = data.rows.reduce(
+    (total, row) =>
+      total + (row.session_correlations ?? []).filter((item) => item.mode === "ai").length,
+    0,
+  );
 
   return (
     <>
@@ -816,145 +1521,133 @@ export default function PullRequestsPage() {
           description={t("pages.pullRequests.description")}
         />
         <div className="flex flex-wrap gap-2">
-          <div className="flex min-w-0 flex-1 gap-2 sm:flex-none">
-            <div className="min-w-56 flex-1 sm:flex-none">
-              <Input
-                aria-label="PR author autocomplete"
-                list="pr-author-options"
-                value={authorDraft}
-                onChange={(event) => setAuthorDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") applyAuthor();
-                }}
-                placeholder="Author or All contributors"
-              />
-              <datalist id="pr-author-options">
-                {data.authors.map((authorOption) => (
-                  <option key={authorOption.login} value={authorLabel(authorOption.login)}>
-                    {authorOption.login} ({formatInt(authorOption.pull_requests)})
-                  </option>
-                ))}
-              </datalist>
-            </div>
-            <Button variant="outline" onClick={applyAuthor}>
-              Apply
-            </Button>
-          </div>
-          <Select
+          <SearchableSelect
+            label={t("pages.pullRequests.filters.author")}
             value={data.active_author}
-            onValueChange={(value) => {
-              setAuthor(value);
-              setAuthorDraft(authorLabel(value));
-            }}
-          >
-            <SelectTrigger aria-label="PR author" className="min-w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {data.authors.map((a) => (
-                <SelectItem key={a.login} value={a.login}>
-                  {authorLabel(a.login)} ({formatInt(a.pull_requests)})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onValueChange={setAuthor}
+            options={authorOptions}
+            placeholder={t("pages.pullRequests.filters.authorPlaceholder")}
+            className="min-w-56"
+          />
         </div>
       </div>
 
-      <Tabs defaultValue="overview">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start overflow-x-auto" variant="line">
           <TabsTrigger value="overview">
             <GitPullRequest className="size-4" />
-            PR Overview
+            {t("pages.pullRequests.tabs.overview")}
           </TabsTrigger>
           <TabsTrigger value="insights">
             <Sparkles className="size-4" />
-            PR AI Insights
+            {t("pages.pullRequests.tabs.insights")}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-            <StatTile label="AI-assisted" value={formatInt(data.summary.ai_assisted)} />
-            <StatTile label="Open" value={formatInt(data.summary.open)} active />
-            <StatTile label="Awaiting review" value={formatInt(data.summary.awaiting_review)} />
-            <StatTile label="Awaiting merge" value={formatInt(data.summary.awaiting_merge)} />
-            <StatTile label="High review time" value={formatInt(data.summary.high_review_time)} />
-            <StatTile label="Merged" value={formatInt(data.summary.merged)} />
-            <StatTile label="Closed" value={formatInt(data.summary.closed)} />
-            <StatTile label="No AI signal" value={formatInt(data.summary.no_ai_signal)} />
+            <StatTile label={t("pages.pullRequests.summary.aiAssisted")} value={formatInt(data.summary.ai_assisted)} />
+            <StatTile label={t("pages.pullRequests.summary.open")} value={formatInt(data.summary.open)} active />
+            <StatTile label={t("pages.pullRequests.summary.awaitingReview")} value={formatInt(data.summary.awaiting_review)} />
+            <StatTile label={t("pages.pullRequests.summary.awaitingMerge")} value={formatInt(data.summary.awaiting_merge)} />
+            <StatTile label={t("pages.pullRequests.summary.highReviewTime")} value={formatInt(data.summary.high_review_time)} />
+            <StatTile label={t("pages.pullRequests.summary.merged")} value={formatInt(data.summary.merged)} />
+            <StatTile label={t("pages.pullRequests.summary.closed")} value={formatInt(data.summary.closed)} />
+            <StatTile label={t("pages.pullRequests.summary.noAiSignal")} value={formatInt(data.summary.no_ai_signal)} />
           </div>
 
           <Card>
             <CardHeader className="gap-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <CardTitle>Pull request queue</CardTitle>
+                  <CardTitle>{t("pages.pullRequests.queue.title")}</CardTitle>
                   <CardDescription>
-                    {formatInt(filteredRows.length)} PRs in the selected date range
+                    {t("pages.pullRequests.queue.description", { count: formatInt(totalRows) })}
                   </CardDescription>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <div className="relative min-w-64">
                     <Search className="pointer-events-none absolute left-2.5 top-2 size-4 text-muted-foreground" />
                     <Input
-                      aria-label="Search pull requests"
+                      aria-label={t("pages.pullRequests.filters.searchLabel")}
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Search PRs"
+                      placeholder={t("pages.pullRequests.filters.searchPlaceholder")}
                       className="pl-8"
                     />
                   </div>
-                  <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
-                    <SelectTrigger aria-label="PR status" className="min-w-44">
-                      <Filter className="size-4" />
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All statuses</SelectItem>
-                      <SelectItem value="awaiting_review">Awaiting review</SelectItem>
-                      <SelectItem value="awaiting_merge">Awaiting merge</SelectItem>
-                      <SelectItem value="merged">Merged</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    label={t("pages.pullRequests.filters.status")}
+                    value={status}
+                    onValueChange={(value) => setStatus(value as StatusFilter)}
+                    options={statusOptions(t)}
+                    className="min-w-44"
+                    leadingIcon={<Filter className="size-4" />}
+                  />
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              {filteredRows.length ? (
+              {rows.length ? (
+                <>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10">
                         <input
                           type="checkbox"
-                          aria-label="Select visible pull requests"
+                          aria-label={t("pages.pullRequests.filters.selectVisible")}
                           checked={allVisibleSelected}
                           onChange={(event) => selectVisibleRows(event.target.checked)}
                           className="size-4 accent-primary"
                         />
                       </TableHead>
-                      <TableHead>Number</TableHead>
-                      <TableHead>Pull request</TableHead>
-                      <TableHead>Business Value</TableHead>
-                      <TableHead>AI Maturity</TableHead>
-                      <TableHead>Author</TableHead>
-                      <TableHead className="text-right">Size</TableHead>
-                      <TableHead className="text-right">Review wait</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>
+                        <Button variant="ghost" size="sm" onClick={() => toggleSort("number")}>
+                          {t("pages.pullRequests.columns.number")}
+                          {sortLabel("number")}
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button variant="ghost" size="sm" onClick={() => toggleSort("title")}>
+                          {t("pages.pullRequests.columns.pullRequest")}
+                          {sortLabel("title")}
+                        </Button>
+                      </TableHead>
+                      <TableHead>{t("pages.pullRequests.columns.sessions")}</TableHead>
+                      <TableHead>{t("pages.pullRequests.columns.businessValue")}</TableHead>
+                      <TableHead>{t("pages.pullRequests.columns.aiMaturity")}</TableHead>
+                      <TableHead>{t("pages.pullRequests.columns.author")}</TableHead>
+                      <TableHead className="text-right">
+                        <Button variant="ghost" size="sm" onClick={() => toggleSort("size")}>
+                          {t("pages.pullRequests.columns.size")}
+                          {sortLabel("size")}
+                        </Button>
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <Button variant="ghost" size="sm" onClick={() => toggleSort("review_wait")}>
+                          {t("pages.pullRequests.columns.reviewWait")}
+                          {sortLabel("review_wait")}
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button variant="ghost" size="sm" onClick={() => toggleSort("created")}>
+                          {t("pages.pullRequests.columns.created")}
+                          {sortLabel("created")}
+                        </Button>
+                      </TableHead>
+                      <TableHead>{t("pages.pullRequests.columns.status")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRows.map((row) => (
+                    {rows.map((row) => (
                       <TableRow
                         key={`${row.repo_key}#${row.number}`}
                         className="cursor-pointer"
                         onClick={() => setSelected(row)}
                         tabIndex={0}
                         role="button"
-                        aria-label={`Open PR ${row.number}`}
+                        aria-label={t("pages.pullRequests.row.open", { number: row.number })}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") setSelected(row);
                         }}
@@ -962,7 +1655,7 @@ export default function PullRequestsPage() {
                         <TableCell>
                           <input
                             type="checkbox"
-                            aria-label={`Select PR ${row.number}`}
+                            aria-label={t("pages.pullRequests.row.select", { number: row.number })}
                             checked={selectedPrKeys.has(prKey(row))}
                             onChange={() => togglePrSelection(row)}
                             onClick={(event) => event.stopPropagation()}
@@ -977,6 +1670,33 @@ export default function PullRequestsPage() {
                           <div className="truncate text-xs text-muted-foreground">
                             {repoLabel(row)}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {topSessionCorrelation(row) ? (
+                            <div className="min-w-28">
+                              <Badge
+                                variant="outline"
+                                className={scoreClass(topSessionCorrelation(row)!.score)}
+                              >
+                                {confidencePct(topSessionCorrelation(row)!.confidence)}
+                              </Badge>
+                              <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                                {t("pages.pullRequests.row.sessionCount", {
+                                  count: (row.session_correlations ?? []).length,
+                                  label: t("common.sessionLabel", {
+                                    count: (row.session_correlations ?? []).length,
+                                    defaultValue:
+                                      (row.session_correlations ?? []).length === 1
+                                        ? "session"
+                                        : "sessions",
+                                  }),
+                                  mode: sessionModeLabel(topSessionCorrelation(row)!.mode, t),
+                                })}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <IndexCell
@@ -1015,10 +1735,13 @@ export default function PullRequestsPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className={statusClass(row.status_bucket)}>
-                              {statusLabel(row.status_bucket)}
+                              {statusLabel(row.status_bucket, t)}
                             </Badge>
                             {row.ai_session_overlap ? (
-                              <Bot className="size-4 text-primary" aria-label="AI overlap" />
+                              <Bot
+                                className="size-4 text-primary"
+                                aria-label={t("pages.pullRequests.row.aiOverlap")}
+                              />
                             ) : null}
                           </div>
                         </TableCell>
@@ -1026,8 +1749,44 @@ export default function PullRequestsPage() {
                     ))}
                   </TableBody>
                 </Table>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+                  <span className="text-muted-foreground">
+                    {t("common.pageOfTotal", {
+                      page: currentPage + 1,
+                      total: pageCount,
+                      count: formatInt(totalRows),
+                    })}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={currentPage <= 0}
+                      onClick={() => setPage((value) => Math.max(0, value - 1))}
+                    >
+                      <ChevronLeft className="size-4" />
+                      {t("common.previous")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={currentPage >= pageCount - 1}
+                      onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
+                    >
+                      {t("common.next")}
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+                </>
               ) : (
-                <EmptyBlock message="No pull requests match the selected filters." />
+                <EmptyBlock
+                  message={
+                    debouncedQuery.trim() || status !== "all"
+                      ? t("pages.pullRequests.queue.noFilterMatch")
+                      : t("pages.pullRequests.queue.noRangeData")
+                  }
+                />
               )}
             </CardContent>
           </Card>
@@ -1063,91 +1822,78 @@ export default function PullRequestsPage() {
               <CardHeader className="gap-3">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <CardTitle>Deterministic rules</CardTitle>
+                    <CardTitle>{t("pages.pullRequests.deterministic.title")}</CardTitle>
                     <CardDescription>
-                      {formatInt(filteredInsights.length)} insights from local, configurable rules.
+                      {t("pages.pullRequests.deterministic.description", {
+                        count: formatInt(insightTotalRows),
+                      })}
                     </CardDescription>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                    <Select value={insightOrg} onValueChange={setInsightOrg}>
-                      <SelectTrigger aria-label="Insight org">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALL_VALUE}>All orgs</SelectItem>
-                        {insightOptions.orgs.map((org) => (
-                          <SelectItem key={org} value={org}>
-                            {org}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={insightRepo} onValueChange={setInsightRepo}>
-                      <SelectTrigger aria-label="Insight repo">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALL_VALUE}>All repos</SelectItem>
-                        {insightOptions.repos.map((repo) => (
-                          <SelectItem key={repo} value={repo}>
-                            {repo}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={insightCategory} onValueChange={setInsightCategory}>
-                      <SelectTrigger aria-label="Insight type">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALL_VALUE}>All types</SelectItem>
-                        {insightOptions.categories.map((category) => (
-                          <SelectItem key={category} value={category}>
-                            {category}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={insightSeverity} onValueChange={setInsightSeverity}>
-                      <SelectTrigger aria-label="Insight severity">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALL_VALUE}>All severities</SelectItem>
-                        {insightOptions.severities.map((severity) => (
-                          <SelectItem key={severity} value={severity}>
-                            {severity}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={insightScope} onValueChange={setInsightScope}>
-                      <SelectTrigger aria-label="Insight scope">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALL_VALUE}>All scopes</SelectItem>
-                        {insightOptions.scopes.map((scope) => (
-                          <SelectItem key={scope} value={scope}>
-                            {scope}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      label={t("pages.pullRequests.deterministic.filters.org")}
+                      value={insightOrg}
+                      onValueChange={setInsightOrg}
+                      options={insightOrgOptions}
+                    />
+                    <SearchableSelect
+                      label={t("pages.pullRequests.deterministic.filters.repo")}
+                      value={insightRepo}
+                      onValueChange={setInsightRepo}
+                      options={insightRepoOptions}
+                    />
+                    <SearchableSelect
+                      label={t("pages.pullRequests.deterministic.filters.type")}
+                      value={insightCategory}
+                      onValueChange={setInsightCategory}
+                      options={insightCategoryOptions}
+                    />
+                    <SearchableSelect
+                      label={t("pages.pullRequests.deterministic.filters.severity")}
+                      value={insightSeverity}
+                      onValueChange={setInsightSeverity}
+                      options={insightSeverityOptions}
+                    />
+                    <SearchableSelect
+                      label={t("pages.pullRequests.deterministic.filters.scope")}
+                      value={insightScope}
+                      onValueChange={setInsightScope}
+                      options={insightScopeOptions}
+                    />
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
+                {deterministicInsights.loading && !deterministicInsights.data ? (
+                  <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+                    {t("pages.pullRequests.deterministic.loading")}
+                  </div>
+                ) : null}
+                {deterministicInsights.error ? (
+                  <div className="rounded-lg border border-destructive/40 p-4">
+                    <ErrorBlock error={deterministicInsights.error} />
+                    <Button
+                      className="mt-3"
+                      variant="outline"
+                      onClick={() => deterministicInsights.refetch()}
+                    >
+                      {t("pages.pullRequests.deterministic.retry")}
+                    </Button>
+                  </div>
+                ) : null}
                 {pagedInsights.length ? (
                   pagedInsights.map((insight) => (
                     <DeterministicInsight key={insight.id} insight={insight} />
                   ))
-                ) : (
-                  <EmptyBlock message="No deterministic PR insights match the selected filters." />
-                )}
+                ) : !deterministicInsights.loading && !deterministicInsights.error ? (
+                  <EmptyBlock message={t("pages.pullRequests.deterministic.empty")} />
+                ) : null}
                 <div className="flex items-center justify-between gap-3 pt-2 text-sm text-muted-foreground">
                   <span>
-                    Page {currentInsightPage + 1} of {insightPageCount}
+                    {t("common.pageOf", {
+                      page: currentInsightPage + 1,
+                      total: insightPageCount,
+                    })}
                   </span>
                   <div className="flex gap-2">
                     <Button
@@ -1157,7 +1903,7 @@ export default function PullRequestsPage() {
                       disabled={currentInsightPage === 0}
                     >
                       <ChevronLeft className="size-4" />
-                      Previous
+                      {t("common.previous")}
                     </Button>
                     <Button
                       size="sm"
@@ -1167,7 +1913,7 @@ export default function PullRequestsPage() {
                       }
                       disabled={currentInsightPage >= insightPageCount - 1}
                     >
-                      Next
+                      {t("common.next")}
                       <ChevronRight className="size-4" />
                     </Button>
                   </div>
@@ -1178,88 +1924,55 @@ export default function PullRequestsPage() {
             <div className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>PR AI indexes</CardTitle>
+                  <CardTitle>{t("pages.pullRequests.aiIndexes.title")}</CardTitle>
                   <CardDescription>
-                    Generate Business Value or AI Maturity scores with your local CLI.
+                    {t("pages.pullRequests.aiIndexes.description")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Select value={engineId} onValueChange={setEngineId}>
-                    <SelectTrigger aria-label="PR AI index engine" className="w-full">
-                      <SelectValue placeholder="Select engine" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableEngines.map((engine) => (
-                        <SelectItem key={engine.id} value={engine.id}>
-                          {engine.label} {engine.available ? "" : "(not installed)"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    label={t("pages.pullRequests.aiIndexes.engine")}
+                    value={engineId}
+                    onValueChange={setEngineId}
+                    options={engineOptions}
+                    placeholder={t("pages.pullRequests.aiIndexes.enginePlaceholder")}
+                    className="w-full"
+                  />
+                  {selectedEngine ? (
+                    <p className="text-xs text-muted-foreground">{selectedEngine.notes}</p>
+                  ) : null}
 
                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                    <Select
+                    <SearchableSelect
+                      label={t("pages.pullRequests.aiIndexes.type")}
                       value={batchType}
                       onValueChange={(value) => setBatchType(value as PrIndexType)}
-                    >
-                      <SelectTrigger aria-label="PR AI index type">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="business_value">Business Value Index</SelectItem>
-                        <SelectItem value="ai_maturity">AI Maturity</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select
+                      options={indexTypeOptions(t)}
+                    />
+                    <SearchableSelect
+                      label={t("pages.pullRequests.aiIndexes.scope")}
                       value={batchScope}
                       onValueChange={(value) => setBatchScope(value as PrAiBatchScope)}
-                    >
-                      <SelectTrigger aria-label="PR AI index scope">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="selected_prs">
-                          Selected PRs ({formatInt(selectedRows.length)})
-                        </SelectItem>
-                        <SelectItem value="current_author">
-                          Current author ({authorLabel(data.active_author)})
-                        </SelectItem>
-                        <SelectItem value="repo">Repo</SelectItem>
-                        <SelectItem value="org">Org</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      options={batchScopeOptions}
+                    />
                   </div>
 
                   {batchScope === "repo" ? (
-                    <Select value={batchRepo} onValueChange={setBatchRepo}>
-                      <SelectTrigger aria-label="PR AI index repo">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALL_VALUE}>Choose repo</SelectItem>
-                        {prOptions.repos.map((repo) => (
-                          <SelectItem key={repo} value={repo}>
-                            {repo}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      label={t("pages.pullRequests.aiIndexes.repo")}
+                      value={batchRepo}
+                      onValueChange={setBatchRepo}
+                      options={batchRepoOptions}
+                    />
                   ) : null}
 
                   {batchScope === "org" ? (
-                    <Select value={batchOrg} onValueChange={setBatchOrg}>
-                      <SelectTrigger aria-label="PR AI index org">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={ALL_VALUE}>Choose org</SelectItem>
-                        {prOptions.orgs.map((org) => (
-                          <SelectItem key={org} value={org}>
-                            {org}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      label={t("pages.pullRequests.aiIndexes.org")}
+                      value={batchOrg}
+                      onValueChange={setBatchOrg}
+                      options={batchOrgOptions}
+                    />
                   ) : null}
 
                   <Button
@@ -1275,11 +1988,18 @@ export default function PullRequestsPage() {
                   >
                     <Sparkles className="size-4" />
                     {generatingIndexKey === `${batchType}:batch`
-                      ? "Generating..."
-                      : `Generate ${indexShortTitle(batchType)}`}
+                      ? t("common.generating")
+                      : t("pages.pullRequests.aiIndexes.generate", {
+                          name: indexShortTitle(batchType, t),
+                        })}
                   </Button>
 
                   {indexError ? <p className="text-sm text-destructive">{indexError}</p> : null}
+                  <JobStatusPanel
+                    job={indexJob}
+                    onRetry={() => void retryAiJob(indexJob, setIndexJob, setIndexError)}
+                    onCancel={() => void cancelAiJob(indexJob, setIndexJob, setIndexError)}
+                  />
                   {indexJob?.result ? (
                     <div className="space-y-2 rounded-lg border p-3 text-sm">
                       <p>{indexJob.result.summary}</p>
@@ -1303,37 +2023,240 @@ export default function PullRequestsPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>AI Agent Insights</CardTitle>
+                  <CardTitle>{t("pages.pullRequests.sessionsPanel.title")}</CardTitle>
                   <CardDescription>
-                    Runs on demand for {authorLabel(data.active_author)} using the selected date
-                    range.
+                    {t("pages.pullRequests.sessionsPanel.description", {
+                      prs: formatInt(correlatedPrCount),
+                      matches: formatInt(aiSessionMatchCount),
+                    })}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      aria-label={t("pages.pullRequests.sessionsPanel.enableDeterministic")}
+                      checked={correlationConfig.enabled}
+                      onChange={(event) =>
+                        patchCorrelationConfig({ enabled: event.target.checked })
+                      }
+                      className="size-4 accent-primary"
+                    />
+                    {t("pages.pullRequests.sessionsPanel.enableDeterministic")}
+                  </label>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground" htmlFor="pr-session-before">
+                        {t("pages.pullRequests.sessionsPanel.minutesBefore")}
+                      </label>
+                      <Input
+                        id="pr-session-before"
+                        aria-label={t("pages.pullRequests.sessionsPanel.minutesBeforeAria")}
+                        type="number"
+                        min={0}
+                        max={10080}
+                        value={correlationConfig.time_window_before_minutes}
+                        onChange={(event) =>
+                          patchCorrelationConfig({
+                            time_window_before_minutes: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground" htmlFor="pr-session-after">
+                        {t("pages.pullRequests.sessionsPanel.minutesAfter")}
+                      </label>
+                      <Input
+                        id="pr-session-after"
+                        aria-label={t("pages.pullRequests.sessionsPanel.minutesAfterAria")}
+                        type="number"
+                        min={0}
+                        max={10080}
+                        value={correlationConfig.time_window_after_minutes}
+                        onChange={(event) =>
+                          patchCorrelationConfig({
+                            time_window_after_minutes: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label
+                        className="text-xs text-muted-foreground"
+                        htmlFor="pr-session-confidence"
+                      >
+                        {t("pages.pullRequests.sessionsPanel.minConfidence")}
+                      </label>
+                      <Input
+                        id="pr-session-confidence"
+                        aria-label={t("pages.pullRequests.sessionsPanel.minConfidenceAria")}
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={correlationConfig.min_confidence}
+                        onChange={(event) =>
+                          patchCorrelationConfig({ min_confidence: Number(event.target.value) })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground" htmlFor="pr-session-max">
+                        {t("pages.pullRequests.sessionsPanel.maxSessions")}
+                      </label>
+                      <Input
+                        id="pr-session-max"
+                        aria-label={t("pages.pullRequests.sessionsPanel.maxSessionsAria")}
+                        type="number"
+                        min={1}
+                        max={25}
+                        value={correlationConfig.max_sessions_per_pr}
+                        onChange={(event) =>
+                          patchCorrelationConfig({
+                            max_sessions_per_pr: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 text-sm">
+                    {CORRELATION_BOOLEAN_OPTIONS.map(([label, key]) => (
+                      <label key={key} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={correlationConfig[key]}
+                          onChange={(event) =>
+                            patchCorrelationConfig({
+                              [key]: event.target.checked,
+                            })
+                          }
+                          className="size-4 accent-primary"
+                        />
+                        {t(`enums.correlationSignal.${label}`, { defaultValue: label })}</label>
+                    ))}
+                  </div>
+
+                  <details className="rounded-lg border p-3 text-sm">
+                    <summary className="cursor-pointer font-medium">{t("pages.pullRequests.sessionsPanel.signalWeights")}</summary>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {CORRELATION_WEIGHT_OPTIONS.map(([label, key]) => (
+                        <div key={key} className="space-y-1">
+                          <label className="text-xs text-muted-foreground">{t(`enums.correlationSignal.${label}`, { defaultValue: label })}</label>
+                          <Input
+                            aria-label={t("pages.pullRequests.sessionsPanel.weightAria", { defaultValue: "{{label}} weight", label: t(`enums.correlationSignal.${label}`, { defaultValue: label }) })}
+                            type="number"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={correlationConfig.weights[key]}
+                            onChange={(event) =>
+                              patchCorrelationWeights({
+                                [key]: Number(event.target.value),
+                              })
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => void saveCorrelationConfig()}
+                    disabled={savingCorrelationConfig}
+                  >
+                    <Save className="size-4" />
+                    {savingCorrelationConfig
+                      ? t("pages.pullRequests.sessionsPanel.saving")
+                      : t("pages.pullRequests.sessionsPanel.saveConfig")}
+                  </Button>
+
+                  <Button
+                    className="w-full"
+                    onClick={() => void generateSessionCorrelation()}
+                    disabled={
+                      generatingCorrelation ||
+                      !canGenerateIndex ||
+                      (batchScope === "selected_prs" && selectedRows.length === 0) ||
+                      (batchScope === "repo" && batchRepo === ALL_VALUE) ||
+                      (batchScope === "org" && batchOrg === ALL_VALUE)
+                    }
+                  >
+                    <Sparkles className="size-4" />
+                    {generatingCorrelation
+                      ? t("pages.pullRequests.sessionsPanel.correlating")
+                      : t("pages.pullRequests.sessionsPanel.generateAi")}
+                  </Button>
+
+                  {correlationError ? (
+                    <p className="text-sm text-destructive">{correlationError}</p>
+                  ) : null}
+                  <JobStatusPanel
+                    job={correlationJob}
+                    onRetry={() =>
+                      void retryAiJob(correlationJob, setCorrelationJob, setCorrelationError)
+                    }
+                    onCancel={() =>
+                      void cancelAiJob(correlationJob, setCorrelationJob, setCorrelationError)
+                    }
+                  />
+                  {correlationJob?.result ? (
+                    <div className="rounded-lg border p-3 text-sm">
+                      <p>{correlationJob.result.summary}</p>
+                      {correlationJob.result.session_correlations?.length ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {correlationJob.result.session_correlations.slice(0, 8).map((item) => (
+                            <Badge
+                              key={`${item.repo_key}#${item.pr_number}:${item.provider}:${item.session_id}`}
+                              variant="outline"
+                            >
+                              #{item.pr_number} {confidencePct(item.confidence)}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("pages.pullRequests.agentInsights.title")}</CardTitle>
+                  <CardDescription>
+                    {t("pages.pullRequests.agentInsights.description", {
+                      author: authorLabel(data.active_author, t),
+                    })}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Select value={engineId} onValueChange={setEngineId}>
-                    <SelectTrigger aria-label="AI insight engine" className="w-full">
-                      <SelectValue placeholder="Select engine" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableEngines.map((engine) => (
-                        <SelectItem key={engine.id} value={engine.id}>
-                          {engine.label} {engine.available ? "" : "(not installed)"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedEngine ? (
-                    <p className="text-xs text-muted-foreground">{selectedEngine.notes}</p>
-                  ) : null}
+                  <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {t("pages.pullRequests.agentInsights.engine")}{" "}
+                    <span className="font-medium text-foreground">
+                      {selectedEngine?.label ?? t("common.notSelected")}
+                    </span>
+                    . {t("pages.pullRequests.agentInsights.changeEngine")}
+                  </div>
                   <Button
                     className="w-full"
                     onClick={generateAiInsights}
                     disabled={generating || !selectedEngine?.available}
                   >
                     <Sparkles className="size-4" />
-                    {generating ? "Generating..." : "Generate AI Insights"}
+                    {generating
+                      ? t("pages.pullRequests.agentInsights.generating")
+                      : t("pages.pullRequests.agentInsights.generate")}
                   </Button>
                   {jobError ? <p className="text-sm text-destructive">{jobError}</p> : null}
+                  <JobStatusPanel
+                    job={job}
+                    onRetry={() => void retryAiJob(job, setJob, setJobError)}
+                    onCancel={() => void cancelAiJob(job, setJob, setJobError)}
+                  />
                   {job?.result ? (
                     <div className="space-y-3 rounded-lg border p-3">
                       <p className="text-sm">{job.result.summary}</p>
@@ -1359,16 +2282,16 @@ export default function PullRequestsPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Rule management</CardTitle>
+                  <CardTitle>{t("pages.pullRequests.ruleManagement.title")}</CardTitle>
                   <CardDescription>
-                    Rules are managed in Settings so they can be reused and audited.
+                    {t("pages.pullRequests.ruleManagement.description")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Button asChild variant="outline" className="w-full">
                     <Link href="/settings?section=rules">
                       <SlidersHorizontal className="size-4" />
-                      Open PR Rules settings
+                      {t("pages.pullRequests.ruleManagement.openSettings")}
                     </Link>
                   </Button>
                 </CardContent>

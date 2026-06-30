@@ -45,6 +45,28 @@ const aiMaturityIndex = {
   generated_at_utc: "2026-06-24T12:10:00Z",
 };
 
+const sessionCorrelation = {
+  repo_key: "D:/Github/harness-dashboard",
+  pr_number: 145,
+  provider: "codex",
+  session_id: "s-pr-145",
+  mode: "deterministic",
+  score: 91,
+  confidence: 0.91,
+  summary: "Session overlaps the PR and touched the main changed file.",
+  reasons: ["Session overlaps the PR active window.", "Session tool calls touched 1 file."],
+  signals: { time: 0.4, file_touch: 0.25, branch: 0.25 },
+  session_started_at_utc: "2026-06-24T09:55:00Z",
+  session_ended_at_utc: "2026-06-24T11:30:00Z",
+  project_slug: "harness-dashboard",
+  sample_cwd: "D:/Github/harness-dashboard",
+  turns: 8,
+  tokens: 12000,
+  engine: null,
+  input_hash: null,
+  generated_at_utc: null,
+};
+
 const deterministicInsights = Array.from({ length: 10 }, (_, index) => ({
   id: `insight-${index}`,
   rule_id: index === 0 ? "stale-open-pr" : `rule-${index}`,
@@ -68,6 +90,20 @@ const bundle = {
     { login: "alice", pull_requests: 2, is_default: true },
     { login: "bob", pull_requests: 1, is_default: false },
   ],
+  pagination: {
+    page: 0,
+    page_size: 25,
+    total_rows: 2,
+  },
+  filter_options: {
+    authors: ["__all", "alice", "bob"],
+    repos: ["acme/harness-dashboard"],
+    orgs: ["acme"],
+    statuses: ["awaiting_review", "merged"],
+    insight_categories: ["review", "size"],
+    insight_severities: ["info", "warning"],
+    insight_scopes: ["aggregate", "pr"],
+  },
   summary: {
     total: 2,
     ai_assisted: 1,
@@ -106,6 +142,7 @@ const bundle = {
       changed_files: 8,
       review_count: 0,
       merge_commit_sha: null,
+      head_sha: "head145abcdef",
       html_url: "https://github.com/acme/harness-dashboard/pull/145",
       ai_session_overlap: true,
       churn: 457,
@@ -124,6 +161,24 @@ const bundle = {
             "https://github.com/acme/harness-dashboard/blob/main/apps/web/app/pull-requests/page.tsx",
         },
       ],
+      session_correlations: [sessionCorrelation],
+      related_commits: [
+        {
+          sha: "head145abcdef",
+          authored_at_utc: "2026-06-24T10:30:00Z",
+          author_name: "Alice",
+          author_email: "alice@example.com",
+          subject: "feat: context aware routing",
+          branch: "feat/pr-routing",
+          files_changed: 3,
+          insertions: 120,
+          deletions: 12,
+          ai_assisted: true,
+          match_reason: "head_sha",
+        },
+      ],
+      related_deployments: [],
+      related_incidents: [],
       business_value_index: businessValueIndex,
       ai_maturity_index: null,
       timeline: [
@@ -171,6 +226,7 @@ const bundle = {
       changed_files: 5,
       review_count: 2,
       merge_commit_sha: "abc123",
+      head_sha: "def456",
       html_url: null,
       ai_session_overlap: false,
       churn: 302,
@@ -178,6 +234,51 @@ const bundle = {
       cycle_hours: 32,
       review_wait_hours: 26,
       files: [],
+      session_correlations: [],
+      related_commits: [
+        {
+          sha: "def456",
+          authored_at_utc: "2026-06-23T11:00:00Z",
+          author_name: "Alice",
+          author_email: "alice@example.com",
+          subject: "feat: ship billing export",
+          branch: "feat/billing-export",
+          files_changed: 4,
+          insertions: 290,
+          deletions: 12,
+          ai_assisted: false,
+          match_reason: "head_sha",
+        },
+      ],
+      related_deployments: [
+        {
+          kind: "run",
+          ext_id: "deploy-210",
+          name: "production",
+          created_at_utc: "2026-06-24T20:00:00Z",
+          status: "success",
+          sha: "abc123",
+          html_url: "https://github.com/acme/harness-dashboard/actions/runs/210",
+          lead_time_hours: 2,
+          match_reason: "merge_sha",
+        },
+      ],
+      related_incidents: [
+        {
+          source: "github_issue",
+          ext_id: "991",
+          title: "Billing export timeout",
+          severity: "high",
+          opened_at_utc: "2026-06-25T10:00:00Z",
+          resolved_at_utc: "2026-06-25T13:00:00Z",
+          state: "resolved",
+          html_url: "https://github.com/acme/harness-dashboard/issues/991",
+          deploy_ext_id: "deploy-210",
+          mttr_hours: 3,
+          hours_after_merge: 16,
+          match_reason: "linked_deployment",
+        },
+      ],
       business_value_index: null,
       ai_maturity_index: aiMaturityIndex,
       timeline: [],
@@ -228,6 +329,23 @@ const bundle = {
       custom: false,
     },
   ],
+  session_correlation_config: {
+    enabled: true,
+    time_window_before_minutes: 240,
+    time_window_after_minutes: 240,
+    min_confidence: 0.4,
+    max_sessions_per_pr: 5,
+    use_branch: true,
+    use_file_touches: true,
+    use_title_keywords: true,
+    weights: {
+      time_overlap: 0.4,
+      temporal_proximity: 0.15,
+      branch: 0.25,
+      file_touch: 0.25,
+      title_keyword: 0.1,
+    },
+  },
 };
 
 const prRules = [
@@ -248,12 +366,77 @@ const prRules = [
 ];
 
 let lastAiJobBody = "";
+let lastSettingsBody = "";
+
+function prBundleForUrl(urlString: string) {
+  const url = new URL(urlString);
+  const status = url.searchParams.get("status");
+  const query = url.searchParams.get("query")?.toLowerCase() ?? "";
+  const page = Number(url.searchParams.get("page") ?? 0);
+  const pageSize = Number(url.searchParams.get("page_size") ?? 25);
+  const rows = bundle.rows.filter((row) => {
+    if (status && row.status_bucket !== status) return false;
+    if (!query) return true;
+    return [row.title, row.repo_full_name, row.author, String(row.number)]
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+  const start = page * pageSize;
+  return {
+    ...bundle,
+    rows: rows.slice(start, start + pageSize).map((row) => ({
+      ...row,
+      files: [],
+      timeline: [],
+      related_commits: [],
+      related_deployments: [],
+      related_incidents: [],
+    })),
+    pagination: {
+      page,
+      page_size: pageSize,
+      total_rows: rows.length,
+    },
+  };
+}
+
+function prDetailForUrl(urlString: string) {
+  const url = new URL(urlString);
+  const number = Number(url.searchParams.get("number"));
+  return bundle.rows.find((row) => row.number === number) ?? bundle.rows[0];
+}
+
+function deterministicInsightsForUrl(urlString: string) {
+  const url = new URL(urlString);
+  const category = url.searchParams.get("category");
+  const page = Number(url.searchParams.get("page") ?? 0);
+  const pageSize = Number(url.searchParams.get("page_size") ?? 8);
+  const rows = deterministicInsights.filter((insight) => {
+    if (category && insight.category !== category) return false;
+    return true;
+  });
+  const start = page * pageSize;
+  return {
+    rows: rows.slice(start, start + pageSize),
+    pagination: {
+      page,
+      page_size: pageSize,
+      total_rows: rows.length,
+    },
+    filter_options: bundle.filter_options,
+  };
+}
 
 test.beforeEach(async ({ request, page }) => {
   await seedConfiguredFixture(request);
   lastAiJobBody = "";
+  lastSettingsBody = "";
 
   await page.route("**/api/settings", async (route) => {
+    if (route.request().method() === "POST") {
+      lastSettingsBody = route.request().postData() ?? "";
+    }
     await route.fulfill({
       json: {
         claude_dir: "/home/.claude",
@@ -266,13 +449,21 @@ test.beforeEach(async ({ request, page }) => {
         pr_ai_default_generation_mode: "batch",
         pr_business_value_prompt: "Score business impact.",
         pr_ai_maturity_prompt: "Score AI maturity.",
+        pr_session_correlation_config: bundle.session_correlation_config,
+        pr_session_correlation_prompt: "Correlate PRs to sessions.",
         providers: [],
       },
     });
   });
 
+  await page.route("**/api/pull-requests/deterministic-insights**", async (route) => {
+    await route.fulfill({ json: deterministicInsightsForUrl(route.request().url()) });
+  });
+  await page.route("**/api/pull-requests/detail**", async (route) => {
+    await route.fulfill({ json: prDetailForUrl(route.request().url()) });
+  });
   await page.route("**/api/pull-requests/bundle**", async (route) => {
-    await route.fulfill({ json: bundle });
+    await route.fulfill({ json: prBundleForUrl(route.request().url()) });
   });
   await page.route("**/api/pull-requests/ai-engines", async (route) => {
     await route.fulfill({
@@ -311,6 +502,7 @@ test.beforeEach(async ({ request, page }) => {
             },
           ],
           indexes: [businessValueIndex],
+          session_correlations: [sessionCorrelation],
         },
       },
     });
@@ -354,10 +546,11 @@ test("pull request overview, AI insights, and rule settings are functional", asy
   await expect(main.getByText("acme/harness-dashboard").first()).toBeVisible();
   await expect(main.getByText("82 A")).toBeVisible();
   await expect(main.getByText("nps customer")).toBeVisible();
+  await expect(main.getByText("91%")).toBeVisible();
   await expect(main.getByRole("group", { name: "PR grain" })).toHaveCount(0);
 
-  await main.getByLabel("PR author autocomplete").fill("All contributors");
-  await main.getByRole("button", { name: "Apply" }).click();
+  await main.getByRole("combobox", { name: "PR author" }).click();
+  await page.getByRole("option", { name: /All contributors/ }).click();
 
   await main.getByLabel("Select PR 145").check();
   await main.getByText("Context-aware routing orchestrator").click();
@@ -365,6 +558,12 @@ test("pull request overview, AI insights, and rule settings are functional", asy
   await expect(page.getByRole("dialog")).toContainText("acme/harness-dashboard");
   await expect(page.getByRole("dialog")).toContainText("Static Code Review");
   await expect(page.getByRole("dialog")).toContainText("typo-app[bot]");
+  await expect(page.getByRole("dialog")).toContainText("Correlated sessions");
+  await expect(page.getByRole("dialog")).toContainText("codex:s-pr-145");
+  await expect(page.getByRole("dialog")).toContainText("Related commits");
+  await expect(page.getByRole("dialog")).toContainText("feat: context aware routing");
+  await expect(page.getByRole("dialog")).toContainText("Deployments");
+  await expect(page.getByRole("dialog")).toContainText("Post-merge incidents");
   await expect(page.getByRole("dialog")).toContainText("apps/web/app/pull-requests/page.tsx");
   await page.getByRole("button", { name: "Close" }).click();
 
@@ -372,6 +571,7 @@ test("pull request overview, AI insights, and rule settings are functional", asy
   await expect(main.getByText("Context-aware routing orchestrator")).toHaveCount(0);
   await expect(main.getByText("Ship billing export")).toBeVisible();
   await main.getByRole("textbox", { name: "Search pull requests" }).fill("");
+  await expect(main.getByText("Context-aware routing orchestrator")).toBeVisible();
 
   await main.getByRole("tab", { name: "PR AI Insights" }).click();
   await expect(main.getByText("PR cycle time")).toBeVisible();
@@ -379,10 +579,14 @@ test("pull request overview, AI insights, and rule settings are functional", asy
   await expect(main.getByText("Insight 9")).toHaveCount(0);
   await main.getByRole("button", { name: /Next/ }).click();
   await expect(main.getByText("Insight 9")).toBeVisible();
+  await expect(main.locator('[data-slot="skeleton"]')).toHaveCount(0);
 
   await main.getByRole("combobox", { name: "Insight type" }).click();
   await page.getByRole("option", { name: "size" }).click();
   await expect(main.getByText("PR waiting too long")).toHaveCount(0);
+
+  await main.getByRole("button", { name: "Save deterministic config" }).click();
+  await expect.poll(() => lastSettingsBody).toContain("pr_session_correlation_config");
 
   await main.getByRole("button", { name: "Generate Business Value" }).click();
   await expect.poll(() => lastAiJobBody).toContain('"analysis_type":"business_value"');
@@ -393,6 +597,9 @@ test("pull request overview, AI insights, and rule settings are functional", asy
   await expect(
     main.getByText("The review queue needs one targeted reviewer assignment.").first(),
   ).toBeVisible();
+
+  await main.getByRole("button", { name: "Generate AI correlation" }).click();
+  await expect.poll(() => lastAiJobBody).toContain('"analysis_type":"session_correlation"');
 
   await main.getByRole("link", { name: "Open PR Rules settings" }).click();
   await expect(page).toHaveURL(/\/settings\/?\?section=rules/);

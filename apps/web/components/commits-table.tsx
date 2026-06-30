@@ -164,7 +164,7 @@ export function CommitsTable({ commits }: { commits: CommitRow[] }) {
         <Input
           list={projectListId}
           placeholder={t("components.commitsTable.projectPlaceholder")}
-          aria-label="Filter by project"
+          aria-label={t("components.commitsTable.filterByProject")}
           value={projectFilter}
           onChange={(e) => setProjectFilter(e.target.value)}
           className="max-w-[220px]"
@@ -177,7 +177,7 @@ export function CommitsTable({ commits }: { commits: CommitRow[] }) {
         <Input
           list={authorListId}
           placeholder={t("components.commitsTable.authorPlaceholder")}
-          aria-label="Filter by author"
+          aria-label={t("components.commitsTable.filterByAuthor")}
           value={authorFilter}
           onChange={(e) => setAuthorFilter(e.target.value)}
           className="max-w-[220px]"
@@ -188,7 +188,7 @@ export function CommitsTable({ commits }: { commits: CommitRow[] }) {
           ))}
         </datalist>
         <Select value={aiFilter} onValueChange={(v) => setAiFilter(v as AiFilter)}>
-          <SelectTrigger className="w-[150px]" aria-label="Filter by AI">
+          <SelectTrigger className="w-[150px]" aria-label={t("components.commitsTable.filterByAi")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -198,7 +198,10 @@ export function CommitsTable({ commits }: { commits: CommitRow[] }) {
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">
-          {filtered.length} of {commits.length}
+          {t("components.commitsTable.filteredCount", {
+            count: filtered.length,
+            total: commits.length,
+          })}
         </span>
       </div>
 
@@ -208,7 +211,7 @@ export function CommitsTable({ commits }: { commits: CommitRow[] }) {
         search={{
           fields: ["subject", "sha"],
           placeholder: t("components.commitsTable.searchPlaceholder"),
-          ariaLabel: "Search commits",
+          ariaLabel: t("components.commitsTable.searchAria"),
         }}
         actions={<PathToggle short={short} onToggle={() => setShort((v) => !v)} />}
         pageSize={25}

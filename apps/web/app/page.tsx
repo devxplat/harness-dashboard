@@ -89,9 +89,10 @@ function RowsSkeleton() {
 export default function OverviewPage() {
   const { t: tr } = useTranslation();
   const { range, since, until, previous } = useRange();
-  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { queryProviders, settingsLoaded, hasAvailableProviders, hasSelectedProviders } =
+    useProviderFilter();
   const [shortNames, setShortNames] = useState(true);
-  const canFetchProviderData = settingsLoaded && hasAvailableProviders;
+  const canFetchProviderData = settingsLoaded && hasAvailableProviders && hasSelectedProviders;
   // Fast path: the stat panel renders from the lightweight totals query (~0.6s)
   // while the heavier bundle (heatmaps, by-model, recent sessions) streams in.
   const totals = useApi<Totals>(
@@ -119,21 +120,21 @@ export default function OverviewPage() {
 
   return (
     <>
-      {t ? (
+      {totals.loading || !t ? (
+        <Skeleton className="h-[196px] w-full rounded-xl" />
+      ) : (
         <OverviewStats
           totals={t}
           prev={prev.data}
           rangeLabel={tr(`rangeLabel.${range}`, { defaultValue: tr("rangeLabel.selected") })}
           daily={dailyTotals}
         />
-      ) : (
-        <Skeleton className="h-[196px] w-full rounded-xl" />
       )}
 
       <div className="grid items-stretch gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardContent>
-            {!b ? (
+            {bundle.loading || !b ? (
               <Skeleton className="h-44 w-full" />
             ) : dailyTotals.length ? (
               <ActivityHeatmap data={dailyTotals} granular={activityTotals} />
@@ -145,7 +146,7 @@ export default function OverviewPage() {
 
         <Card className="flex flex-col lg:col-span-1">
           <CardContent className="flex flex-1 flex-col">
-            {!b ? (
+            {bundle.loading || !b ? (
               <Skeleton className="h-44 w-full" />
             ) : dailyTotals.length ? (
               <CalendarHeatmap
@@ -165,7 +166,7 @@ export default function OverviewPage() {
           <CardTitle>{tr("overview.dailyTokens")}</CardTitle>
         </CardHeader>
         <CardContent>
-          {!b ? (
+          {bundle.loading || !b ? (
             <Skeleton className="h-64 w-full" />
           ) : b.daily.length ? (
             <DailyChart data={b.daily} />
@@ -181,7 +182,7 @@ export default function OverviewPage() {
             <CardTitle>{tr("overview.byModel")}</CardTitle>
           </CardHeader>
           <CardContent>
-            {!b ? (
+            {bundle.loading || !b ? (
               <RowsSkeleton />
             ) : (
               <Table>
@@ -218,7 +219,7 @@ export default function OverviewPage() {
             <PathToggle short={shortNames} onToggle={() => setShortNames((v) => !v)} />
           </CardHeader>
           <CardContent>
-            {!b ? (
+            {bundle.loading || !b ? (
               <RowsSkeleton />
             ) : (
               <Table>

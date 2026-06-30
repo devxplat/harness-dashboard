@@ -1,6 +1,6 @@
 import PullRequestsPage from "@/app/pull-requests/page";
 import { installFailingFetch, installFetch, renderWithRange } from "@/lib/test-utils";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -50,6 +50,28 @@ const aiMaturityIndex = {
   generated_at_utc: "2026-06-24T12:10:00Z",
 };
 
+const sessionCorrelation = {
+  repo_key: "D:/Github/harness-dashboard",
+  pr_number: 145,
+  provider: "codex",
+  session_id: "s-pr-145",
+  mode: "deterministic",
+  score: 91,
+  confidence: 0.91,
+  summary: "Session overlaps the PR and touched the main changed file.",
+  reasons: ["Session overlaps the PR active window.", "Session tool calls touched 1 file."],
+  signals: { time: 0.4, file_touch: 0.25, branch: 0.25 },
+  session_started_at_utc: "2026-06-24T09:55:00Z",
+  session_ended_at_utc: "2026-06-24T11:30:00Z",
+  project_slug: "harness-dashboard",
+  sample_cwd: "D:/Github/harness-dashboard",
+  turns: 8,
+  tokens: 12000,
+  engine: null,
+  input_hash: null,
+  generated_at_utc: null,
+};
+
 const deterministicInsights = Array.from({ length: 10 }, (_, index) => ({
   id: `insight-${index}`,
   rule_id: index === 0 ? "stale-open-pr" : `rule-${index}`,
@@ -73,6 +95,20 @@ const bundle = {
     { login: "alice", pull_requests: 2, is_default: true },
     { login: "bob", pull_requests: 1, is_default: false },
   ],
+  pagination: {
+    page: 0,
+    page_size: 25,
+    total_rows: 2,
+  },
+  filter_options: {
+    authors: ["__all", "alice", "bob"],
+    repos: ["acme/harness-dashboard"],
+    orgs: ["acme"],
+    statuses: ["awaiting_review", "merged"],
+    insight_categories: ["review", "size"],
+    insight_severities: ["info", "warning"],
+    insight_scopes: ["aggregate", "pr"],
+  },
   summary: {
     total: 2,
     ai_assisted: 1,
@@ -111,6 +147,7 @@ const bundle = {
       changed_files: 8,
       review_count: 0,
       merge_commit_sha: null,
+      head_sha: "head145abcdef",
       html_url: "https://github.com/acme/harness-dashboard/pull/145",
       ai_session_overlap: true,
       churn: 457,
@@ -129,6 +166,24 @@ const bundle = {
             "https://github.com/acme/harness-dashboard/blob/main/apps/web/app/pull-requests/page.tsx",
         },
       ],
+      session_correlations: [sessionCorrelation],
+      related_commits: [
+        {
+          sha: "head145abcdef",
+          authored_at_utc: "2026-06-24T10:30:00Z",
+          author_name: "Alice",
+          author_email: "alice@example.com",
+          subject: "feat: context aware routing",
+          branch: "feat/pr-routing",
+          files_changed: 3,
+          insertions: 120,
+          deletions: 12,
+          ai_assisted: true,
+          match_reason: "head_sha",
+        },
+      ],
+      related_deployments: [],
+      related_incidents: [],
       business_value_index: businessValueIndex,
       ai_maturity_index: null,
       timeline: [
@@ -176,6 +231,7 @@ const bundle = {
       changed_files: 5,
       review_count: 2,
       merge_commit_sha: "abc123",
+      head_sha: "def456",
       html_url: null,
       ai_session_overlap: false,
       churn: 302,
@@ -183,6 +239,51 @@ const bundle = {
       cycle_hours: 32,
       review_wait_hours: 26,
       files: [],
+      session_correlations: [],
+      related_commits: [
+        {
+          sha: "def456",
+          authored_at_utc: "2026-06-23T11:00:00Z",
+          author_name: "Alice",
+          author_email: "alice@example.com",
+          subject: "feat: ship billing export",
+          branch: "feat/billing-export",
+          files_changed: 4,
+          insertions: 290,
+          deletions: 12,
+          ai_assisted: false,
+          match_reason: "head_sha",
+        },
+      ],
+      related_deployments: [
+        {
+          kind: "run",
+          ext_id: "deploy-210",
+          name: "production",
+          created_at_utc: "2026-06-24T20:00:00Z",
+          status: "success",
+          sha: "abc123",
+          html_url: "https://github.com/acme/harness-dashboard/actions/runs/210",
+          lead_time_hours: 2,
+          match_reason: "merge_sha",
+        },
+      ],
+      related_incidents: [
+        {
+          source: "github_issue",
+          ext_id: "991",
+          title: "Billing export timeout",
+          severity: "high",
+          opened_at_utc: "2026-06-25T10:00:00Z",
+          resolved_at_utc: "2026-06-25T13:00:00Z",
+          state: "resolved",
+          html_url: "https://github.com/acme/harness-dashboard/issues/991",
+          deploy_ext_id: "deploy-210",
+          mttr_hours: 3,
+          hours_after_merge: 16,
+          match_reason: "linked_deployment",
+        },
+      ],
       business_value_index: null,
       ai_maturity_index: aiMaturityIndex,
       timeline: [],
@@ -233,6 +334,23 @@ const bundle = {
       custom: false,
     },
   ],
+  session_correlation_config: {
+    enabled: true,
+    time_window_before_minutes: 240,
+    time_window_after_minutes: 240,
+    min_confidence: 0.4,
+    max_sessions_per_pr: 5,
+    use_branch: true,
+    use_file_touches: true,
+    use_title_keywords: true,
+    weights: {
+      time_overlap: 0.4,
+      temporal_proximity: 0.15,
+      branch: 0.25,
+      file_touch: 0.25,
+      title_keyword: 0.1,
+    },
+  },
 };
 
 const engines = [
@@ -245,15 +363,87 @@ const engines = [
   },
 ];
 
+function prBundleForUrl(path: string) {
+  const url = new URL(path, "http://localhost");
+  const status = url.searchParams.get("status");
+  const query = url.searchParams.get("query")?.toLowerCase() ?? "";
+  const page = Number(url.searchParams.get("page") ?? 0);
+  const pageSize = Number(url.searchParams.get("page_size") ?? 25);
+  const rows = bundle.rows.filter((row) => {
+    if (status && row.status_bucket !== status) return false;
+    if (!query) return true;
+    return [row.title, row.repo_full_name, row.author, String(row.number)]
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+  const start = page * pageSize;
+  return {
+    ...bundle,
+    rows: rows.slice(start, start + pageSize).map((row) => ({
+      ...row,
+      files: [],
+      timeline: [],
+      related_commits: [],
+      related_deployments: [],
+      related_incidents: [],
+    })),
+    pagination: {
+      page,
+      page_size: pageSize,
+      total_rows: rows.length,
+    },
+  };
+}
+
+function prDetailForUrl(path: string) {
+  const url = new URL(path, "http://localhost");
+  const number = Number(url.searchParams.get("number"));
+  return bundle.rows.find((row) => row.number === number) ?? bundle.rows[0];
+}
+
+function deterministicInsightsForUrl(path: string) {
+  const url = new URL(path, "http://localhost");
+  const category = url.searchParams.get("category");
+  const severity = url.searchParams.get("severity");
+  const scope = url.searchParams.get("scope");
+  const repo = url.searchParams.get("repo");
+  const org = url.searchParams.get("org");
+  const page = Number(url.searchParams.get("page") ?? 0);
+  const pageSize = Number(url.searchParams.get("page_size") ?? 8);
+  const rows = deterministicInsights.filter((insight) => {
+    if (category && insight.category !== category) return false;
+    if (severity && insight.severity !== severity) return false;
+    if (scope && insight.scope !== scope) return false;
+    if (repo && !insight.affected_prs.some((pr) => pr.repo_full_name === repo)) return false;
+    if (org && !insight.affected_prs.some((pr) => pr.repo_owner === org)) return false;
+    return true;
+  });
+  const start = page * pageSize;
+  return {
+    rows: rows.slice(start, start + pageSize),
+    pagination: {
+      page,
+      page_size: pageSize,
+      total_rows: rows.length,
+    },
+    filter_options: bundle.filter_options,
+  };
+}
+
 describe("PullRequestsPage", () => {
   it("renders the overview, applies author/search filters, and opens the PR detail sheet", async () => {
     const user = userEvent.setup();
     const fetchMock = installFetch({
-      "/api/pull-requests/bundle": bundle,
+      "/api/pull-requests/deterministic-insights": deterministicInsightsForUrl,
+      "/api/pull-requests/detail": prDetailForUrl,
+      "/api/pull-requests/bundle": prBundleForUrl,
       "/api/pull-requests/ai-engines": engines,
       "/api/settings": {
         pr_ai_default_engine: "codex",
         pr_ai_default_generation_mode: "batch",
+        pr_session_correlation_config: bundle.session_correlation_config,
+        pr_session_correlation_prompt: "Correlate PRs to sessions.",
       },
     });
     renderWithRange(<PullRequestsPage />);
@@ -266,40 +456,77 @@ describe("PullRequestsPage", () => {
     expect(screen.getAllByText("acme/harness-dashboard").length).toBeGreaterThan(0);
     expect(screen.getByText("82 A")).toBeInTheDocument();
     expect(screen.getByText("nps customer")).toBeInTheDocument();
+    expect(screen.getByText("91%")).toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText("PR author autocomplete"));
-    await user.type(screen.getByLabelText("PR author autocomplete"), "All contributors");
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    await user.click(screen.getByLabelText("Select visible pull requests"));
+    expect(screen.getByLabelText("Select PR 145")).toBeChecked();
+
+    await user.click(screen.getByRole("combobox", { name: "PR author" }));
+    await user.click(screen.getByRole("option", { name: /All contributors/ }));
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("author=__all"))).toBe(true),
     );
 
+    await user.click(screen.getByRole("combobox", { name: "PR status" }));
+    await user.type(screen.getByRole("textbox", { name: "Search PR status" }), "merged");
+    await user.click(screen.getByRole("option", { name: "Merged" }));
+    await waitFor(() =>
+      expect(screen.queryByText("Context-aware routing orchestrator")).not.toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "PR status" }));
+    await user.click(screen.getByRole("option", { name: "All statuses" }));
+    await waitFor(() =>
+      expect(screen.getByText("Context-aware routing orchestrator")).toBeInTheDocument(),
+    );
+
     await user.type(screen.getByRole("textbox", { name: "Search pull requests" }), "billing");
-    expect(screen.queryByText("Context-aware routing orchestrator")).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByText("Context-aware routing orchestrator")).not.toBeInTheDocument(),
+    );
     expect(screen.getByText("Ship billing export")).toBeInTheDocument();
 
     await user.clear(screen.getByRole("textbox", { name: "Search pull requests" }));
-    await user.click(screen.getByRole("button", { name: "Open PR 145" }));
+    await waitFor(() =>
+      expect(screen.getByText("Context-aware routing orchestrator")).toBeInTheDocument(),
+    );
+    fireEvent.keyDown(screen.getByRole("button", { name: "Open PR 145" }), { key: "Enter" });
     expect(screen.getByRole("dialog")).toHaveTextContent("#145 Context-aware routing orchestrator");
     expect(screen.getByRole("dialog")).toHaveTextContent("acme/harness-dashboard");
-    expect(screen.getByRole("dialog")).toHaveTextContent("Static Code Review");
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("Static Code Review"));
     expect(screen.getByRole("dialog")).toHaveTextContent("typo-app[bot]");
     expect(screen.getByRole("dialog")).toHaveTextContent("Business Value Index");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Correlated sessions");
+    expect(screen.getByRole("dialog")).toHaveTextContent("codex:s-pr-145");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Related commits");
+    expect(screen.getByRole("dialog")).toHaveTextContent("feat: context aware routing");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Deployments");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Post-merge incidents");
     expect(screen.getByRole("dialog")).toHaveTextContent("apps/web/app/pull-requests/page.tsx");
+    expect(screen.getByRole("link", { name: "codex:s-pr-145" })).toHaveAttribute(
+      "href",
+      "/sessions?id=s-pr-145&provider=codex",
+    );
     expect(screen.getByRole("link", { name: "Open on GitHub" })).toHaveAttribute(
       "href",
       "https://github.com/acme/harness-dashboard/pull/145",
     );
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   }, 15000);
 
   it("paginates and filters deterministic insights, then generates AI insights", async () => {
     const user = userEvent.setup();
     installFetch({
-      "/api/pull-requests/bundle": bundle,
+      "/api/pull-requests/deterministic-insights": deterministicInsightsForUrl,
+      "/api/pull-requests/detail": prDetailForUrl,
+      "/api/pull-requests/bundle": prBundleForUrl,
       "/api/pull-requests/ai-engines": engines,
       "/api/settings": {
         pr_ai_default_engine: "codex",
         pr_ai_default_generation_mode: "batch",
+        pr_session_correlation_config: bundle.session_correlation_config,
+        pr_session_correlation_prompt: "Correlate PRs to sessions.",
       },
       "/api/pull-requests/ai-insights/jobs/job-1": {
         id: "job-1",
@@ -323,6 +550,7 @@ describe("PullRequestsPage", () => {
             },
           ],
           indexes: [businessValueIndex],
+          session_correlations: [sessionCorrelation],
         },
       },
       "/api/pull-requests/ai-insights/jobs": {
@@ -341,17 +569,74 @@ describe("PullRequestsPage", () => {
     renderWithRange(<PullRequestsPage />);
 
     await user.click(await screen.findByLabelText("Select PR 145"));
+    await user.click(screen.getAllByRole("button", { name: "Generate AI Maturity" })[0]!);
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(fetch)
+          .mock.calls.some(
+            ([url, init]) =>
+              String(url).includes("/api/pull-requests/ai-insights/jobs") &&
+              String((init as RequestInit)?.body).includes('"analysis_type":"ai_maturity"') &&
+              String((init as RequestInit)?.body).includes('"scope":"single_pr"') &&
+              String((init as RequestInit)?.body).includes('"number":145'),
+          ),
+      ).toBe(true),
+    );
+
     await user.click(await screen.findByRole("tab", { name: "PR AI Insights" }));
     expect(screen.getByText("PR cycle time")).toBeInTheDocument();
     expect(screen.getByText("PR waiting too long")).toBeInTheDocument();
     expect(screen.queryByText("Insight 9")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: /Next/ }));
-    expect(screen.getByText("Insight 9")).toBeInTheDocument();
+    expect(await screen.findByText("Insight 9")).toBeInTheDocument();
 
     await user.click(screen.getByRole("combobox", { name: "Insight type" }));
+    await user.type(screen.getByRole("textbox", { name: "Search Insight type" }), "siz");
     await user.click(screen.getByRole("option", { name: "size" }));
     expect(screen.queryByText("PR waiting too long")).toBeNull();
+
+    await user.click(screen.getByRole("combobox", { name: "PR AI index type" }));
+    await user.click(screen.getByRole("option", { name: "AI Maturity" }));
+    expect(screen.getByRole("button", { name: "Generate AI Maturity" })).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "PR AI index type" }));
+    await user.click(screen.getByRole("option", { name: "Business Value Index" }));
+    await user.click(screen.getByRole("combobox", { name: "PR AI index scope" }));
+    await user.click(screen.getByRole("option", { name: /Current author/ }));
+    await user.click(screen.getByRole("combobox", { name: "PR AI index scope" }));
+    await user.click(screen.getByRole("option", { name: /Selected PRs/ }));
+
+    fireEvent.change(screen.getByLabelText("Session minutes before PR"), {
+      target: { value: "120" },
+    });
+    fireEvent.change(screen.getByLabelText("Session minutes after PR"), {
+      target: { value: "45" },
+    });
+    fireEvent.change(screen.getByLabelText("Session min confidence"), {
+      target: { value: "0.7" },
+    });
+    fireEvent.change(screen.getByLabelText("Max sessions per PR"), {
+      target: { value: "6" },
+    });
+    await user.click(screen.getByLabelText("Branch"));
+    await user.click(screen.getByText("Signal weights"));
+    fireEvent.change(screen.getByLabelText("Time overlap weight"), {
+      target: { value: "0.5" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save deterministic config" }));
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(fetch)
+          .mock.calls.some(
+            ([url, init]) =>
+              String(url).includes("/api/settings") &&
+              String((init as RequestInit)?.body).includes("pr_session_correlation_config") &&
+              String((init as RequestInit)?.body).includes('"time_window_before_minutes":120'),
+          ),
+      ).toBe(true),
+    );
 
     await user.click(screen.getByRole("button", { name: "Generate Business Value" }));
     await waitFor(() =>
@@ -377,11 +662,24 @@ describe("PullRequestsPage", () => {
         screen.getAllByText("The review queue needs one targeted reviewer assignment.").length,
       ).toBeGreaterThan(0),
     );
+
+    await user.click(screen.getByRole("button", { name: "Generate AI correlation" }));
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(fetch)
+          .mock.calls.some(
+            ([url, init]) =>
+              String(url).includes("/api/pull-requests/ai-insights/jobs") &&
+              String((init as RequestInit)?.body).includes('"analysis_type":"session_correlation"'),
+          ),
+      ).toBe(true),
+    );
     expect(screen.getByRole("link", { name: "Open PR Rules settings" })).toHaveAttribute(
       "href",
       "/settings?section=rules",
     );
-  }, 15000);
+  }, 30000);
 
   it("renders the error state", async () => {
     installFailingFetch();

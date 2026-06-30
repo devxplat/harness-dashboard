@@ -1,4 +1,4 @@
-//! Google Calendar OAuth (loopback + PKCE) and event fetch — the network half of
+//! Google Calendar OAuth (loopback + PKCE) and event fetch -- the network half of
 //! the Phase-3 integration. Token storage/refresh orchestration lives in the API
 //! handlers (they own the DB + at-rest encryption); this module is the HTTP +
 //! crypto helpers. Event parsing is in `harness_core::calendar` (pure, tested).
@@ -26,21 +26,23 @@ fn b64(bytes: &[u8]) -> String {
 }
 
 /// A PKCE `(verifier, S256 challenge)` pair.
-pub fn pkce_pair() -> (String, String) {
+pub fn pkce_pair() -> anyhow::Result<(String, String)> {
     let mut raw = [0u8; 64];
-    let _ = getrandom::getrandom(&mut raw);
+    getrandom::getrandom(&mut raw)
+        .map_err(|err| anyhow::anyhow!("failed to generate PKCE verifier entropy: {err:?}"))?;
     let verifier = b64(&raw);
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(verifier.as_bytes());
     let challenge = b64(&hasher.finalize());
-    (verifier, challenge)
+    Ok((verifier, challenge))
 }
 
-pub fn oauth_state() -> String {
+pub fn oauth_state() -> anyhow::Result<String> {
     let mut raw = [0u8; 32];
-    let _ = getrandom::getrandom(&mut raw);
-    b64(&raw)
+    getrandom::getrandom(&mut raw)
+        .map_err(|err| anyhow::anyhow!("failed to generate OAuth state entropy: {err:?}"))?;
+    Ok(b64(&raw))
 }
 
 /// The consent URL the user opens to grant calendar access.
@@ -107,7 +109,7 @@ pub async fn refresh_access(
     Ok(resp.json().await?)
 }
 
-/// Fetch primary-calendar events in a window around now (−90d … +30d), parsed into
+/// Fetch primary-calendar events in a window around now (-90d to +30d), parsed into
 /// insertable rows.
 pub async fn fetch_events(access_token: &str) -> anyhow::Result<Vec<CalendarEventRow>> {
     let now = chrono::Utc::now();

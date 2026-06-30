@@ -151,9 +151,10 @@ export default function ProjectsPage() {
   const [shortNames, setShortNames] = useState(true);
   const columns = useMemo(() => makeColumns(shortNames, t), [shortNames, t]);
   const { since, until } = useRange();
-  const { queryProviders, settingsLoaded, hasAvailableProviders } = useProviderFilter();
+  const { queryProviders, settingsLoaded, hasAvailableProviders, hasSelectedProviders } =
+    useProviderFilter();
   const { data, error, loading } = useApi<ProjectRow[]>(
-    settingsLoaded && hasAvailableProviders
+    settingsLoaded && hasAvailableProviders && hasSelectedProviders
       ? `/api/projects${rangeQuery(since, until, queryProviders)}`
       : null,
   );

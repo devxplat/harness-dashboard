@@ -16,6 +16,7 @@ import { apiPost } from "@/lib/api";
 import { backfillSummary } from "@/lib/github";
 import type { GithubSyncSettings } from "@/lib/types";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 const UNITS: GithubSyncSettings["backfill"]["unit"][] = [
@@ -27,6 +28,7 @@ const UNITS: GithubSyncSettings["backfill"]["unit"][] = [
 ];
 
 function SettingsForm({ initial, onSaved }: { initial: GithubSyncSettings; onSaved: () => void }) {
+  const { t } = useTranslation();
   const [value, setValue] = useState(String(initial.backfill.value));
   const [unit, setUnit] = useState(initial.backfill.unit);
   const [autoEnabled, setAutoEnabled] = useState(initial.autosync.enabled);
@@ -44,9 +46,9 @@ function SettingsForm({ initial, onSaved }: { initial: GithubSyncSettings; onSav
     };
     const p = apiPost("/api/integrations/github/settings", body);
     toast.promise(p, {
-      loading: "Saving sync settings…",
-      success: "Sync settings saved",
-      error: "Could not save settings",
+      loading: t("components.githubSync.saving"),
+      success: t("components.githubSync.saved"),
+      error: t("components.githubSync.saveError"),
     });
     try {
       await p;
@@ -61,19 +63,19 @@ function SettingsForm({ initial, onSaved }: { initial: GithubSyncSettings; onSav
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground">Backfill window</label>
+        <label className="text-xs font-medium text-muted-foreground">{t("components.githubSync.backfillWindow")}</label>
         <div className="flex flex-wrap items-center gap-2">
           <Input
             type="number"
             min={1}
-            aria-label="Backfill amount"
+            aria-label={t("components.githubSync.backfillAmount")}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             disabled={!windowed}
             className="w-20"
           />
           <Select value={unit} onValueChange={(v) => setUnit(v as typeof unit)}>
-            <SelectTrigger className="w-32" aria-label="Backfill unit">
+            <SelectTrigger className="w-32" aria-label={t("components.githubSync.backfillUnit")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -89,12 +91,12 @@ function SettingsForm({ initial, onSaved }: { initial: GithubSyncSettings; onSav
           </span>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Deepening the window re-backfills the selected repos; a shallower one keeps existing data.
+          {t("components.githubSync.backfillHint")}
         </p>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground">Pull requests to import</label>
+        <label className="text-xs font-medium text-muted-foreground">{t("components.githubSync.prsToImport")}</label>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
@@ -102,7 +104,7 @@ function SettingsForm({ initial, onSaved }: { initial: GithubSyncSettings; onSav
             aria-pressed={prScope === "all"}
             onClick={() => setPrScope("all")}
           >
-            All repo PRs
+            {t("components.githubSync.allRepoPrs")}
           </Button>
           <Button
             size="sm"
@@ -110,17 +112,16 @@ function SettingsForm({ initial, onSaved }: { initial: GithubSyncSettings; onSav
             aria-pressed={prScope === "mine"}
             onClick={() => setPrScope("mine")}
           >
-            Only mine
+            {t("components.githubSync.onlyMine")}
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          All repo PRs gives team baselines for DORA &amp; productivity comparisons; “Only mine”
-          stores just your own.
+          {t("components.githubSync.prScopeHint")}
         </p>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground">Auto-sync</label>
+        <label className="text-xs font-medium text-muted-foreground">{t("components.githubSync.autoSync")}</label>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
@@ -128,34 +129,35 @@ function SettingsForm({ initial, onSaved }: { initial: GithubSyncSettings; onSav
             aria-pressed={autoEnabled}
             onClick={() => setAutoEnabled((v) => !v)}
           >
-            {autoEnabled ? "On" : "Off"}
+            {autoEnabled ? t("common.on") : t("common.off")}
           </Button>
-          <span className="text-xs text-muted-foreground">every</span>
+          <span className="text-xs text-muted-foreground">{t("components.githubSync.every")}</span>
           <Input
             type="number"
             min={15}
-            aria-label="Auto-sync interval (minutes)"
+            aria-label={t("components.githubSync.interval")}
             value={interval}
             onChange={(e) => setIntervalMin(e.target.value)}
             disabled={!autoEnabled}
             className="w-20"
           />
-          <span className="text-xs text-muted-foreground">minutes</span>
+          <span className="text-xs text-muted-foreground">{t("common.minutes")}</span>
         </div>
       </div>
 
       <Button size="sm" onClick={save} disabled={busy}>
-        Save sync settings
+        {t("components.githubSync.save")}
       </Button>
     </div>
   );
 }
 
 export function GithubSyncSettings({ onSaved }: { onSaved?: () => void }) {
+  const { t } = useTranslation();
   const { data, loading, error } = useApi<GithubSyncSettings>("/api/integrations/github/settings");
-  if (error) return <p className="text-xs text-destructive">Could not load settings: {error}</p>;
+  if (error) return <p className="text-xs text-destructive">{t("components.githubSync.loadError", { error })}</p>;
   if (loading || !data || !data.backfill || !data.autosync) {
-    return <p className="text-xs text-muted-foreground">Loading settings…</p>;
+    return <p className="text-xs text-muted-foreground">{t("components.githubSync.loading")}</p>;
   }
   return <SettingsForm initial={data} onSaved={() => onSaved?.()} />;
 }

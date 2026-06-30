@@ -12,9 +12,11 @@ import { formatDateShort } from "@/lib/format";
 import type { GithubReposResponse } from "@/lib/types";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
+  const { t } = useTranslation();
   const { data, error, loading, refetch } = useApi<GithubReposResponse>(
     "/api/integrations/github/repos",
   );
@@ -27,9 +29,9 @@ export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
     setPending(key);
     const p = apiPost("/api/integrations/github/repos/toggle", body);
     toast.promise(p, {
-      loading: "Updating…",
-      success: body.enabled ? "Repo enabled for sync" : "Repo disabled",
-      error: "Could not update repo",
+      loading: t("components.githubRepos.updating"),
+      success: body.enabled ? t("components.githubRepos.enabled") : t("components.githubRepos.disabled"),
+      error: t("components.githubRepos.updateError"),
     });
     try {
       await p;
@@ -42,16 +44,15 @@ export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
     }
   }
 
-  if (error) return <p className="text-xs text-destructive">Could not load repos: {error}</p>;
-  if (loading || !data) return <p className="text-xs text-muted-foreground">Loading repos…</p>;
+  if (error) return <p className="text-xs text-destructive">{t("components.githubRepos.loadError", { error })}</p>;
+  if (loading || !data) return <p className="text-xs text-muted-foreground">{t("components.githubRepos.loading")}</p>;
   const orgs = data.orgs ?? [];
   const totalRepos = data.total_repos ?? orgs.reduce((n, o) => n + o.total, 0);
   const enabledRepos = data.enabled_repos ?? orgs.reduce((n, o) => n + o.enabled_count, 0);
   if (totalRepos === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        No GitHub repos discovered yet — use a supported AI coding provider in a repo with a GitHub
-        origin, then rescan.
+        {t("components.githubRepos.empty")}
       </p>
     );
   }
@@ -59,7 +60,7 @@ export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">
-        {enabledRepos} of {totalRepos} repos enabled for sync
+        {t("components.githubRepos.summary", { enabled: enabledRepos, total: totalRepos })}
       </p>
       {orgs.map((org) => (
         <Collapsible key={org.owner} defaultOpen className="rounded-lg border border-border/60">
@@ -78,7 +79,7 @@ export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
                 disabled={pending === `org:${org.owner}`}
                 onClick={() => toggle({ owner: org.owner, enabled: true }, `org:${org.owner}`)}
               >
-                Enable all
+                {t("components.githubRepos.enableAll")}
               </Button>
               <Button
                 size="sm"
@@ -86,7 +87,7 @@ export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
                 disabled={pending === `org:${org.owner}`}
                 onClick={() => toggle({ owner: org.owner, enabled: false }, `org:${org.owner}`)}
               >
-                Disable all
+                {t("components.githubRepos.disableAll")}
               </Button>
             </div>
           </div>
@@ -101,7 +102,7 @@ export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
                     <span className="truncate text-sm">{r.repo}</span>
                     {r.last_synced_at ? (
                       <span className="text-[11px] text-muted-foreground">
-                        synced {formatDateShort(r.last_synced_at)}
+                        {t("components.githubRepos.synced", { date: formatDateShort(r.last_synced_at) })}
                       </span>
                     ) : null}
                   </span>
@@ -109,13 +110,13 @@ export function GithubRepoPicker({ onChange }: { onChange?: () => void }) {
                     size="sm"
                     variant={r.enabled ? "default" : "outline"}
                     aria-pressed={r.enabled}
-                    aria-label={`${r.enabled ? "Disable" : "Enable"} ${r.owner}/${r.repo}`}
+                    aria-label={t("components.githubRepos.toggleRepo", { action: r.enabled ? t("common.disable") : t("common.enable"), repo: `${r.owner}/${r.repo}` })}
                     disabled={pending === r.repo_key}
                     onClick={() =>
                       toggle({ repo_key: r.repo_key, enabled: !r.enabled }, r.repo_key)
                     }
                   >
-                    {r.enabled ? "On" : "Off"}
+                    {r.enabled ? t("common.on") : t("common.off")}
                   </Button>
                 </li>
               ))}

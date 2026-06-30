@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 const API_PORT = 8080;
@@ -12,6 +13,8 @@ const FIXTURE_HOME = join(RUN_ROOT, "home");
 const FIXTURE_EMPTY = join(RUN_ROOT, "empty");
 const FIXTURE_APPDATA = join(RUN_ROOT, "appdata");
 const E2E_DB = join(RUN_ROOT, "harness.db");
+
+mkdirSync(RUN_ROOT, { recursive: true });
 
 // OS-correct path to the debug binary (backslashes + .exe on Windows).
 const SERVER_BIN = join(

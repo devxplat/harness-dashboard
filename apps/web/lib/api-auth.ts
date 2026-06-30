@@ -18,7 +18,12 @@ function storage(): Storage | null {
 function readStoredKey(): string | null {
   if (process.env.NODE_ENV === "test") return TEST_API_KEY;
   if (memoryKey) return memoryKey;
-  const stored = storage()?.getItem(STORAGE_KEY)?.trim();
+  let stored: string | undefined;
+  try {
+    stored = storage()?.getItem(STORAGE_KEY)?.trim();
+  } catch {
+    return null;
+  }
   if (!stored) return null;
   memoryKey = stored;
   return stored;
@@ -26,14 +31,22 @@ function readStoredKey(): string | null {
 
 function writeStoredKey(key: string): string {
   memoryKey = key;
-  storage()?.setItem(STORAGE_KEY, key);
+  try {
+    storage()?.setItem(STORAGE_KEY, key);
+  } catch {
+    // Keep the in-memory key for restricted browsers where sessionStorage throws.
+  }
   return key;
 }
 
 export function clearApiKey(): void {
   memoryKey = null;
   bootstrapPromise = null;
-  storage()?.removeItem(STORAGE_KEY);
+  try {
+    storage()?.removeItem(STORAGE_KEY);
+  } catch {
+    // Nothing to clear when storage is unavailable.
+  }
 }
 
 export async function getApiKey(forceRefresh = false): Promise<string> {
@@ -69,7 +82,7 @@ export async function authHeaders(base?: HeadersInit): Promise<Headers> {
   return headers;
 }
 
-export async function authenticatedStreamUrl(path: string): Promise<string> {
+export async function authenticatedStreamUrl(path: "/api/stream" = "/api/stream"): Promise<string> {
   const separator = path.includes("?") ? "&" : "?";
   return `${API_BASE}${path}${separator}api_key=${encodeURIComponent(await getApiKey())}`;
 }

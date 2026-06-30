@@ -35,13 +35,17 @@ pub use insights::{
     ProductivityPeriodRow, ProductivitySummary, WarmupBucketRow,
 };
 pub use pr_dashboard::{
-    PrAiIndex, PrAnalyticsTile, PrAuthorOption, PrDashboardBundle, PrDashboardRow, PrFileRef,
-    PrGrain, PrInsight, PrInsightRule, PrPeriodRow, PrRef, PrSummary,
+    PrAiIndex, PrAnalyticsTile, PrAuthorOption, PrDashboardBundle, PrDashboardQuery,
+    PrDashboardRow, PrDeploymentRef, PrDeterministicInsightsPage, PrFileRef, PrFilterOptions,
+    PrGrain, PrIncidentRef, PrInsight, PrInsightRule, PrPagination, PrPeriodRow, PrRef,
+    PrRelatedCommit, PrSessionCandidateGroup, PrSessionCorrelation, PrSessionCorrelationConfig,
+    PrSessionCorrelationWeights, PrSummary,
 };
 pub use queries::{
-    AgentGroupRow, DailyRow, MessageDetail, ModelRow, OverviewUsageBundle, ProjectRow, PromptRow,
-    ProviderObservedStats, ProviderSummary, SessionRow, SkillRow, Tip, ToolRow, Totals,
-    WorkspaceRow,
+    AgentGroupRow, ContextWindowComponent, ContextWindowDetail, DailyRow, MessageDetail, ModelRow,
+    OverviewUsageBundle, PlanUsageSnapshotWindow, PlanUsageWindow, ProjectRow, PromptRow,
+    ProviderObservedStats, ProviderPlanSelection, ProviderSnapshotStatus, ProviderSummary,
+    SessionBundle, SessionRow, SkillRow, Tip, ToolRow, Totals, WorkspaceRow,
 };
 pub use survey::{
     SurveyCorrelationBundle, SurveyCorrelationRow, SurveyResponseRow, SurveyTrendRow,

@@ -13,6 +13,8 @@ Each row carries provenance:
 - `usage_source`: `exact`, `provider_reported`, or `unavailable`.
 - `cost_source`: `api_estimate`, `provider_reported`, or `unavailable`.
 - `source_path`, `source_key`, and `source_fingerprint` for mutable source adapters.
+- context-window and plan-usage data carries its own `source` such as `statusline`, `estimated`,
+  `computed`, or `unavailable`.
 
 This lets the UI distinguish exact token counts from provider-reported values and unavailable
 fields instead of presenting every source as equally precise.
@@ -32,6 +34,21 @@ fields instead of presenting every source as equally precise.
 | opencode       | `opencode-run-logs`       | unset                                          | `OPENCODE_RUN_LOGS_DIR`       | reported    | reported    | yes/yes       |
 
 Settings can enable/disable providers and source entries, override paths, and trigger refreshes.
+
+## Context Window And Plan Usage
+
+| Provider       | Context-window source | Plan catalog | Plan usage source |
+| -------------- | --------------------- | ------------ | ----------------- |
+| Claude Code    | Status Line `context_window` when the user opts in; otherwise estimated from local usage. | Claude Free/Pro/Max/Team; Enterprise non-selectable. | Status Line `rate_limits` windows such as 5-hour, 7-day, Sonnet-only, and usage credits. |
+| Codex          | `~/.codex/models_cache.json` plus local session token deltas; catalog fallback when cache is absent. | API Key, Free, Go, Plus, Pro, Business; Enterprise non-selectable. | Unavailable unless local quota fields are observed. |
+| Gemini CLI     | Best-effort from local tokens and catalog model windows. | Gemini Code Assist / Google AI individual and team plans; Enterprise non-selectable. | Quotas are documented, but live usage is unavailable unless a local source appears. |
+| Cursor         | Unavailable unless the state DB exposes context metadata. | Hobby, Pro, Pro+, Ultra, Teams Standard/Premium; Enterprise non-selectable. | Unavailable unless the state DB exposes it. |
+| Antigravity    | Best-effort from local activity/model signals. | Free and Google AI plans; Enterprise non-selectable. | Unavailable unless a local quota source appears. |
+| GitHub Copilot | Unavailable unless local telemetry exposes context metadata. | Free, Pro, Pro+, Max, Business; Enterprise non-selectable. | Unavailable unless local telemetry exposes it. |
+| opencode       | Best-effort from local token records. | BYOK, Go, Zen balance. | Unavailable unless Go/Zen local records expose current usage. |
+
+Claude Status Line capture is manual opt-in. The helper command stores only sanitized latest
+snapshots in SQLite; it does not persist the raw Status Line payload.
 
 ## Incremental Scanning
 

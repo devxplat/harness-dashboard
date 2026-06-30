@@ -67,6 +67,9 @@ shows the ordered message thread with token counts, models, tool calls, and side
    list and the totals row reflect the filter.
 2. **When** I open a session, **then** I see its messages in timestamp order with per-message
    model, tokens, tool calls, and a subagent indicator where applicable, reachable by a stable URL.
+3. **When** I open a session with available context metadata, **then** I see context-window usage,
+   component provenance, and plan-usage windows without confusing estimated values for official
+   provider data.
 
 ### User Story 4 — Compare projects and tools (Priority: P2)
 A user compares spend across projects and sees which tools consume the most result tokens.
@@ -144,12 +147,18 @@ scans without restarting.
   priced separately at the cache-read rate.
 - **FR-012:** A selected subscription plan MUST be persisted and surfaced alongside API-equivalent
   cost.
+- **FR-013:** Provider plan selections MUST be persisted per provider. The legacy global plan MUST
+  remain compatible and map only to Claude.
+- **FR-014:** Context-window and plan-usage values MUST carry provenance (`reported`,
+  `estimated`, `computed`, or `unavailable`).
 
 ### Functional Requirements — API
 - **FR-020:** The server MUST expose JSON endpoints covering overview totals, an overview bundle,
-  expensive prompts, projects, tools, recent sessions, a single session's messages, daily series,
-  skills, by-model, subagents/orchestration, workspaces, cross-workspace edits, tips, plan, and
-  settings.
+expensive prompts, projects, tools, recent sessions, a single session's messages, daily series,
+skills, by-model, subagents/orchestration, workspaces, cross-workspace edits, tips, plan, and
+settings.
+- **FR-025:** The server MUST expose provider plan catalog/selection and a session bundle that
+  includes messages, context-window detail, and plan-usage windows.
 - **FR-021:** The server MUST expose an SSE stream that emits scan events (and keep-alives) so the
   UI can refresh live.
 - **FR-022:** The server MUST support manual refresh and a periodic background scan.
@@ -165,6 +174,8 @@ scans without restarting.
 - **FR-033:** The RTK view MUST be hidden when the RTK endpoint reports unavailable.
 - **FR-034:** The UI MUST use the shadcnblocks dashboard18 base with shadcn/ui defaults (no design
   tokens copied from any other project).
+- **FR-035:** Settings MUST show provider-specific plan selection and make Claude Status Line
+  snapshot capture an opt-in setup path.
 
 ### Functional Requirements — CLI & config
 - **FR-040:** The binary MUST default to serving the dashboard and MUST accept flags for port,
@@ -199,6 +210,8 @@ scans without restarting.
 ## Assumptions
 - Claude Code's transcript layout and `message.usage`/`message.model` fields are stable for v0.1.
 - `pricing.json` reflects current published rates and is user-editable.
+- Provider plan catalog prices are seed data with source URLs and `source_checked_at`, not a live
+  billing sync.
 - A single user on a single machine; no concurrency beyond one scanner writer and many readers.
 
 ## Out of scope (v0.1)

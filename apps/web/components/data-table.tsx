@@ -244,9 +244,9 @@ export function DataTable<TData, TValue>({
                           >
                             {label}
                             {sorted === "asc" ? (
-                              <ArrowUp className="size-3.5" aria-label="sorted ascending" />
+                              <ArrowUp className="size-3.5" aria-label={t("components.dataTable.sortedAscending")} />
                             ) : sorted === "desc" ? (
-                              <ArrowDown className="size-3.5" aria-label="sorted descending" />
+                              <ArrowDown className="size-3.5" aria-label={t("components.dataTable.sortedDescending")} />
                             ) : (
                               <ChevronsUpDown className="size-3.5 opacity-50" aria-hidden />
                             )}
@@ -291,7 +291,7 @@ export function DataTable<TData, TValue>({
               value={String(table.getState().pagination.pageSize)}
               onValueChange={(v) => table.setPageSize(Number(v))}
             >
-              <SelectTrigger size="sm" className="w-[4.5rem]" aria-label="Rows per page">
+              <SelectTrigger size="sm" className="w-[4.5rem]" aria-label={t("components.dataTable.rowsPerPage")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

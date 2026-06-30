@@ -5,6 +5,7 @@
 import { progressPercent, rateBudgetLabel, rateBudgetTone } from "@/lib/github";
 import type { GithubProgress } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 const TONE: Record<string, string> = {
   ok: "text-emerald-600 dark:text-emerald-400",
@@ -13,6 +14,7 @@ const TONE: Record<string, string> = {
 };
 
 export function GithubSyncProgress({ progress }: { progress: GithubProgress | null }) {
+  const { t } = useTranslation();
   if (!progress || !progress.running) return null;
   const pct = progressPercent(progress);
   const tone = rateBudgetTone(progress.rate_remaining, progress.rate_limit);
@@ -22,21 +24,29 @@ export function GithubSyncProgress({ progress }: { progress: GithubProgress | nu
     reset_utc: progress.rate_reset_utc,
   });
   return (
-    <div className="space-y-1.5" aria-label="GitHub sync progress" role="status">
+    <div className="space-y-1.5" aria-label={t("components.githubSync.progress")} role="status">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span className="truncate">
-          Syncing {progress.repo_index}/{progress.repo_total}
-          {progress.current_repo ? ` · ${progress.current_repo}` : ""}
+          {t("components.githubSync.syncing", {
+            current: progress.repo_index,
+            total: progress.repo_total,
+            repo: progress.current_repo
+              ? t("components.githubSync.repoSuffix", { repo: progress.current_repo })
+              : "",
+          })}
         </span>
         <span className="tabular-nums">
-          {progress.pull_requests} PRs · {progress.deployments} deploys
+          {t("components.githubSync.summary", {
+            prs: progress.pull_requests,
+            deploys: progress.deployments,
+          })}
         </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
       </div>
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-        <span>API budget</span>
+        <span>{t("components.githubSync.apiBudget")}</span>
         <span className={cn("tabular-nums font-medium", TONE[tone])}>{budget}</span>
       </div>
     </div>

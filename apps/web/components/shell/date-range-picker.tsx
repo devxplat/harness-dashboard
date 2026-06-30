@@ -5,10 +5,11 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useRange } from "@/lib/range";
-import { addDays, format, startOfDay } from "date-fns";
+import { addDays, startOfDay } from "date-fns";
 import { CalendarRange } from "lucide-react";
 import { useState } from "react";
 import type { DateRange } from "react-day-picker";
+import { useTranslation } from "react-i18next";
 
 /** The active window as a calendar range — presets (since, open end) included. */
 function activeWindow(since: string | null, until: string | null): DateRange | undefined {
@@ -19,17 +20,28 @@ function activeWindow(since: string | null, until: string | null): DateRange | u
   return { from, to };
 }
 
-function triggerLabel(range: string, since: string | null, until: string | null): string {
-  if (range !== "custom" || !since || !until) return "Custom range";
-  return `${format(new Date(since), "MMM d")} – ${format(addDays(new Date(until), -1), "MMM d, yyyy")}`;
+function shortRangeDate(date: Date, locale: string, includeYear = false): string {
+  return date.toLocaleDateString(locale, {
+    month: "short",
+    day: "numeric",
+    ...(includeYear ? { year: "numeric" as const } : {}),
+  });
 }
 
-function tooltipLabel(range: string, since: string | null, until: string | null): string {
-  if (range !== "custom" || !since || !until) return "Select a custom date range";
-  return `Custom range: ${triggerLabel(range, since, until)}. Click to change`;
+function triggerLabel(
+  range: string,
+  since: string | null,
+  until: string | null,
+  customLabel: string,
+  locale: string,
+): string {
+  if (range !== "custom" || !since || !until) return customLabel;
+  const from = shortRangeDate(new Date(since), locale);
+  const to = shortRangeDate(addDays(new Date(until), -1), locale, true);
+  return `${from} – ${to}`;
 }
-
 export function DateRangePicker() {
+  const { t, i18n } = useTranslation();
   const { range, since, until, setCustom } = useRange();
   const [open, setOpen] = useState(false);
   // `draft` stays empty until the user starts picking, so the first click always
@@ -63,6 +75,8 @@ export function DateRangePicker() {
   const win = activeWindow(since, until);
   const modifiers: Record<string, DateRange> = {};
   if (picks === 0 && win) modifiers.preset = win; // show the active preset highlighted
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+  const label = triggerLabel(range, since, until, t("components.shell.customRange"), locale);
 
   return (
     <Tooltip>
@@ -72,10 +86,10 @@ export function DateRangePicker() {
             <Button
               size="sm"
               variant={range === "custom" ? "default" : "outline"}
-              aria-label="Pick a custom date range"
+              aria-label={t("components.shell.pickCustomRange")}
             >
               <CalendarRange className="size-3.5" />
-              {triggerLabel(range, since, until)}
+              {label}
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
@@ -93,7 +107,9 @@ export function DateRangePicker() {
         </PopoverContent>
       </Popover>
       <TooltipContent side="bottom" sideOffset={8}>
-        {tooltipLabel(range, since, until)}
+        {range === "custom" && since && until
+          ? t("components.shell.customRangeTooltip", { range: label })
+          : t("components.shell.selectCustomRange")}
       </TooltipContent>
     </Tooltip>
   );

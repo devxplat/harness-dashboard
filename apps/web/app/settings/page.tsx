@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -21,21 +22,29 @@ import {
 } from "@/components/ui/select";
 import { useApi } from "@/hooks/use-api";
 import { apiPost } from "@/lib/api";
+import { formatDate, formatUSD } from "@/lib/format";
 import { LOCALES } from "@/lib/i18n/config";
+import { normalizePrSessionCorrelationConfig } from "@/lib/pr-session-correlation";
 import { providerMeta } from "@/lib/providers";
 import { RANGES } from "@/lib/range";
 import type {
   PrAiEngine,
   PrInsightRule,
+  PrSessionCorrelationConfig,
   ProviderCapabilitySet,
   ProviderConfig,
+  ProviderPlan,
+  ProviderPlansBundle,
   ProviderSourceConfig,
   SettingsInfo,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import type { TFunction } from "i18next";
 import {
   Boxes,
   Copy,
+  CreditCard,
+  ExternalLink,
   GitPullRequest,
   Plug,
   Plus,
@@ -52,11 +61,14 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 const PLANS = ["api", "pro", "max", "max-20x", "team", "team-premium"];
+const STATUSLINE_COMMAND = "harness-dashboard statusline-snapshot";
+const SNAPSHOT_STALE_MS = 24 * 60 * 60 * 1000;
 
 type SectionId =
   | "profile"
   | "integrations"
   | "sources"
+  | "plans_usage"
   | "rules"
   | "ai_features"
   | "general"
@@ -108,7 +120,7 @@ function ProfileSettings({ data, onSaved }: { data: SettingsInfo; onSaved: () =>
       onSaved();
       toast.success(t("settings.profile.saved"));
     } catch {
-      toast.error("Could not save GitHub default user");
+      toast.error(t("settings.profile.githubUserSaveError"));
     } finally {
       setSaving(false);
     }
@@ -183,14 +195,14 @@ function ProfileSettings({ data, onSaved }: { data: SettingsInfo; onSaved: () =>
         </FieldRow>
 
         <FieldRow
-          label="Default GitHub user"
-          hint="Pull Requests opens on this author by default. Leave blank to start with all contributors."
+          label={t("settings.profile.defaultGithubUser")}
+          hint={t("settings.profile.defaultGithubUserHint")}
         >
           <Input
-            aria-label="Default GitHub user"
+            aria-label={t("settings.profile.defaultGithubUser")}
             value={githubLogin}
             onChange={(e) => setGithubLogin(e.target.value)}
-            placeholder="github-login"
+            placeholder={t("settings.profile.githubLoginPlaceholder")}
             className="max-w-xs"
           />
         </FieldRow>
@@ -298,10 +310,10 @@ function ProviderSettingsCard({
         ],
       });
       await apiPost("/api/refresh", {});
-      toast.success(`${provider.label} settings saved`);
+      toast.success(t("settings.provider.settingsSaved", { provider: provider.label }));
       onSaved();
     } catch {
-      toast.error(`Could not save ${provider.label}`);
+      toast.error(t("settings.provider.saveError", { provider: provider.label }));
     } finally {
       setSaving(false);
     }
@@ -310,7 +322,10 @@ function ProviderSettingsCard({
   const Icon = providerMeta(provider.id).Icon;
   const { messages, sessions } = provider.last_scan_counts;
   const statusText = provider.discovered
-    ? `${messages.toLocaleString()} messages - ${sessions.toLocaleString()} sessions`
+    ? t("settings.provider.status", {
+        messages: messages.toLocaleString(),
+        sessions: sessions.toLocaleString(),
+      })
     : null;
 
   return (
@@ -366,7 +381,7 @@ function ProviderSettingsCard({
                   }
                   placeholder={source.default_path ?? t("settings.provider.setPath")}
                   className="h-8 w-full rounded-md border bg-background px-2 font-mono text-[11px] outline-none transition-colors focus:border-primary"
-                  aria-label={`${source.label} path`}
+                  aria-label={t("settings.provider.sourcePath", { source: source.label })}
                 />
                 <p className="break-all text-[11px] text-muted-foreground">
                   {t("settings.provider.active")}{" "}
@@ -405,6 +420,236 @@ function ProviderSettingsCard({
         </div>
       </div>
     </IntegrationCard>
+  );
+}
+
+function planPrice(plan: ProviderPlan, t: TFunction) {
+  if (typeof plan.annual_monthly_usd === "number") {
+    return t("settings.plans.annualMonthly", {
+      price: formatUSD(plan.annual_monthly_usd),
+    });
+  }
+  if (typeof plan.monthly_usd === "number") {
+    return plan.monthly_usd === 0
+      ? formatUSD(0)
+      : t("settings.plans.monthly", {
+          price: formatUSD(plan.monthly_usd),
+        });
+  }
+  return plan.price_note ?? t("settings.plans.seeSource");
+}
+
+function latestSnapshotAt(contextAt: string | null, usageAt: string | null) {
+  return [contextAt, usageAt]
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1) ?? null;
+}
+
+function PlansUsageSettings({ data }: { data: SettingsInfo }) {
+  const { t } = useTranslation();
+  const { data: plans, error, loading, refetch } = useApi<ProviderPlansBundle>("/api/provider-plans");
+  const [saving, setSaving] = useState<string | null>(null);
+
+  async function save(provider: string, planId: string) {
+    setSaving(provider);
+    try {
+      await apiPost("/api/provider-plans", { provider, plan_id: planId });
+      await refetch();
+      toast.success(t("settings.plans.saved"));
+    } catch {
+      toast.error(t("settings.plans.saveError"));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function copyStatuslineCommand() {
+    try {
+      await navigator.clipboard.writeText(STATUSLINE_COMMAND);
+      toast.success(t("settings.plans.commandCopied"));
+    } catch {
+      toast.error(t("settings.plans.commandCopyError"));
+    }
+  }
+
+  if (error) return <ErrorBlock error={error} />;
+  if (loading || !plans) return <LoadingBlock />;
+
+  const selectionByProvider = new Map((plans.selections ?? []).map((item) => [item.provider, item]));
+  const snapshotByProvider = new Map(
+    (plans.snapshot_status ?? []).map((item) => [item.provider, item]),
+  );
+  const providers = data.providers?.length
+    ? data.providers
+    : Object.keys(plans.catalog ?? {}).map((id) => ({
+        id,
+        label: providerMeta(id).label,
+      })) as Pick<ProviderConfig, "id" | "label">[];
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
+        {t("settings.plans.sourceChecked", {
+          date: plans.source_checked_at ?? t("settings.plans.unknownDate"),
+        })}
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        {providers.map((provider) => {
+          const catalog = plans.catalog?.[provider.id] ?? [];
+          const selectable = catalog.filter((plan) => plan.selectable);
+          const selected = selectionByProvider.get(provider.id)?.plan_id ?? selectable[0]?.plan_id ?? "";
+          const selectedPlan = catalog.find((plan) => plan.plan_id === selected);
+          const snapshot = snapshotByProvider.get(provider.id);
+          const snapshotAt = snapshot
+            ? latestSnapshotAt(snapshot.context_captured_at, snapshot.plan_usage_captured_at)
+            : null;
+          const snapshotObserved = Boolean(
+            snapshot?.context_observed || snapshot?.plan_usage_observed,
+          );
+          const snapshotStale = snapshotAt
+            ? Date.now() - Date.parse(snapshotAt) > SNAPSHOT_STALE_MS
+            : false;
+          const Icon = providerMeta(provider.id).Icon;
+          return (
+            <Card key={provider.id}>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Icon className="size-5 shrink-0" />
+                    <div className="min-w-0">
+                      <CardTitle className="truncate text-base">{provider.label}</CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedPlan
+                          ? planPrice(selectedPlan, t)
+                          : t("settings.plans.noSelectable")}
+                      </p>
+                    </div>
+                  </div>
+                  {selectedPlan?.source_url ? (
+                    <Button size="icon" variant="ghost" asChild>
+                      <a href={selectedPlan.source_url} target="_blank" rel="noreferrer">
+                        <ExternalLink className="size-4" />
+                      </a>
+                    </Button>
+                  ) : null}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <FieldRow label={t("settings.plans.currentPlan")}>
+                  <Select
+                    value={selected}
+                    onValueChange={(value) => void save(provider.id, value)}
+                    disabled={saving === provider.id || selectable.length === 0}
+                  >
+                    <SelectTrigger
+                      aria-label={t("settings.plans.currentPlan")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectable.map((plan) => (
+                        <SelectItem key={plan.plan_id} value={plan.plan_id}>
+                          {plan.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldRow>
+                {selectedPlan ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="secondary">
+                      {selectedPlan.audience ?? t("settings.plans.audienceFallback")}
+                    </Badge>
+                    {selectedPlan.billing_unit ? (
+                      <Badge variant="outline">{selectedPlan.billing_unit}</Badge>
+                    ) : null}
+                    {selectedPlan.price_note ? (
+                      <Badge variant="outline">{selectedPlan.price_note}</Badge>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <CapabilityBadges
+                    label={t("settings.provider.supports")}
+                    capabilities={data.providers?.find((item) => item.id === provider.id)?.supported ?? {
+                      tokens: false,
+                      tools: false,
+                      costs: false,
+                      prompts: false,
+                      usage: "missing",
+                      cost: "missing",
+                    }}
+                  />
+                  <CapabilityBadges
+                    label={t("settings.provider.observed")}
+                    capabilities={data.providers?.find((item) => item.id === provider.id)?.observed ?? {
+                      tokens: false,
+                      tools: false,
+                      costs: false,
+                      prompts: false,
+                      usage: "missing",
+                      cost: "missing",
+                    }}
+                  />
+                </div>
+                {provider.id === "claude" ? (
+                  <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs font-medium">
+                        {t("settings.plans.claudeSnapshot")}
+                      </div>
+                      <Badge
+                        variant={snapshotObserved && !snapshotStale ? "default" : "secondary"}
+                      >
+                        {snapshotObserved
+                          ? snapshotStale
+                            ? t("settings.plans.snapshotStale")
+                            : t("settings.plans.snapshotObserved")
+                          : t("settings.plans.snapshotMissing")}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.plans.claudeSnapshotBody")}
+                      {snapshotAt
+                        ? ` / ${t("common.lastSynced", {
+                            date: formatDate(snapshotAt),
+                          })}`
+                        : ""}
+                    </p>
+                    {snapshot?.windows.length ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {snapshot.windows.map((window) => (
+                          <Badge key={window.window_key} variant="outline">
+                            {window.label}
+                            {typeof window.used_pct === "number"
+                              ? ` ${Math.round(window.used_pct)}%`
+                              : ""}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="flex items-center gap-2">
+                      <code className="block min-w-0 flex-1 overflow-x-auto rounded-sm bg-background p-2 text-[11px]">
+                        {t("settings.plans.claudeSnapshotCommand")}
+                      </code>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        aria-label={t("settings.plans.copyCommand")}
+                        onClick={() => void copyStatuslineCommand()}
+                      >
+                        <Copy className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -526,6 +771,13 @@ function normalizePrAiEngineId(value: string | null | undefined): string {
   }
 }
 
+function cloneCorrelationConfig(config: PrSessionCorrelationConfig): PrSessionCorrelationConfig {
+  return {
+    ...config,
+    weights: { ...config.weights },
+  };
+}
+
 const RULE_CATEGORIES = [
   "flow",
   "review",
@@ -558,6 +810,7 @@ function newRule(): PrInsightRule {
 }
 
 function DeterministicRulesSettings() {
+  const { t } = useTranslation();
   const { data, error, loading, refetch } = useApi<PrInsightRule[]>(
     "/api/pull-requests/insight-rules",
   );
@@ -573,11 +826,15 @@ function DeterministicRulesSettings() {
   async function upsert(rule: PrInsightRule) {
     const id = rule.id.trim();
     if (!id) {
-      toast.error("Rule id is required");
+      toast.error(t("settings.rules.idRequired", { defaultValue: "Rule id is required" }));
       return;
     }
     if (!rule.title.trim() || !rule.recommendation.trim()) {
-      toast.error("Title and recommendation are required");
+      toast.error(
+        t("settings.rules.titleRecommendationRequired", {
+          defaultValue: "Title and recommendation are required",
+        }),
+      );
       return;
     }
     setSaving(true);
@@ -596,7 +853,7 @@ function DeterministicRulesSettings() {
       await apiPost<PrInsightRule[]>("/api/pull-requests/insight-rules", { rules: next });
       await refetch();
       setDraft(newRule());
-      toast.success("Deterministic rule saved");
+      toast.success(t("settings.rules.saved", { defaultValue: "Deterministic rule saved" }));
     } catch (e) {
       toast.error(String(e));
     } finally {
@@ -612,7 +869,7 @@ function DeterministicRulesSettings() {
       });
       await refetch();
       if (draft.id === rule.id) setDraft(newRule());
-      toast.success(rule.custom ? "Rule removed" : "Rule override removed");
+      toast.success(rule.custom ? t("settings.rules.removed") : t("settings.rules.overrideRemoved"));
     } catch (e) {
       toast.error(String(e));
     } finally {
@@ -626,12 +883,12 @@ function DeterministicRulesSettings() {
     <div className="grid gap-4 xl:grid-cols-[1fr_420px]">
       <Card>
         <CardHeader>
-          <CardTitle>Deterministic PR Rules</CardTitle>
+          <CardTitle>{t("settings.rules.title")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-            <span>{rules.length} total rules</span>
-            <span>{customCount} custom overrides</span>
+            <span>{t("settings.rules.totalRules", { count: rules.length })}</span>
+            <span>{t("settings.rules.customOverrides", { count: customCount })}</span>
           </div>
           {loading ? (
             <LoadingBlock />
@@ -644,7 +901,7 @@ function DeterministicRulesSettings() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">{rule.title}</span>
                         <Badge variant={rule.custom ? "default" : "outline"}>
-                          {rule.custom ? "custom" : "built-in"}
+                          {rule.custom ? t("common.custom") : t("common.builtIn")}
                         </Badge>
                         <Badge variant="outline">{rule.category}</Badge>
                         <Badge variant="outline">{rule.severity}</Badge>
@@ -661,24 +918,24 @@ function DeterministicRulesSettings() {
                         onClick={() => upsert({ ...rule, enabled: !rule.enabled, custom: true })}
                         disabled={saving}
                       >
-                        {rule.enabled ? "Disable" : "Enable"}
+                        {rule.enabled ? t("settings.rules.disable") : t("settings.rules.enable")}
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => setDraft({ ...rule, custom: true })}
                       >
-                        Edit
+                        {t("settings.rules.edit")}
                       </Button>
                       <Button
                         size="icon"
                         variant="outline"
-                        aria-label={`Clone ${rule.id}`}
+                        aria-label={t("settings.rules.clone", { id: rule.id })}
                         onClick={() =>
                           setDraft({
                             ...rule,
                             id: `${rule.id}-custom`,
-                            title: `${rule.title} copy`,
+                            title: t("settings.rules.copySuffix", { title: rule.title }),
                             custom: true,
                           })
                         }
@@ -689,7 +946,7 @@ function DeterministicRulesSettings() {
                         <Button
                           size="icon"
                           variant="outline"
-                          aria-label={`Delete ${rule.id}`}
+                          aria-label={t("settings.rules.delete", { id: rule.id })}
                           onClick={() => remove(rule)}
                           disabled={saving}
                         >
@@ -707,35 +964,37 @@ function DeterministicRulesSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{draft.id ? "Edit rule" : "Create rule"}</CardTitle>
+          <CardTitle>
+            {draft.id ? t("settings.rules.editTitle") : t("settings.rules.createTitle")}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <FieldRow
-            label="Rule id"
-            hint="Lowercase letters, digits and hyphens. Use an existing built-in id to override it."
+            label={t("settings.rules.id")}
+            hint={t("settings.rules.idHint")}
           >
             <Input
-              aria-label="Rule id"
+              aria-label={t("settings.rules.id")}
               value={draft.id}
               onChange={(e) => patchDraft({ id: e.target.value })}
-              placeholder="large-pr-custom"
+              placeholder={t("settings.rules.placeholders.id")}
             />
           </FieldRow>
-          <FieldRow label="Title">
+          <FieldRow label={t("settings.rules.titleField")}>
             <Input
-              aria-label="Rule title"
+              aria-label={t("settings.rules.titleField")}
               value={draft.title}
               onChange={(e) => patchDraft({ title: e.target.value })}
-              placeholder="Large PR risk"
+              placeholder={t("settings.rules.placeholders.title")}
             />
           </FieldRow>
           <div className="grid gap-3 sm:grid-cols-2">
-            <FieldRow label="Category">
+            <FieldRow label={t("settings.rules.category")}>
               <Select
                 value={draft.category}
                 onValueChange={(value) => patchDraft({ category: value })}
               >
-                <SelectTrigger aria-label="Rule category">
+                <SelectTrigger aria-label={t("settings.rules.category")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -747,37 +1006,37 @@ function DeterministicRulesSettings() {
                 </SelectContent>
               </Select>
             </FieldRow>
-            <FieldRow label="Severity">
+            <FieldRow label={t("settings.rules.severity")}>
               <Select
                 value={draft.severity}
                 onValueChange={(value) => patchDraft({ severity: value })}
               >
-                <SelectTrigger aria-label="Rule severity">
+                <SelectTrigger aria-label={t("settings.rules.severity")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="info">info</SelectItem>
-                  <SelectItem value="warning">warning</SelectItem>
-                  <SelectItem value="critical">critical</SelectItem>
+                  <SelectItem value="info">{t("enums.severity.info")}</SelectItem>
+                  <SelectItem value="warning">{t("enums.severity.warning")}</SelectItem>
+                  <SelectItem value="critical">{t("enums.severity.critical")}</SelectItem>
                 </SelectContent>
               </Select>
             </FieldRow>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <FieldRow label="Scope">
+            <FieldRow label={t("settings.rules.scope")}>
               <Select value={draft.scope} onValueChange={(value) => patchDraft({ scope: value })}>
-                <SelectTrigger aria-label="Rule scope">
+                <SelectTrigger aria-label={t("settings.rules.scope")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pr">pr</SelectItem>
-                  <SelectItem value="aggregate">aggregate</SelectItem>
+                  <SelectItem value="pr">{t("enums.ruleScope.pr")}</SelectItem>
+                  <SelectItem value="aggregate">{t("enums.ruleScope.aggregate")}</SelectItem>
                 </SelectContent>
               </Select>
             </FieldRow>
-            <FieldRow label="Metric">
+            <FieldRow label={t("settings.rules.metric")}>
               <Select value={draft.metric} onValueChange={(value) => patchDraft({ metric: value })}>
-                <SelectTrigger aria-label="Rule metric">
+                <SelectTrigger aria-label={t("settings.rules.metric")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -791,26 +1050,26 @@ function DeterministicRulesSettings() {
             </FieldRow>
           </div>
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-            <FieldRow label="Operator">
+            <FieldRow label={t("settings.rules.operator")}>
               <Select
                 value={draft.operator}
                 onValueChange={(value) => patchDraft({ operator: value })}
               >
-                <SelectTrigger aria-label="Rule operator">
+                <SelectTrigger aria-label={t("settings.rules.operator")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="gt">gt</SelectItem>
-                  <SelectItem value="gte">gte</SelectItem>
-                  <SelectItem value="lt">lt</SelectItem>
-                  <SelectItem value="lte">lte</SelectItem>
-                  <SelectItem value="eq">eq</SelectItem>
+                  <SelectItem value="gt">{t("enums.operator.gt")}</SelectItem>
+                  <SelectItem value="gte">{t("enums.operator.gte")}</SelectItem>
+                  <SelectItem value="lt">{t("enums.operator.lt")}</SelectItem>
+                  <SelectItem value="lte">{t("enums.operator.lte")}</SelectItem>
+                  <SelectItem value="eq">{t("enums.operator.eq")}</SelectItem>
                 </SelectContent>
               </Select>
             </FieldRow>
-            <FieldRow label="Threshold">
+            <FieldRow label={t("settings.rules.threshold")}>
               <Input
-                aria-label="Rule threshold"
+                aria-label={t("settings.rules.threshold")}
                 type="number"
                 value={draft.threshold}
                 onChange={(e) => patchDraft({ threshold: Number(e.target.value) })}
@@ -823,20 +1082,20 @@ function DeterministicRulesSettings() {
                 onChange={(e) => patchDraft({ enabled: e.target.checked })}
                 className="size-4 accent-primary"
               />
-              Enabled
+              {t("settings.rules.enabled")}
             </label>
           </div>
-          <FieldRow label="Description">
+          <FieldRow label={t("settings.rules.description")}>
             <textarea
-              aria-label="Rule description"
+              aria-label={t("settings.rules.description")}
               value={draft.description ?? ""}
               onChange={(e) => patchDraft({ description: e.target.value || null })}
               className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             />
           </FieldRow>
-          <FieldRow label="Recommendation">
+          <FieldRow label={t("settings.rules.recommendation")}>
             <textarea
-              aria-label="Rule recommendation"
+              aria-label={t("settings.rules.recommendation")}
               value={draft.recommendation}
               onChange={(e) => patchDraft({ recommendation: e.target.value })}
               className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -845,10 +1104,10 @@ function DeterministicRulesSettings() {
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => upsert(draft)} disabled={saving}>
               <Plus className="size-4" />
-              Save rule
+              {t("settings.rules.save")}
             </Button>
             <Button variant="outline" onClick={() => setDraft(newRule())}>
-              Clear
+              {t("settings.rules.clear")}
             </Button>
           </div>
         </CardContent>
@@ -858,11 +1117,16 @@ function DeterministicRulesSettings() {
 }
 
 function AiFeaturesSettings({ data, onSaved }: { data: SettingsInfo; onSaved: () => void }) {
+  const { t } = useTranslation();
   const engines = useApi<PrAiEngine[]>("/api/pull-requests/ai-engines");
   const [engine, setEngine] = useState("");
   const [mode, setMode] = useState("per_pr");
   const [businessPrompt, setBusinessPrompt] = useState("");
   const [maturityPrompt, setMaturityPrompt] = useState("");
+  const [sessionPrompt, setSessionPrompt] = useState("");
+  const [sessionConfig, setSessionConfig] = useState<PrSessionCorrelationConfig>(() =>
+    normalizePrSessionCorrelationConfig(null),
+  );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -876,11 +1140,19 @@ function AiFeaturesSettings({ data, onSaved }: { data: SettingsInfo; onSaved: ()
     setMode(data.pr_ai_default_generation_mode ?? "per_pr");
     setBusinessPrompt(data.pr_business_value_prompt ?? "");
     setMaturityPrompt(data.pr_ai_maturity_prompt ?? "");
+    setSessionPrompt(data.pr_session_correlation_prompt ?? "");
+    setSessionConfig(
+      cloneCorrelationConfig(
+        normalizePrSessionCorrelationConfig(data.pr_session_correlation_config),
+      ),
+    );
   }, [
     data.pr_ai_default_engine,
     data.pr_ai_default_generation_mode,
     data.pr_business_value_prompt,
     data.pr_ai_maturity_prompt,
+    data.pr_session_correlation_config,
+    data.pr_session_correlation_prompt,
     engines.data,
   ]);
 
@@ -892,9 +1164,11 @@ function AiFeaturesSettings({ data, onSaved }: { data: SettingsInfo; onSaved: ()
         pr_ai_default_generation_mode: mode,
         pr_business_value_prompt: businessPrompt,
         pr_ai_maturity_prompt: maturityPrompt,
+        pr_session_correlation_prompt: sessionPrompt,
+        pr_session_correlation_config: sessionConfig,
       });
       onSaved();
-      toast.success("AI feature settings saved");
+      toast.success(t("settings.aiFeatures.saved"));
     } catch (e) {
       toast.error(String(e));
     } finally {
@@ -902,91 +1176,182 @@ function AiFeaturesSettings({ data, onSaved }: { data: SettingsInfo; onSaved: ()
     }
   }
 
-  const engineOptions = Array.isArray(engines.data) ? engines.data : [];
+  const engineOptions = [
+    {
+      value: "__auto",
+      label: t("pages.pullRequests.aiIndexes.autoEngine"),
+      description: t("pages.pullRequests.aiIndexes.autoEngineDescription"),
+    },
+    ...(Array.isArray(engines.data) ? engines.data : []).map((item) => ({
+      value: item.id,
+      label: item.available
+        ? item.label
+        : t("pages.pullRequests.aiIndexes.notInstalled", { name: item.label }),
+      description: item.notes,
+    })),
+  ];
+  const modeOptions = [
+    { value: "per_pr", label: t("enums.generationMode.per_pr") },
+    { value: "all_mine", label: t("enums.generationMode.all_mine") },
+    { value: "repo", label: t("enums.generationMode.repo") },
+    { value: "org", label: t("enums.generationMode.org") },
+    { value: "batch", label: t("enums.generationMode.batch") },
+  ];
+
+  function patchSessionConfig(patch: Partial<PrSessionCorrelationConfig>) {
+    setSessionConfig((current) => cloneCorrelationConfig({ ...current, ...patch }));
+  }
 
   return (
     <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
       <Card>
         <CardHeader>
-          <CardTitle>PR AI generation</CardTitle>
+          <CardTitle>{t("settings.aiFeatures.title")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
           <FieldRow
-            label="Default engine"
-            hint="Used first on Pull Requests when the CLI is installed."
+            label={t("settings.aiFeatures.defaultEngine")}
+            hint={t("settings.aiFeatures.defaultEngineHint")}
           >
-            <Select
+            <SearchableSelect
+              label={t("settings.aiFeatures.defaultEngineLabel")}
               value={engine || "__auto"}
               onValueChange={(value) => setEngine(value === "__auto" ? "" : value)}
-            >
-              <SelectTrigger aria-label="Default PR AI engine">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__auto">Auto-detect available CLI</SelectItem>
-                {engineOptions.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.label} {item.available ? "" : "(not installed)"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={engineOptions}
+            />
           </FieldRow>
 
           <FieldRow
-            label="Default generation mode"
-            hint="Pull Requests still lets you override this per run."
+            label={t("settings.aiFeatures.defaultMode")}
+            hint={t("settings.aiFeatures.defaultModeHint")}
           >
-            <Select value={mode} onValueChange={setMode}>
-              <SelectTrigger aria-label="Default PR AI generation mode">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="per_pr">Per PR button</SelectItem>
-                <SelectItem value="all_mine">All PRs from default author</SelectItem>
-                <SelectItem value="repo">All PRs in a repo</SelectItem>
-                <SelectItem value="org">All PRs in an org</SelectItem>
-                <SelectItem value="batch">Selected PR batch</SelectItem>
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              label={t("settings.aiFeatures.defaultModeLabel")}
+              value={mode}
+              onValueChange={setMode}
+              options={modeOptions}
+            />
           </FieldRow>
 
+          <div className="space-y-3 rounded-lg border p-3">
+            <div>
+              <p className="text-sm font-medium">{t("settings.aiFeatures.correlationTitle")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.aiFeatures.correlationDescription")}
+              </p>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={sessionConfig.enabled}
+                onChange={(event) => patchSessionConfig({ enabled: event.target.checked })}
+                className="size-4 accent-primary"
+              />
+              {t("common.enabled")}
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FieldRow label={t("settings.aiFeatures.beforeMinutes")}>
+                <Input
+                  aria-label={t("settings.aiFeatures.beforeMinutesAria")}
+                  type="number"
+                  min={0}
+                  max={10080}
+                  value={sessionConfig.time_window_before_minutes}
+                  onChange={(event) =>
+                    patchSessionConfig({
+                      time_window_before_minutes: Number(event.target.value),
+                    })
+                  }
+                />
+              </FieldRow>
+              <FieldRow label={t("settings.aiFeatures.afterMinutes")}>
+                <Input
+                  aria-label={t("settings.aiFeatures.afterMinutesAria")}
+                  type="number"
+                  min={0}
+                  max={10080}
+                  value={sessionConfig.time_window_after_minutes}
+                  onChange={(event) =>
+                    patchSessionConfig({
+                      time_window_after_minutes: Number(event.target.value),
+                    })
+                  }
+                />
+              </FieldRow>
+              <FieldRow label={t("settings.aiFeatures.minConfidence")}>
+                <Input
+                  aria-label={t("settings.aiFeatures.minConfidenceAria")}
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={sessionConfig.min_confidence}
+                  onChange={(event) =>
+                    patchSessionConfig({ min_confidence: Number(event.target.value) })
+                  }
+                />
+              </FieldRow>
+              <FieldRow label={t("settings.aiFeatures.maxSessions")}>
+                <Input
+                  aria-label={t("settings.aiFeatures.maxSessionsAria")}
+                  type="number"
+                  min={1}
+                  max={25}
+                  value={sessionConfig.max_sessions_per_pr}
+                  onChange={(event) =>
+                    patchSessionConfig({ max_sessions_per_pr: Number(event.target.value) })
+                  }
+                />
+              </FieldRow>
+            </div>
+          </div>
+
           <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-            CLI execution stays local. LiteLLM, OpenRouter, or another OpenAI-compatible provider
-            can be added later behind the reserved engine without changing these prompts.
+            {t("settings.aiFeatures.localOnlyNote")}
           </div>
 
           <Button onClick={save} disabled={saving}>
             <Sparkles className="size-4" />
-            Save AI settings
+            {t("settings.aiFeatures.save")}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Index prompts</CardTitle>
+          <CardTitle>{t("settings.aiFeatures.promptsTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
           <FieldRow
-            label="Business Value Index prompt"
-            hint="The backend always adds the deterministic PR payload and strict JSON schema."
+            label={t("settings.aiFeatures.businessPrompt")}
+            hint={t("settings.aiFeatures.businessPromptHint")}
           >
             <textarea
-              aria-label="Business Value Index prompt"
+              aria-label={t("settings.aiFeatures.businessPrompt")}
               value={businessPrompt}
               onChange={(event) => setBusinessPrompt(event.target.value)}
               className="min-h-32 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             />
           </FieldRow>
           <FieldRow
-            label="AI Maturity prompt"
-            hint="Use this to tune what good AI-assisted delivery means for your team."
+            label={t("settings.aiFeatures.maturityPrompt")}
+            hint={t("settings.aiFeatures.maturityPromptHint")}
           >
             <textarea
-              aria-label="AI Maturity prompt"
+              aria-label={t("settings.aiFeatures.maturityPrompt")}
               value={maturityPrompt}
               onChange={(event) => setMaturityPrompt(event.target.value)}
+              className="min-h-32 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            />
+          </FieldRow>
+          <FieldRow
+            label={t("settings.aiFeatures.sessionPrompt")}
+            hint={t("settings.aiFeatures.sessionPromptHint")}
+          >
+            <textarea
+              aria-label={t("settings.aiFeatures.sessionPrompt")}
+              value={sessionPrompt}
+              onChange={(event) => setSessionPrompt(event.target.value)}
               className="min-h-32 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             />
           </FieldRow>
@@ -1012,6 +1377,7 @@ export default function SettingsPage() {
         "profile",
         "integrations",
         "sources",
+        "plans_usage",
         "rules",
         "ai_features",
         "general",
@@ -1043,16 +1409,22 @@ export default function SettingsPage() {
         description: t("settings.nav.sourcesDesc"),
       },
       {
+        id: "plans_usage" as SectionId,
+        label: t("settings.nav.plansUsage"),
+        icon: CreditCard,
+        description: t("settings.nav.plansUsageDesc"),
+      },
+      {
         id: "rules" as SectionId,
-        label: "PR Rules",
+        label: t("settings.nav.rules"),
         icon: GitPullRequest,
-        description: "Create, override, disable, and remove deterministic pull request rules.",
+        description: t("settings.nav.rulesDesc"),
       },
       {
         id: "ai_features" as SectionId,
-        label: "AI Features",
+        label: t("settings.nav.aiFeatures"),
         icon: Sparkles,
-        description: "Configure PR AI indexes, local CLI execution, and prompt overrides.",
+        description: t("settings.nav.aiFeaturesDesc"),
       },
       {
         id: "general" as SectionId,
@@ -1074,10 +1446,10 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await apiPost("/api/plan", { plan });
-      toast.success(`Plan set to ${plan}`);
+      toast.success(t("settings.general.planSet", { plan }));
       refetch();
     } catch {
-      toast.error("Could not update plan");
+      toast.error(t("settings.general.planError"));
     } finally {
       setSaving(false);
     }
@@ -1093,7 +1465,7 @@ export default function SettingsPage() {
     <>
       <PageTitle title={t("pages.settings.title")} description={t("pages.settings.description")} />
       <div className="flex flex-col gap-6 lg:flex-row">
-        <nav className="w-full shrink-0 lg:w-56" aria-label="Settings sections">
+        <nav className="w-full shrink-0 lg:w-56" aria-label={t("pages.settings.sections")}>
           <div className="sticky top-4 space-y-1">
             {SECTIONS.map((s) => {
               const Icon = s.icon;
@@ -1142,6 +1514,8 @@ export default function SettingsPage() {
             ) : (
               <p className="text-sm text-muted-foreground">{t("settings.provider.noSources")}</p>
             ))}
+
+          {section === "plans_usage" && <PlansUsageSettings data={data} />}
 
           {section === "rules" && <DeterministicRulesSettings />}
 

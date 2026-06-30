@@ -10,12 +10,13 @@ mod github;
 #[cfg(feature = "release-embed")]
 mod static_assets;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use harness_core::db::Db;
 use harness_core::paths;
 use harness_core::pricing::Pricing;
 use notify::{RecursiveMode, Watcher};
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -53,6 +54,8 @@ pub struct AppState {
     about = "Local-first AI coding analytics dashboard"
 )]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<CliCommand>,
     /// Port to bind (env PORT, default 8080).
     #[arg(long)]
     port: Option<u16>,
@@ -76,6 +79,12 @@ struct Cli {
     no_scan: bool,
 }
 
+#[derive(Subcommand, Debug)]
+enum CliCommand {
+    /// Capture a Claude Code Status Line payload into the local dashboard database.
+    StatuslineSnapshot,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -85,6 +94,10 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
+
+    if matches!(cli.command, Some(CliCommand::StatuslineSnapshot)) {
+        return statusline_snapshot(cli.db.unwrap_or_else(paths::db_path));
+    }
 
     let host = cli
         .host
@@ -231,6 +244,35 @@ async fn main() -> anyhow::Result<()> {
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
     .await?;
+    Ok(())
+}
+
+fn statusline_snapshot(db_path: PathBuf) -> anyhow::Result<()> {
+    let mut input = String::new();
+    std::io::stdin().read_to_string(&mut input)?;
+    let payload: serde_json::Value = serde_json::from_str(&input)?;
+    let db = Db::open(&db_path)?;
+    db.save_claude_statusline_snapshot(&payload)?;
+
+    let ctx = payload
+        .pointer("/context_window/used_percentage")
+        .and_then(serde_json::Value::as_f64)
+        .map(|pct| format!("ctx {:.0}%", pct));
+    let five_hour = payload
+        .pointer("/rate_limits/five_hour/used_percentage")
+        .and_then(serde_json::Value::as_f64)
+        .map(|pct| format!("5h {:.0}%", pct));
+    let seven_day = payload
+        .pointer("/rate_limits/seven_day/used_percentage")
+        .and_then(serde_json::Value::as_f64)
+        .map(|pct| format!("7d {:.0}%", pct));
+    let parts = [ctx, five_hour, seven_day]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    if !parts.is_empty() {
+        println!("Harness {}", parts.join(" / "));
+    }
     Ok(())
 }
 
