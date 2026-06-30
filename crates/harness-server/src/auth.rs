@@ -240,7 +240,7 @@ fn is_loopback_host(host: &str) -> bool {
 
 fn generate_api_key() -> anyhow::Result<String> {
     let mut raw = [0u8; 32];
-    getrandom::getrandom(&mut raw).map_err(|e| anyhow::anyhow!("rng error: {e}"))?;
+    getrandom::fill(&mut raw).map_err(|e| anyhow::anyhow!("rng error: {e}"))?;
     Ok(B64URL.encode(raw))
 }
 

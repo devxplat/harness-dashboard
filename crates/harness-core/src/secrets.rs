@@ -17,7 +17,7 @@ fn key_path() -> PathBuf {
 }
 
 fn rng(buf: &mut [u8]) -> Result<()> {
-    getrandom::getrandom(buf).map_err(|e| CoreError::Other(format!("rng error: {e}")))
+    getrandom::fill(buf).map_err(|e| CoreError::Other(format!("rng error: {e}")))
 }
 
 /// Load the 32-byte key from the key file, creating it (with a fresh random key)
