@@ -20,13 +20,13 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # No .env.local in CI → NEXT_PUBLIC_API_BASE is empty → same-origin fetches.
+      # No .env.local in CI; NEXT_PUBLIC_API_BASE is empty, so fetches stay same-origin.
       - run: pnpm --filter @harness/web build
       - run: cargo build --release -p harness-server --features release-embed
       - name: Stage binary
