@@ -12,7 +12,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 rusqlite = { version = "0.32", features = ["bundled"] }
 walkdir = "2"
-dirs = "5"
+dirs = "6"
 regex = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 # Local git history reading. `vendored-libgit2` statically links a from-source
