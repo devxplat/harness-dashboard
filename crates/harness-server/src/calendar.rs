@@ -28,7 +28,7 @@ fn b64(bytes: &[u8]) -> String {
 /// A PKCE `(verifier, S256 challenge)` pair.
 pub fn pkce_pair() -> anyhow::Result<(String, String)> {
     let mut raw = [0u8; 64];
-    getrandom::getrandom(&mut raw)
+    getrandom::fill(&mut raw)
         .map_err(|err| anyhow::anyhow!("failed to generate PKCE verifier entropy: {err:?}"))?;
     let verifier = b64(&raw);
     use sha2::{Digest, Sha256};
@@ -40,7 +40,7 @@ pub fn pkce_pair() -> anyhow::Result<(String, String)> {
 
 pub fn oauth_state() -> anyhow::Result<String> {
     let mut raw = [0u8; 32];
-    getrandom::getrandom(&mut raw)
+    getrandom::fill(&mut raw)
         .map_err(|err| anyhow::anyhow!("failed to generate OAuth state entropy: {err:?}"))?;
     Ok(b64(&raw))
 }

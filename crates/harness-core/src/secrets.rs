@@ -7,7 +7,7 @@
 use crate::error::{CoreError, Result};
 use crate::paths;
 use aes_gcm::aead::{Aead, KeyInit};
-use aes_gcm::{Aes256Gcm, Key, Nonce};
+use aes_gcm::{Aes256Gcm, Nonce};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use std::path::{Path, PathBuf};
@@ -17,7 +17,7 @@ fn key_path() -> PathBuf {
 }
 
 fn rng(buf: &mut [u8]) -> Result<()> {
-    getrandom::getrandom(buf).map_err(|e| CoreError::Other(format!("rng error: {e}")))
+    getrandom::fill(buf).map_err(|e| CoreError::Other(format!("rng error: {e}")))
 }
 
 /// Load the 32-byte key from the key file, creating it (with a fresh random key)
@@ -52,11 +52,14 @@ fn restrict_perms(path: &Path) {
 fn restrict_perms(_path: &Path) {}
 
 fn encrypt_with(key: &[u8; 32], plaintext: &str) -> Result<String> {
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|e| CoreError::Other(format!("cipher init error: {e}")))?;
     let mut nonce = [0u8; 12];
     rng(&mut nonce)?;
+    let nonce_ref =
+        Nonce::try_from(&nonce[..]).map_err(|e| CoreError::Other(format!("nonce error: {e}")))?;
     let ct = cipher
-        .encrypt(Nonce::from_slice(&nonce), plaintext.as_bytes())
+        .encrypt(&nonce_ref, plaintext.as_bytes())
         .map_err(|e| CoreError::Other(format!("encrypt error: {e}")))?;
     let mut out = nonce.to_vec();
     out.extend_from_slice(&ct);
@@ -71,9 +74,12 @@ fn decrypt_with(key: &[u8; 32], token: &str) -> Result<String> {
         return Err(CoreError::Other("ciphertext too short".into()));
     }
     let (nonce, ct) = raw.split_at(12);
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+    let cipher = Aes256Gcm::new_from_slice(key)
+        .map_err(|e| CoreError::Other(format!("cipher init error: {e}")))?;
+    let nonce_ref =
+        Nonce::try_from(nonce).map_err(|e| CoreError::Other(format!("nonce error: {e}")))?;
     let pt = cipher
-        .decrypt(Nonce::from_slice(nonce), ct)
+        .decrypt(&nonce_ref, ct)
         .map_err(|e| CoreError::Other(format!("decrypt error: {e}")))?;
     String::from_utf8(pt).map_err(|e| CoreError::Other(format!("utf8 error: {e}")))
 }
